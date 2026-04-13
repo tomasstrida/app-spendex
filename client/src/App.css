@@ -674,3 +674,36 @@
   min-width: 0;
 }
 .tx-cell-amount { text-align: right; }
+
+/* ── Bulk delete bar ── */
+.tx-bulk-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+  border: none;
+}
+.btn-danger:hover:not(:disabled) { filter: brightness(1.15); }
+
+/* ── Tx checkbox ── */
+.tx-checkbox {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  margin: 0;
+}
+
+.tx-row-selected {
+  background: color-mix(in srgb, var(--accent) 8%, transparent) !important;
+}
+.tx-row-selected:hover { background: color-mix(in srgb, var(--accent) 14%, transparent) !important; }

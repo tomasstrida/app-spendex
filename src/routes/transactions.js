@@ -70,4 +70,15 @@ router.delete('/:id', requireAuth, writeLimiter, (req, res) => {
   res.json({ ok: true });
 });
 
+// DELETE /api/transactions  body: { ids: [1,2,3] }
+router.delete('/', requireAuth, writeLimiter, (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Neplatná data.' });
+  const placeholders = ids.map(() => '?').join(',');
+  const result = db.prepare(
+    `DELETE FROM transactions WHERE id IN (${placeholders}) AND user_id = ?`
+  ).run(...ids, req.user.id);
+  res.json({ deleted: result.changes });
+});
+
 module.exports = router;

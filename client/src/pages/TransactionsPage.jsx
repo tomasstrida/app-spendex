@@ -45,6 +45,8 @@ export default function TransactionsPage() {
   const [editData, setEditData] = useState({});
   const [visibleCols, setVisibleCols] = useState(loadCols);
   const [colPickerOpen, setColPickerOpen] = useState(false);
+  const [selected, setSelected] = useState(new Set());
+  const [deleting, setDeleting] = useState(false);
   const pickerRef = useRef();
 
   useEffect(() => {
@@ -72,7 +74,7 @@ export default function TransactionsPage() {
         if (filterCat) params.set('category_id', filterCat);
         return fetch(`/api/transactions?${params}`).then(r => r.json());
       })
-      .then(setTransactions)
+      .then(data => { setTransactions(data); setSelected(new Set()); })
       .finally(() => setLoading(false));
   }, [period, filterCat]);
 
@@ -98,7 +100,42 @@ export default function TransactionsPage() {
   async function handleDelete(id) {
     if (!confirm('Smazat tuto transakci?')) return;
     const r = await fetch(`/api/transactions/${id}`, { method: 'DELETE' });
-    if (r.ok) setTransactions(prev => prev.filter(t => t.id !== id));
+    if (r.ok) {
+      setTransactions(prev => prev.filter(t => t.id !== id));
+      setSelected(prev => { const s = new Set(prev); s.delete(id); return s; });
+    }
+  }
+
+  async function handleDeleteSelected() {
+    if (!confirm(`Smazat ${selected.size} označených transakcí?`)) return;
+    setDeleting(true);
+    const ids = [...selected];
+    const r = await fetch('/api/transactions', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    if (r.ok) {
+      setTransactions(prev => prev.filter(t => !selected.has(t.id)));
+      setSelected(new Set());
+    }
+    setDeleting(false);
+  }
+
+  function toggleSelect(id) {
+    setSelected(prev => {
+      const s = new Set(prev);
+      s.has(id) ? s.delete(id) : s.add(id);
+      return s;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selected.size === transactions.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(transactions.map(t => t.id)));
+    }
   }
 
   function startEdit(tx) {
@@ -139,6 +176,8 @@ export default function TransactionsPage() {
 
   const totalSpent = transactions.reduce((s, t) => t.amount < 0 ? s + Math.abs(t.amount) : s, 0);
   const cols = ALL_COLS.filter(c => visibleCols.includes(c.key));
+  const allSelected = transactions.length > 0 && selected.size === transactions.length;
+  const someSelected = selected.size > 0 && !allSelected;
 
   return (
     <Layout>
@@ -214,9 +253,32 @@ export default function TransactionsPage() {
             <span style={{ fontSize: 14, fontWeight: 600 }}>Výdaje: {formatCurrency(totalSpent)}</span>
           </div>
 
+          {selected.size > 0 && (
+            <div className="tx-bulk-bar">
+              <span className="text-muted" style={{ fontSize: 13 }}>Označeno: <strong style={{ color: 'var(--text)' }}>{selected.size}</strong></span>
+              <button
+                className="btn btn-danger"
+                onClick={handleDeleteSelected}
+                disabled={deleting}
+              >
+                <Trash2 size={15} />
+                {deleting ? 'Mažu…' : `Smazat ${selected.size}`}
+              </button>
+            </div>
+          )}
+
           <div className="tx-table">
             {/* Hlavička */}
             <div className="tx-header-row" style={{ gridTemplateColumns: colsToGrid(cols) }}>
+              <span className="tx-th">
+                <input
+                  type="checkbox"
+                  className="tx-checkbox"
+                  checked={allSelected}
+                  ref={el => { if (el) el.indeterminate = someSelected; }}
+                  onChange={toggleSelectAll}
+                />
+              </span>
               {cols.map(c => (
                 <span key={c.key} className={`tx-th${c.key === 'amount' ? ' tx-th-right' : ''}`}>{c.label}</span>
               ))}
@@ -280,7 +342,19 @@ export default function TransactionsPage() {
                 </div>
               </div>
             ) : (
-              <div key={tx.id} className="tx-row" style={{ gridTemplateColumns: colsToGrid(cols) }}>
+              <div
+                key={tx.id}
+                className={`tx-row${selected.has(tx.id) ? ' tx-row-selected' : ''}`}
+                style={{ gridTemplateColumns: colsToGrid(cols) }}
+              >
+                <span className="tx-cell">
+                  <input
+                    type="checkbox"
+                    className="tx-checkbox"
+                    checked={selected.has(tx.id)}
+                    onChange={() => toggleSelect(tx.id)}
+                  />
+                </span>
                 {cols.map(c => (
                   <span key={c.key} className={`tx-cell tx-cell-${c.key}`}>
                     {renderCell(c.key, tx, categories)}
@@ -304,7 +378,7 @@ export default function TransactionsPage() {
 }
 
 function colsToGrid(cols) {
-  return cols.map(c => {
+  const dataCols = cols.map(c => {
     if (c.key === 'date') return '56px';
     if (c.key === 'tx_time') return '52px';
     if (c.key === 'amount') return '110px';
@@ -313,7 +387,8 @@ function colsToGrid(cols) {
     if (c.key === 'entered_by') return '120px';
     if (c.key === 'counterparty_account') return '140px';
     return '1fr';
-  }).join(' ') + ' 72px';
+  }).join(' ');
+  return `28px ${dataCols} 72px`;
 }
 
 function renderCell(key, tx, categories) {
