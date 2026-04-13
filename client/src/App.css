@@ -329,6 +329,88 @@
   font-size: 12px;
 }
 
+/* ── Card ── */
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+}
+
+/* ── Categories ── */
+.category-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 640px;
+}
+
+.category-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+}
+
+.category-row-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.category-row-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.category-row-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.category-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.category-form-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ── Color picker ── */
+.color-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.color-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.1s, border-color 0.1s;
+}
+.color-swatch:hover { transform: scale(1.15); }
+.color-swatch.selected { border-color: #fff; outline: 2px solid var(--accent); }
+
+/* ── Month label wider for period display ── */
+.month-label { min-width: 200px; }
+
 /* ── Helpers ── */
 .text-muted { color: var(--text2); }
 .text-danger { color: var(--danger); }

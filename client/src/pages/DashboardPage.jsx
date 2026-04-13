@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, TrendingDown } from 'lucide-react';
 import Layout from '../components/Layout';
-import { t, formatCurrency, formatMonth, currentMonth, addMonths } from '../i18n';
+import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
 
 function BudgetBar({ budget }) {
   const pct = budget.amount > 0 ? Math.min((budget.spent / budget.amount) * 100, 100) : 0;
@@ -38,46 +38,64 @@ function BudgetBar({ budget }) {
 }
 
 export default function DashboardPage() {
-  const [month, setMonth] = useState(currentMonth());
+  const [period, setPeriod] = useState(null);   // periodKey "YYYY-MM"
+  const [periodStart, setPeriodStart] = useState(null);
+  const [periodEnd, setPeriodEnd] = useState(null);
+  const [currentPeriod, setCurrentPeriod] = useState(null);
   const [data, setData] = useState(null);
   const [budgets, setBudgets] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Načti nastavení → zjisti aktuální období
   useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.json())
+      .then(s => {
+        setPeriod(s.current_period);
+        setCurrentPeriod(s.current_period);
+      });
+  }, []);
+
+  // Načti data při změně období
+  useEffect(() => {
+    if (!period) return;
     setLoading(true);
     Promise.all([
-      fetch(`/api/stats/overview?month=${month}`).then(r => r.json()),
-      fetch(`/api/budgets?month=${month}`).then(r => r.json()),
+      fetch(`/api/stats/overview?period=${period}`).then(r => r.json()),
+      fetch(`/api/budgets?period=${period}`).then(r => r.json()),
     ]).then(([stats, buds]) => {
       setData(stats);
-      setBudgets(buds);
+      setPeriodStart(stats.period_start);
+      setPeriodEnd(stats.period_end);
+      setBudgets(buds.budgets);
     }).finally(() => setLoading(false));
-  }, [month]);
+  }, [period]);
 
   return (
     <Layout>
       <div className="page-header">
         <h1 className="page-title">{t.dashboard.title}</h1>
-        <div className="month-nav">
-          <button className="btn btn-ghost btn-icon" onClick={() => setMonth(m => addMonths(m, -1))}>
-            <ChevronLeft size={18} />
-          </button>
-          <span className="month-label">{formatMonth(month)}</span>
-          <button
-            className="btn btn-ghost btn-icon"
-            onClick={() => setMonth(m => addMonths(m, 1))}
-            disabled={month >= currentMonth()}
-          >
-            <ChevronRight size={18} />
-          </button>
-        </div>
+        {period && (
+          <div className="month-nav">
+            <button className="btn btn-ghost btn-icon" onClick={() => setPeriod(p => addPeriods(p, -1))}>
+              <ChevronLeft size={18} />
+            </button>
+            <span className="month-label">{formatPeriod(periodStart, periodEnd)}</span>
+            <button
+              className="btn btn-ghost btn-icon"
+              onClick={() => setPeriod(p => addPeriods(p, 1))}
+              disabled={period >= currentPeriod}
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        )}
       </div>
 
       {loading ? (
         <div className="page-loading">{t.common.loading}</div>
       ) : (
         <div className="dashboard-content">
-          {/* Celkem utraceno */}
           <div className="stat-card">
             <div className="stat-card-icon"><TrendingDown size={20} /></div>
             <div>
@@ -86,17 +104,16 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Rozpočty */}
           <section className="section">
             <h2 className="section-title">{t.dashboard.budgets}</h2>
-            {budgets?.length === 0 ? (
+            {!budgets?.length ? (
               <div className="empty-state">
                 <p>{t.dashboard.noBudgets}</p>
                 <p className="text-muted">{t.dashboard.noBudgetsHint}</p>
               </div>
             ) : (
               <div className="budget-list">
-                {budgets?.map(b => <BudgetBar key={b.id} budget={b} />)}
+                {budgets.map(b => <BudgetBar key={b.id} budget={b} />)}
               </div>
             )}
           </section>

@@ -65,6 +65,12 @@ function initSchema() {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS settings (
+      user_id INTEGER PRIMARY KEY,
+      billing_day INTEGER DEFAULT 1,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS category_rules (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,

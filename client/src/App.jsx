@@ -5,13 +5,15 @@ import RegisterPage from './pages/RegisterPage';
 import ForgotPage from './pages/ForgotPage';
 import ResetPage from './pages/ResetPage';
 import DashboardPage from './pages/DashboardPage';
+import CategoriesPage from './pages/CategoriesPage';
+import SettingsPage from './pages/SettingsPage';
 import PlaceholderPage from './pages/PlaceholderPage';
 
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
 
 function AuthProvider({ children }) {
-  const [user, setUser] = useState(undefined); // undefined = loading
+  const [user, setUser] = useState(undefined);
 
   useEffect(() => {
     fetch('/auth/me')
@@ -41,19 +43,22 @@ function GuestOnly({ children }) {
   return children;
 }
 
+const R = ({ el }) => <RequireAuth>{el}</RequireAuth>;
+
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<GuestOnly><LoginPage /></GuestOnly>} />
+          <Route path="/login"    element={<GuestOnly><LoginPage /></GuestOnly>} />
           <Route path="/register" element={<GuestOnly><RegisterPage /></GuestOnly>} />
-          <Route path="/forgot" element={<GuestOnly><ForgotPage /></GuestOnly>} />
-          <Route path="/reset" element={<ResetPage />} />
-          <Route path="/" element={<RequireAuth><DashboardPage /></RequireAuth>} />
-          <Route path="/transactions" element={<RequireAuth><PlaceholderPage title="Transakce" /></RequireAuth>} />
-          <Route path="/categories" element={<RequireAuth><PlaceholderPage title="Kategorie" /></RequireAuth>} />
-          <Route path="/budgets" element={<RequireAuth><PlaceholderPage title="Rozpočty" /></RequireAuth>} />
+          <Route path="/forgot"   element={<GuestOnly><ForgotPage /></GuestOnly>} />
+          <Route path="/reset"    element={<ResetPage />} />
+          <Route path="/"             element={<R el={<DashboardPage />} />} />
+          <Route path="/transactions" element={<R el={<PlaceholderPage title="Transakce" />} />} />
+          <Route path="/categories"   element={<R el={<CategoriesPage />} />} />
+          <Route path="/budgets"      element={<R el={<PlaceholderPage title="Rozpočty" />} />} />
+          <Route path="/settings"     element={<R el={<SettingsPage />} />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
