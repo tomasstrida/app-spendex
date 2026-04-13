@@ -47,6 +47,9 @@ export default function TransactionsPage() {
   const [colPickerOpen, setColPickerOpen] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [customMode, setCustomMode] = useState(false);
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
   const pickerRef = useRef();
 
   useEffect(() => {
@@ -58,11 +61,24 @@ export default function TransactionsPage() {
       setCurrentPeriod(s.current_period);
       setPeriodStart(s.period_start);
       setPeriodEnd(s.period_end);
+      setCustomFrom(s.period_start);
+      setCustomTo(s.period_end);
       setCategories(cats);
     });
   }, []);
 
   const loadTransactions = useCallback(() => {
+    if (customMode) {
+      if (!customFrom || !customTo) return;
+      setLoading(true);
+      const params = new URLSearchParams({ from: customFrom, to: customTo });
+      if (filterCat) params.set('category_id', filterCat);
+      fetch(`/api/transactions?${params}`)
+        .then(r => r.json())
+        .then(data => { setTransactions(data); setSelected(new Set()); })
+        .finally(() => setLoading(false));
+      return;
+    }
     if (!period) return;
     setLoading(true);
     fetch(`/api/settings?period=${period}`)
@@ -76,7 +92,7 @@ export default function TransactionsPage() {
       })
       .then(data => { setTransactions(data); setSelected(new Set()); })
       .finally(() => setLoading(false));
-  }, [period, filterCat]);
+  }, [period, filterCat, customMode, customFrom, customTo]);
 
   useEffect(() => { loadTransactions(); }, [loadTransactions]);
 
@@ -184,7 +200,7 @@ export default function TransactionsPage() {
       <div className="page-header">
         <h1 className="page-title">Transakce</h1>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          {period && (
+          {!customMode && period && (
             <div className="month-nav">
               <button className="btn btn-ghost btn-icon" onClick={() => setPeriod(p => addPeriods(p, -1))}>
                 <ChevronLeft size={18} />
@@ -199,6 +215,36 @@ export default function TransactionsPage() {
               </button>
             </div>
           )}
+          {customMode && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                className="input"
+                type="date"
+                value={customFrom}
+                onChange={e => setCustomFrom(e.target.value)}
+                style={{ maxWidth: 140 }}
+              />
+              <span className="text-muted" style={{ fontSize: 13 }}>–</span>
+              <input
+                className="input"
+                type="date"
+                value={customTo}
+                onChange={e => setCustomTo(e.target.value)}
+                style={{ maxWidth: 140 }}
+              />
+            </div>
+          )}
+          <button
+            className={`btn btn-ghost`}
+            style={{ fontSize: 12, padding: '5px 10px' }}
+            onClick={() => {
+              setCustomMode(m => !m);
+              setSelected(new Set());
+            }}
+            title={customMode ? 'Přepnout na billing období' : 'Vlastní rozsah dat'}
+          >
+            {customMode ? 'Billing období' : 'Vlastní rozsah'}
+          </button>
           <select
             className="input"
             style={{ maxWidth: 180, fontSize: 13 }}
