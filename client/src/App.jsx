@@ -6,6 +6,7 @@ import ForgotPage from './pages/ForgotPage';
 import ResetPage from './pages/ResetPage';
 import DashboardPage from './pages/DashboardPage';
 import CategoriesPage from './pages/CategoriesPage';
+import BudgetsPage from './pages/BudgetsPage';
 import SettingsPage from './pages/SettingsPage';
 import PlaceholderPage from './pages/PlaceholderPage';
 
@@ -57,7 +58,7 @@ export default function App() {
           <Route path="/"             element={<R el={<DashboardPage />} />} />
           <Route path="/transactions" element={<R el={<PlaceholderPage title="Transakce" />} />} />
           <Route path="/categories"   element={<R el={<CategoriesPage />} />} />
-          <Route path="/budgets"      element={<R el={<PlaceholderPage title="Rozpočty" />} />} />
+          <Route path="/budgets"      element={<R el={<BudgetsPage />} />} />
           <Route path="/settings"     element={<R el={<SettingsPage />} />} />
         </Routes>
       </BrowserRouter>
