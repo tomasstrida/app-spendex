@@ -50,32 +50,34 @@ router.get('/', requireAuth, (req, res) => {
 });
 
 // PUT /api/budgets
-// body: { category_id, period, amount, default_only }
-// default_only=true  → uloží/aktualizuje výchozí budget (month='default')
-// default_only=false → uloží přepsání pro dané období (month=period)
+// body: { category_id, period, amount, scope }
+// scope='all'  → aktualizuje default + smaže VŠECHNA period-přepsání pro tuto kategorii
+// scope='from' → aktualizuje default + smaže přepsání >= period (budoucnost)
 router.put('/', requireAuth, writeLimiter, (req, res) => {
-  const { category_id, period, amount, default_only = false } = req.body;
+  const { category_id, period, amount, scope = 'all' } = req.body;
   if (!category_id || !period || amount == null) return res.status(400).json({ error: 'category_id, period a amount jsou povinné.' });
 
   const cat = db.prepare('SELECT id FROM categories WHERE id = ? AND user_id = ?').get(category_id, req.user.id);
   if (!cat) return res.status(404).json({ error: 'Kategorie nenalezena.' });
 
-  const monthKey = default_only ? 'default' : period;
-
   db.prepare(`
     INSERT INTO budgets (user_id, category_id, month, amount)
-    VALUES (?, ?, ?, ?)
+    VALUES (?, ?, 'default', ?)
     ON CONFLICT(user_id, category_id, month) DO UPDATE SET amount = excluded.amount
-  `).run(req.user.id, category_id, monthKey, amount);
+  `).run(req.user.id, category_id, amount);
 
-  // Pokud ukládáme výchozí, smaž přepsání pro toto období (aby se projevila nová výchozí hodnota)
-  if (default_only) {
-    db.prepare('DELETE FROM budgets WHERE user_id = ? AND category_id = ? AND month = ?')
+  if (scope === 'all') {
+    // Smaž všechna period-přepsání pro tuto kategorii
+    db.prepare(`DELETE FROM budgets WHERE user_id = ? AND category_id = ? AND month != 'default'`)
+      .run(req.user.id, category_id);
+  } else {
+    // Smaž přepsání od tohoto období dál (month >= period, ale není 'default')
+    db.prepare(`DELETE FROM budgets WHERE user_id = ? AND category_id = ? AND month != 'default' AND month >= ?`)
       .run(req.user.id, category_id, period);
   }
 
-  const row = db.prepare('SELECT * FROM budgets WHERE user_id = ? AND category_id = ? AND month = ?')
-    .get(req.user.id, category_id, monthKey);
+  const row = db.prepare(`SELECT * FROM budgets WHERE user_id = ? AND category_id = ? AND month = 'default'`)
+    .get(req.user.id, category_id);
   res.json(row);
 });
 
