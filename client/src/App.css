@@ -120,6 +120,12 @@
   font-weight: 600;
   font-size: 16px;
   color: var(--text);
+  line-height: 1.2;
+}
+
+.sidebar-version {
+  font-size: 11px;
+  color: var(--text2);
 }
 
 .sidebar-nav {

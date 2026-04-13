@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../App';
 import { t } from '../i18n';
 import {
@@ -20,6 +21,11 @@ const navItems = [
 
 export default function Sidebar() {
   const { user, setUser } = useAuth();
+  const [version, setVersion] = useState('');
+
+  useEffect(() => {
+    fetch('/health').then(r => r.json()).then(d => setVersion(d.version || ''));
+  }, []);
 
   async function handleLogout() {
     await fetch('/auth/logout', { method: 'POST' });
@@ -30,7 +36,10 @@ export default function Sidebar() {
     <aside className="sidebar">
       <div className="sidebar-logo">
         <span className="sidebar-logo-mark">S</span>
-        <span className="sidebar-logo-text">Spendex</span>
+        <div>
+          <div className="sidebar-logo-text">Spendex</div>
+          {version && <div className="sidebar-version">v{version}</div>}
+        </div>
       </div>
 
       <nav className="sidebar-nav">
