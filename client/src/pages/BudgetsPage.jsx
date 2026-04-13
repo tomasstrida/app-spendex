@@ -1,27 +1,31 @@
 import { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, X, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, X, Check, RotateCcw } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
 
 const i = {
   title: 'Rozpočty',
   addBudget: 'Přidat rozpočet',
-  editBudget: 'Upravit rozpočet',
   category: 'Kategorie',
   limit: 'Měsíční limit (Kč)',
   selectCategory: '— vyberte kategorii —',
-  noBudgets: 'Žádné rozpočty pro toto období.',
-  noBudgetsHint: 'Přidejte rozpočet pro kategorii.',
+  noBudgets: 'Žádné výchozí rozpočty.',
+  noBudgetsHint: 'Přidejte rozpočet — bude platit pro všechna období.',
   noCategories: 'Nejprve vytvořte kategorie v sekci Kategorie.',
-  deleteConfirm: 'Smazat tento rozpočet?',
+  deleteConfirm: 'Smazat tento rozpočet úplně (včetně výchozí hodnoty)?',
+  deleteOverrideConfirm: 'Zrušit přepsání a vrátit se na výchozí hodnotu?',
   spent: 'utraceno',
   remaining: 'zbývá',
   over: 'přečerpáno',
 };
 
 function BudgetForm({ initial, categories, period, existingCategoryIds, onSave, onCancel }) {
+  const isNew = !initial;
+  // Pro nový budget: vždy ukládáme jako default.
+  // Pro edit: nabídneme volbu default_only nebo jen toto období.
   const [categoryId, setCategoryId] = useState(initial?.category_id ? String(initial.category_id) : '');
   const [amount, setAmount] = useState(initial?.amount ? String(initial.amount) : '');
+  const [defaultOnly, setDefaultOnly] = useState(true); // výchozí = ukládá jako default
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -39,11 +43,16 @@ function BudgetForm({ initial, categories, period, existingCategoryIds, onSave, 
       const r = await fetch('/api/budgets', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category_id: parseInt(categoryId), period, amount: amt }),
+        body: JSON.stringify({
+          category_id: parseInt(categoryId),
+          period,
+          amount: amt,
+          default_only: isNew ? true : defaultOnly,
+        }),
       });
       const d = await r.json();
       if (!r.ok) { setError(d.error || 'Chyba.'); return; }
-      onSave(d);
+      onSave();
     } catch {
       setError('Chyba připojení.');
     } finally {
@@ -53,7 +62,7 @@ function BudgetForm({ initial, categories, period, existingCategoryIds, onSave, 
 
   return (
     <form className="category-form" onSubmit={handleSubmit}>
-      <h3 className="category-form-title">{initial ? i.editBudget : i.addBudget}</h3>
+      <h3 className="category-form-title">{isNew ? i.addBudget : 'Upravit rozpočet'}</h3>
       {error && <div className="alert alert-error">{error}</div>}
 
       <div className="form-group">
@@ -62,7 +71,7 @@ function BudgetForm({ initial, categories, period, existingCategoryIds, onSave, 
           className="input"
           value={categoryId}
           onChange={e => setCategoryId(e.target.value)}
-          disabled={!!initial}
+          disabled={!isNew}
         >
           <option value="">{i.selectCategory}</option>
           {availableCategories.map(c => (
@@ -81,10 +90,29 @@ function BudgetForm({ initial, categories, period, existingCategoryIds, onSave, 
           placeholder="5 000"
           value={amount}
           onChange={e => setAmount(e.target.value)}
-          autoFocus={!!initial}
+          autoFocus={!isNew}
           style={{ maxWidth: 160 }}
         />
       </div>
+
+      {!isNew && (
+        <div className="budget-edit-scope">
+          <label className={`budget-scope-option${defaultOnly ? ' selected' : ''}`}>
+            <input type="radio" checked={defaultOnly} onChange={() => setDefaultOnly(true)} />
+            <div>
+              <div style={{ fontWeight: 500, fontSize: 13 }}>Výchozí hodnota</div>
+              <div className="text-muted" style={{ fontSize: 12 }}>Platí pro všechna období bez přepsání</div>
+            </div>
+          </label>
+          <label className={`budget-scope-option${!defaultOnly ? ' selected' : ''}`}>
+            <input type="radio" checked={!defaultOnly} onChange={() => setDefaultOnly(false)} />
+            <div>
+              <div style={{ fontWeight: 500, fontSize: 13 }}>Jen toto období</div>
+              <div className="text-muted" style={{ fontSize: 12 }}>Přepíše výchozí hodnotu pro toto období</div>
+            </div>
+          </label>
+        </div>
+      )}
 
       <div className="form-actions">
         <button type="button" className="btn btn-ghost" onClick={onCancel}>
@@ -120,10 +148,9 @@ export default function BudgetsPage() {
     });
   }, []);
 
-  useEffect(() => {
-    if (!period) return;
+  function loadBudgets(p) {
     setLoading(true);
-    fetch(`/api/budgets?period=${period}`)
+    fetch(`/api/budgets?period=${p}`)
       .then(r => r.json())
       .then(d => {
         setBudgets(d.budgets || []);
@@ -131,28 +158,22 @@ export default function BudgetsPage() {
         setPeriodEnd(d.period_end);
       })
       .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    if (!period) return;
+    loadBudgets(period);
   }, [period]);
 
   const existingCategoryIds = budgets.map(b => b.category_id);
 
-  function handleSaved(budget) {
-    setBudgets(prev => {
-      const idx = prev.findIndex(b => b.id === budget.id);
-      if (idx >= 0) {
-        const next = [...prev]; next[idx] = budget; return next;
-      }
-      // nový — reload pro správná data (spent atd.)
-      fetch(`/api/budgets?period=${period}`).then(r => r.json()).then(d => setBudgets(d.budgets || []));
-      return prev;
-    });
-    setShowForm(false);
-    setEditItem(null);
-  }
-
-  async function handleDelete(budget) {
-    if (!confirm(i.deleteConfirm)) return;
-    const r = await fetch(`/api/budgets/${budget.id}`, { method: 'DELETE' });
-    if (r.ok) setBudgets(prev => prev.filter(b => b.id !== budget.id));
+  async function handleDelete(b) {
+    const isOverride = b.is_override;
+    if (!confirm(isOverride ? i.deleteOverrideConfirm : i.deleteConfirm)) return;
+    // Pokud je override, smažeme override_id; jinak default_id
+    const id = isOverride ? b.override_id : b.default_id;
+    const r = await fetch(`/api/budgets/${id}`, { method: 'DELETE' });
+    if (r.ok) loadBudgets(period);
   }
 
   const pct = (spent, amount) => amount > 0 ? Math.min((spent / amount) * 100, 100) : 0;
@@ -164,13 +185,13 @@ export default function BudgetsPage() {
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           {period && (
             <div className="month-nav">
-              <button className="btn btn-ghost btn-icon" onClick={() => setPeriod(p => addPeriods(p, -1))}>
+              <button className="btn btn-ghost btn-icon" onClick={() => { setPeriod(p => addPeriods(p, -1)); setShowForm(false); setEditItem(null); }}>
                 <ChevronLeft size={18} />
               </button>
               <span className="month-label">{formatPeriod(periodStart, periodEnd)}</span>
               <button
                 className="btn btn-ghost btn-icon"
-                onClick={() => setPeriod(p => addPeriods(p, 1))}
+                onClick={() => { setPeriod(p => addPeriods(p, 1)); setShowForm(false); setEditItem(null); }}
                 disabled={period >= currentPeriod}
               >
                 <ChevronRight size={18} />
@@ -189,13 +210,13 @@ export default function BudgetsPage() {
         <div className="empty-state"><p>{i.noCategories}</p></div>
       )}
 
-      {showForm && !editItem && (
+      {showForm && (
         <div className="card" style={{ maxWidth: 480, marginBottom: 24 }}>
           <BudgetForm
             categories={categories}
             period={period}
             existingCategoryIds={existingCategoryIds}
-            onSave={handleSaved}
+            onSave={() => { setShowForm(false); loadBudgets(period); }}
             onCancel={() => setShowForm(false)}
           />
         </div>
@@ -204,7 +225,12 @@ export default function BudgetsPage() {
       {loading ? (
         <div className="page-loading">{t.common.loading}</div>
       ) : budgets.length === 0 && !showForm ? (
-        categories.length > 0 && <div className="empty-state"><p>{i.noBudgets}</p><p className="text-muted">{i.noBudgetsHint}</p></div>
+        categories.length > 0 && (
+          <div className="empty-state">
+            <p>{i.noBudgets}</p>
+            <p className="text-muted">{i.noBudgetsHint}</p>
+          </div>
+        )
       ) : (
         <div className="budget-list">
           {budgets.map(b => {
@@ -212,33 +238,48 @@ export default function BudgetsPage() {
             const remaining = b.amount - b.spent;
             const p = pct(b.spent, b.amount);
 
-            return editItem?.id === b.id ? (
-              <div key={b.id} className="card" style={{ maxWidth: 640 }}>
+            return editItem?.category_id === b.category_id ? (
+              <div key={b.category_id} className="card" style={{ maxWidth: 640 }}>
                 <BudgetForm
                   initial={b}
                   categories={categories}
                   period={period}
                   existingCategoryIds={existingCategoryIds}
-                  onSave={handleSaved}
+                  onSave={() => { setEditItem(null); loadBudgets(period); }}
                   onCancel={() => setEditItem(null)}
                 />
               </div>
             ) : (
-              <div key={b.id} className="budget-item">
+              <div key={b.category_id} className="budget-item">
                 <div className="budget-item-header">
                   <div className="budget-item-name">
                     <span className="budget-dot" style={{ background: b.category_color || '#6366f1' }} />
                     {b.category_name}
+                    {b.is_override ? (
+                      <span className="budget-badge budget-badge-override">upraveno</span>
+                    ) : (
+                      <span className="budget-badge budget-badge-default">výchozí</span>
+                    )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div className="budget-item-amounts">
                       <span className={over ? 'text-danger' : ''}>{formatCurrency(b.spent)}</span>
                       <span className="text-muted"> / {formatCurrency(b.amount)}</span>
+                      {b.is_override && (
+                        <span className="text-muted" style={{ fontSize: 11 }}>
+                          &nbsp;(výchozí: {formatCurrency(b.default_amount)})
+                        </span>
+                      )}
                     </div>
-                    <button className="btn btn-ghost btn-icon" onClick={() => { setShowForm(false); setEditItem(b); }}>
+                    <button className="btn btn-ghost btn-icon" title="Upravit" onClick={() => { setShowForm(false); setEditItem(b); }}>
                       <Pencil size={14} />
                     </button>
-                    <button className="btn btn-ghost btn-icon" onClick={() => handleDelete(b)}>
+                    {b.is_override && (
+                      <button className="btn btn-ghost btn-icon" title="Zrušit přepsání" onClick={() => handleDelete(b)}>
+                        <RotateCcw size={14} />
+                      </button>
+                    )}
+                    <button className="btn btn-ghost btn-icon" title={b.is_override ? 'Smazat přepsání' : 'Smazat rozpočet'} onClick={() => handleDelete(b)}>
                       <Trash2 size={14} />
                     </button>
                   </div>

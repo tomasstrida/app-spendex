@@ -87,6 +87,26 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_categories_user ON categories(user_id);
   `);
 
+  // Migrace: budgety bez 'default' záznamu — vezmi nejnovější per user+category a nastav jako default
+  const budgetMigration = db.prepare(`
+    SELECT user_id, category_id, MAX(month) as month, amount
+    FROM budgets
+    WHERE month != 'default'
+    GROUP BY user_id, category_id
+    HAVING NOT EXISTS (
+      SELECT 1 FROM budgets b2
+      WHERE b2.user_id = budgets.user_id
+        AND b2.category_id = budgets.category_id
+        AND b2.month = 'default'
+    )
+  `).all();
+  const insertDefault = db.prepare(`
+    INSERT OR IGNORE INTO budgets (user_id, category_id, month, amount) VALUES (?, ?, 'default', ?)
+  `);
+  for (const row of budgetMigration) {
+    insertDefault.run(row.user_id, row.category_id, row.amount);
+  }
+
   // Migrace: nové sloupce pro Air Bank metadata
   const migrations = [
     'ALTER TABLE transactions ADD COLUMN tx_time TEXT',

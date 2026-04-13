@@ -707,3 +707,35 @@
   background: color-mix(in srgb, var(--accent) 8%, transparent) !important;
 }
 .tx-row-selected:hover { background: color-mix(in srgb, var(--accent) 14%, transparent) !important; }
+
+/* ── Budget badges + edit scope ── */
+.budget-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 20px;
+  letter-spacing: 0.02em;
+  margin-left: 8px;
+}
+.budget-badge-default  { background: var(--bg); color: var(--text2); border: 1px solid var(--border); }
+.budget-badge-override { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+
+.budget-edit-scope {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.budget-scope-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.budget-scope-option.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.budget-scope-option input[type="radio"] { margin-top: 2px; accent-color: var(--accent); }
