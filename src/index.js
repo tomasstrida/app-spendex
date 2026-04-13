@@ -43,7 +43,8 @@ app.use(passport.session());
 initSchema();
 
 // --- Health check ---
-app.get('/health', (req, res) => res.json({ status: 'ok', version: process.env.npm_package_version }));
+const APP_VERSION = require('fs').readFileSync(require('path').join(__dirname, '../VERSION'), 'utf8').trim();
+app.get('/health', (req, res) => res.json({ status: 'ok', version: APP_VERSION }));
 
 // --- API routes ---
 app.use('/auth', require('./routes/auth'));
