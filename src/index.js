@@ -16,6 +16,9 @@ if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Railway / reverse proxy
+app.set('trust proxy', 1);
+
 // --- Middleware ---
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
