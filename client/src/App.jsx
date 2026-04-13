@@ -5,6 +5,7 @@ import RegisterPage from './pages/RegisterPage';
 import ForgotPage from './pages/ForgotPage';
 import ResetPage from './pages/ResetPage';
 import DashboardPage from './pages/DashboardPage';
+import PlaceholderPage from './pages/PlaceholderPage';
 
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
@@ -49,7 +50,10 @@ export default function App() {
           <Route path="/register" element={<GuestOnly><RegisterPage /></GuestOnly>} />
           <Route path="/forgot" element={<GuestOnly><ForgotPage /></GuestOnly>} />
           <Route path="/reset" element={<ResetPage />} />
-          <Route path="/*" element={<RequireAuth><DashboardPage /></RequireAuth>} />
+          <Route path="/" element={<RequireAuth><DashboardPage /></RequireAuth>} />
+          <Route path="/transactions" element={<RequireAuth><PlaceholderPage title="Transakce" /></RequireAuth>} />
+          <Route path="/categories" element={<RequireAuth><PlaceholderPage title="Kategorie" /></RequireAuth>} />
+          <Route path="/budgets" element={<RequireAuth><PlaceholderPage title="Rozpočty" /></RequireAuth>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
