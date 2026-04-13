@@ -7,6 +7,7 @@ import {
   ArrowLeftRight,
   Tag,
   PiggyBank,
+  Upload,
   Settings,
   LogOut,
 } from 'lucide-react';
@@ -16,6 +17,7 @@ const navItems = [
   { to: '/transactions', icon: ArrowLeftRight,  label: t.nav.transactions },
   { to: '/categories',   icon: Tag,             label: t.nav.categories },
   { to: '/budgets',      icon: PiggyBank,       label: t.nav.budgets },
+  { to: '/import',       icon: Upload,          label: t.nav.import },
   { to: '/settings',     icon: Settings,        label: t.nav.settings },
 ];
 

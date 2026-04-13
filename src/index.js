@@ -53,6 +53,7 @@ app.use('/api/categories', require('./routes/categories'));
 app.use('/api/budgets', require('./routes/budgets'));
 app.use('/api/stats', require('./routes/stats'));
 app.use('/api/settings', require('./routes/settings'));
+app.use('/api/import', require('./routes/import'));
 
 // --- Frontend (production) ---
 const clientDist = path.join(__dirname, '../client/dist');

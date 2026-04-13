@@ -4,6 +4,7 @@ const cs = {
     transactions: 'Transakce',
     categories: 'Kategorie',
     budgets: 'Rozpočty',
+    import: 'Import',
     settings: 'Nastavení',
   },
   dashboard: {

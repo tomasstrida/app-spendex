@@ -420,3 +420,82 @@
 /* ── Helpers ── */
 .text-muted { color: var(--text2); }
 .text-danger { color: var(--danger); }
+
+/* ── Import ── */
+.import-upload-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 32px;
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  max-width: 480px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.import-upload-area:hover { border-color: var(--accent); }
+
+.import-upload-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.import-upload-hint {
+  font-size: 13px;
+  color: var(--text2);
+  text-align: center;
+}
+
+.import-summary {
+  display: flex;
+  gap: 24px;
+  padding: 16px 20px;
+  background: var(--bg2);
+  border-radius: 10px;
+}
+
+.import-summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.import-summary-num {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+}
+
+.import-mapping-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.import-mapping-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.import-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+}
+.import-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
