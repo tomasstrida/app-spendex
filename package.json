@@ -1,0 +1,32 @@
+{
+  "name": "spendex",
+  "version": "1.0.1",
+  "description": "Spendex – personal finance management app",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "dev:client": "cd client && npm run dev",
+    "build": "cd client && npm run build",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.4.3",
+    "better-sqlite3-session-store": "^0.1.0",
+    "bcrypt": "^5.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.3.1",
+    "express-session": "^1.18.0",
+    "node-cron": "^3.0.3",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
+    "passport-local": "^1.0.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "husky": "^9.0.11",
+    "nodemon": "^3.1.0"
+  }
+}
