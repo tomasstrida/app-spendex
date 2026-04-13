@@ -86,6 +86,18 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_budgets_user_month ON budgets(user_id, month);
     CREATE INDEX IF NOT EXISTS idx_categories_user ON categories(user_id);
   `);
+
+  // Migrace: nové sloupce pro Air Bank metadata
+  const migrations = [
+    'ALTER TABLE transactions ADD COLUMN tx_time TEXT',
+    'ALTER TABLE transactions ADD COLUMN tx_type TEXT',
+    'ALTER TABLE transactions ADD COLUMN counterparty_account TEXT',
+    'ALTER TABLE transactions ADD COLUMN entered_by TEXT',
+    'ALTER TABLE transactions ADD COLUMN place TEXT',
+  ];
+  for (const sql of migrations) {
+    try { db.exec(sql); } catch { /* sloupec již existuje */ }
+  }
 }
 
 module.exports = { initSchema };

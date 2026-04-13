@@ -1,7 +1,30 @@
-import { useState, useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Pencil, Trash2, Check, X } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { ChevronLeft, ChevronRight, Pencil, Trash2, Check, X, Columns3 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { formatCurrency, formatPeriod, addPeriods } from '../i18n';
+
+const ALL_COLS = [
+  { key: 'date',                 label: 'Datum',           default: true,  always: true },
+  { key: 'tx_time',              label: 'Čas',             default: false },
+  { key: 'description',          label: 'Popis',           default: true,  always: true },
+  { key: 'tx_type',              label: 'Typ úhrady',      default: false },
+  { key: 'category_name',        label: 'Kategorie',       default: true },
+  { key: 'entered_by',           label: 'Kdo zadal',       default: false },
+  { key: 'counterparty_account', label: 'Číslo účtu',      default: false },
+  { key: 'place',                label: 'Obchodní místo',  default: false },
+  { key: 'note',                 label: 'Zpráva/Poznámka', default: false },
+  { key: 'amount',               label: 'Částka',          default: true,  always: true },
+];
+
+const LS_KEY = 'spendex_tx_cols';
+
+function loadCols() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LS_KEY));
+    if (saved) return saved;
+  } catch { /* ignore */ }
+  return ALL_COLS.filter(c => c.default).map(c => c.key);
+}
 
 function formatDate(iso) {
   if (!iso) return '';
@@ -20,8 +43,10 @@ export default function TransactionsPage() {
   const [loading, setLoading] = useState(true);
   const [editId, setEditId] = useState(null);
   const [editData, setEditData] = useState({});
+  const [visibleCols, setVisibleCols] = useState(loadCols);
+  const [colPickerOpen, setColPickerOpen] = useState(false);
+  const pickerRef = useRef();
 
-  // Načti nastavení + kategorie
   useEffect(() => {
     Promise.all([
       fetch('/api/settings').then(r => r.json()),
@@ -35,7 +60,6 @@ export default function TransactionsPage() {
     });
   }, []);
 
-  // Načti transakce při změně období
   const loadTransactions = useCallback(() => {
     if (!period) return;
     setLoading(true);
@@ -53,6 +77,23 @@ export default function TransactionsPage() {
   }, [period, filterCat]);
 
   useEffect(() => { loadTransactions(); }, [loadTransactions]);
+
+  // Zavři picker kliknutím ven
+  useEffect(() => {
+    function onClick(e) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target)) setColPickerOpen(false);
+    }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  function toggleCol(key) {
+    setVisibleCols(prev => {
+      const next = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
+      localStorage.setItem(LS_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
 
   async function handleDelete(id) {
     if (!confirm('Smazat tuto transakci?')) return;
@@ -97,6 +138,7 @@ export default function TransactionsPage() {
   }
 
   const totalSpent = transactions.reduce((s, t) => t.amount < 0 ? s + Math.abs(t.amount) : s, 0);
+  const cols = ALL_COLS.filter(c => visibleCols.includes(c.key));
 
   return (
     <Layout>
@@ -130,6 +172,32 @@ export default function TransactionsPage() {
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
+
+          {/* Přepínač sloupců */}
+          <div className="col-picker-wrap" ref={pickerRef}>
+            <button
+              className={`btn btn-ghost${colPickerOpen ? ' active' : ''}`}
+              onClick={() => setColPickerOpen(o => !o)}
+              title="Zobrazené sloupce"
+            >
+              <Columns3 size={16} /> Sloupce
+            </button>
+            {colPickerOpen && (
+              <div className="col-picker-dropdown">
+                {ALL_COLS.map(c => (
+                  <label key={c.key} className={`col-picker-item${c.always ? ' disabled' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={visibleCols.includes(c.key)}
+                      disabled={c.always}
+                      onChange={() => !c.always && toggleCol(c.key)}
+                    />
+                    {c.label}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -146,7 +214,15 @@ export default function TransactionsPage() {
             <span style={{ fontSize: 14, fontWeight: 600 }}>Výdaje: {formatCurrency(totalSpent)}</span>
           </div>
 
-          <div className="tx-list">
+          <div className="tx-table">
+            {/* Hlavička */}
+            <div className="tx-header-row" style={{ gridTemplateColumns: colsToGrid(cols) }}>
+              {cols.map(c => (
+                <span key={c.key} className={`tx-th${c.key === 'amount' ? ' tx-th-right' : ''}`}>{c.label}</span>
+              ))}
+              <span className="tx-th" />
+            </div>
+
             {transactions.map(tx => editId === tx.id ? (
               <div key={tx.id} className="tx-edit-row">
                 <div className="tx-edit-grid">
@@ -204,21 +280,12 @@ export default function TransactionsPage() {
                 </div>
               </div>
             ) : (
-              <div key={tx.id} className="tx-row">
-                <span className="tx-date">{formatDate(tx.date)}</span>
-                <span className="tx-desc">{tx.description || <span className="text-muted">—</span>}</span>
-                <span className="tx-cat">
-                  {tx.category_name ? (
-                    <span className="tx-cat-badge" style={{ background: (tx.category_color || '#6366f1') + '33', color: tx.category_color || '#6366f1' }}>
-                      {tx.category_name}
-                    </span>
-                  ) : (
-                    <span className="text-muted" style={{ fontSize: 12 }}>—</span>
-                  )}
-                </span>
-                <span className={`tx-amount ${tx.amount < 0 ? 'tx-amount-out' : 'tx-amount-in'}`}>
-                  {tx.amount < 0 ? '−' : '+'}{formatCurrency(Math.abs(tx.amount))}
-                </span>
+              <div key={tx.id} className="tx-row" style={{ gridTemplateColumns: colsToGrid(cols) }}>
+                {cols.map(c => (
+                  <span key={c.key} className={`tx-cell tx-cell-${c.key}`}>
+                    {renderCell(c.key, tx, categories)}
+                  </span>
+                ))}
                 <span className="tx-actions">
                   <button className="btn btn-ghost btn-icon" onClick={() => startEdit(tx)} title="Upravit">
                     <Pencil size={14} />
@@ -234,4 +301,55 @@ export default function TransactionsPage() {
       )}
     </Layout>
   );
+}
+
+function colsToGrid(cols) {
+  return cols.map(c => {
+    if (c.key === 'date') return '56px';
+    if (c.key === 'tx_time') return '52px';
+    if (c.key === 'amount') return '110px';
+    if (c.key === 'category_name') return '140px';
+    if (c.key === 'tx_type') return '130px';
+    if (c.key === 'entered_by') return '120px';
+    if (c.key === 'counterparty_account') return '140px';
+    return '1fr';
+  }).join(' ') + ' 72px';
+}
+
+function renderCell(key, tx, categories) {
+  switch (key) {
+    case 'date':
+      return <span className="tx-date">{formatDate(tx.date)}</span>;
+    case 'tx_time':
+      return <span className="text-muted" style={{ fontSize: 12 }}>{tx.tx_time || '—'}</span>;
+    case 'description':
+      return <span className="tx-desc">{tx.description || <span className="text-muted">—</span>}</span>;
+    case 'tx_type':
+      return <span className="text-muted" style={{ fontSize: 12 }}>{tx.tx_type || '—'}</span>;
+    case 'category_name':
+      return tx.category_name ? (
+        <span className="tx-cat-badge" style={{
+          background: (tx.category_color || '#6366f1') + '33',
+          color: tx.category_color || '#6366f1',
+        }}>
+          {tx.category_name}
+        </span>
+      ) : <span className="text-muted" style={{ fontSize: 12 }}>—</span>;
+    case 'entered_by':
+      return <span style={{ fontSize: 13 }}>{tx.entered_by || '—'}</span>;
+    case 'counterparty_account':
+      return <span className="text-muted" style={{ fontSize: 12 }}>{tx.counterparty_account || '—'}</span>;
+    case 'place':
+      return <span style={{ fontSize: 13 }}>{tx.place || '—'}</span>;
+    case 'note':
+      return <span className="text-muted" style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.note || '—'}</span>;
+    case 'amount':
+      return (
+        <span className={`tx-amount ${tx.amount < 0 ? 'tx-amount-out' : 'tx-amount-in'}`}>
+          {tx.amount < 0 ? '−' : '+'}{formatCurrency(Math.abs(tx.amount))}
+        </span>
+      );
+    default:
+      return null;
+  }
 }

@@ -11,10 +11,13 @@ const COL = {
   CURRENCY: 4,
   AMOUNT: 5,
   COUNTERPARTY: 9,
+  COUNTERPARTY_ACCOUNT: 10,
   NOTE_ME: 17,
   MESSAGE: 18,
   PLACE: 24,
+  DATETIME: 28,
   REF_NUMBER: 32,
+  ENTERED_BY: 34,
 };
 
 function parseAmount(str) {
@@ -86,6 +89,11 @@ function parseAirBankCSV(text) {
 
     const refNumber = fields[COL.REF_NUMBER]?.trim() || '';
 
+    // Čas z "DD/MM/YYYY HH:MM:SS"
+    const datetimeRaw = fields[COL.DATETIME]?.trim() || '';
+    const timeMatch = datetimeRaw.match(/(\d{2}:\d{2})/);
+    const txTime = timeMatch ? timeMatch[1] : null;
+
     transactions.push({
       date,
       amount,
@@ -95,6 +103,11 @@ function parseAirBankCSV(text) {
       ab_category: fields[COL.AB_CATEGORY]?.trim() || '',
       direction: fields[COL.DIRECTION]?.trim() || '',
       external_id: refNumber || null,
+      tx_time: txTime,
+      tx_type: fields[COL.TYPE]?.trim() || null,
+      counterparty_account: fields[COL.COUNTERPARTY_ACCOUNT]?.trim() || null,
+      entered_by: fields[COL.ENTERED_BY]?.trim() || null,
+      place: place || null,
     });
   }
 

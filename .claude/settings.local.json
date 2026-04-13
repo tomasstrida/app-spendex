@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth:*)",
+      "Bash(railway --version)",
+      "Bash(gh repo:*)",
+      "Bash(npm create:*)",
+      "Bash(npm install:*)",
+      "Bash(npm rebuild:*)",
+      "Bash(node:*)",
+      "Bash(npm list:*)",
+      "Bash(npx husky:*)",
+      "Bash(git init:*)",
+      "Bash(git remote:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)",
+      "Bash(git checkout:*)",
+      "Bash(git merge:*)",
+      "Bash(npm run:*)",
+      "Bash(brew list:*)",
+      "Bash(npm -v)",
+      "Bash(~/.nvm/versions/node/v22.22.2/bin/npm rebuild:*)"
+    ]
+  }
+}
