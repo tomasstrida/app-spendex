@@ -37,11 +37,16 @@ export default function ImportPage() {
       if (!r.ok) { setError(d.error); return; }
       setTransactions(d.transactions);
       setAbCategories(d.ab_categories);
-      // Inicializuj mapování — auto-match podle názvu (case-insensitive)
+      // Předvyplň mapování: 1) uložené mapování, 2) shoda názvu
+      const saved = d.saved_mappings || {};
       const map = {};
       d.ab_categories.forEach(abCat => {
-        const match = categories.find(c => c.name.toLowerCase() === abCat.toLowerCase());
-        map[abCat] = match ? String(match.id) : '';
+        if (saved[abCat]) {
+          map[abCat] = String(saved[abCat]);
+        } else {
+          const match = categories.find(c => c.name.toLowerCase() === abCat.toLowerCase());
+          map[abCat] = match ? String(match.id) : '';
+        }
       });
       setCategoryMap(map);
       setStep(STEP.MAPPING);

@@ -739,3 +739,40 @@
 }
 .budget-scope-option.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .budget-scope-option input[type="radio"] { margin-top: 2px; accent-color: var(--accent); }
+
+/* ── Mapping table (Settings) ── */
+.mapping-table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.mapping-header {
+  display: grid;
+  grid-template-columns: 1fr 1fr 36px;
+  gap: 12px;
+  padding: 8px 14px;
+  background: var(--bg);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text2);
+}
+
+.mapping-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 36px;
+  gap: 12px;
+  padding: 10px 14px;
+  align-items: center;
+  border-top: 1px solid var(--border);
+}
+.mapping-row:hover { background: var(--bg); }
+
+.mapping-ab-cat {
+  font-size: 13px;
+  color: var(--text);
+}
