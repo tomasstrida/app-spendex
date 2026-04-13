@@ -5,11 +5,11 @@ import RegisterPage from './pages/RegisterPage';
 import ForgotPage from './pages/ForgotPage';
 import ResetPage from './pages/ResetPage';
 import DashboardPage from './pages/DashboardPage';
+import TransactionsPage from './pages/TransactionsPage';
 import CategoriesPage from './pages/CategoriesPage';
 import BudgetsPage from './pages/BudgetsPage';
 import ImportPage from './pages/ImportPage';
 import SettingsPage from './pages/SettingsPage';
-import PlaceholderPage from './pages/PlaceholderPage';
 
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
@@ -57,7 +57,7 @@ export default function App() {
           <Route path="/forgot"   element={<GuestOnly><ForgotPage /></GuestOnly>} />
           <Route path="/reset"    element={<ResetPage />} />
           <Route path="/"             element={<R el={<DashboardPage />} />} />
-          <Route path="/transactions" element={<R el={<PlaceholderPage title="Transakce" />} />} />
+          <Route path="/transactions" element={<R el={<TransactionsPage />} />} />
           <Route path="/categories"   element={<R el={<CategoriesPage />} />} />
           <Route path="/budgets"      element={<R el={<BudgetsPage />} />} />
           <Route path="/import"       element={<R el={<ImportPage />} />} />

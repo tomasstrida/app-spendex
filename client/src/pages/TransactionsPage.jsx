@@ -1,0 +1,237 @@
+import { useState, useEffect, useCallback } from 'react';
+import { ChevronLeft, ChevronRight, Pencil, Trash2, Check, X } from 'lucide-react';
+import Layout from '../components/Layout';
+import { formatCurrency, formatPeriod, addPeriods } from '../i18n';
+
+function formatDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' });
+}
+
+export default function TransactionsPage() {
+  const [period, setPeriod] = useState(null);
+  const [periodStart, setPeriodStart] = useState(null);
+  const [periodEnd, setPeriodEnd] = useState(null);
+  const [currentPeriod, setCurrentPeriod] = useState(null);
+  const [transactions, setTransactions] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [filterCat, setFilterCat] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [editId, setEditId] = useState(null);
+  const [editData, setEditData] = useState({});
+
+  // Načti nastavení + kategorie
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/settings').then(r => r.json()),
+      fetch('/api/categories').then(r => r.json()),
+    ]).then(([s, cats]) => {
+      setPeriod(s.current_period);
+      setCurrentPeriod(s.current_period);
+      setPeriodStart(s.period_start);
+      setPeriodEnd(s.period_end);
+      setCategories(cats);
+    });
+  }, []);
+
+  // Načti transakce při změně období
+  const loadTransactions = useCallback(() => {
+    if (!period) return;
+    setLoading(true);
+    fetch(`/api/settings?period=${period}`)
+      .then(r => r.json())
+      .then(s => {
+        setPeriodStart(s.period_start);
+        setPeriodEnd(s.period_end);
+        const params = new URLSearchParams({ from: s.period_start, to: s.period_end });
+        if (filterCat) params.set('category_id', filterCat);
+        return fetch(`/api/transactions?${params}`).then(r => r.json());
+      })
+      .then(setTransactions)
+      .finally(() => setLoading(false));
+  }, [period, filterCat]);
+
+  useEffect(() => { loadTransactions(); }, [loadTransactions]);
+
+  async function handleDelete(id) {
+    if (!confirm('Smazat tuto transakci?')) return;
+    const r = await fetch(`/api/transactions/${id}`, { method: 'DELETE' });
+    if (r.ok) setTransactions(prev => prev.filter(t => t.id !== id));
+  }
+
+  function startEdit(tx) {
+    setEditId(tx.id);
+    setEditData({
+      description: tx.description || '',
+      category_id: tx.category_id ? String(tx.category_id) : '',
+      amount: String(Math.abs(tx.amount)),
+      date: tx.date,
+      note: tx.note || '',
+    });
+  }
+
+  async function saveEdit(tx) {
+    const body = {
+      description: editData.description,
+      category_id: editData.category_id ? parseInt(editData.category_id) : null,
+      amount: tx.amount < 0 ? -Math.abs(parseFloat(editData.amount)) : Math.abs(parseFloat(editData.amount)),
+      date: editData.date,
+      note: editData.note,
+    };
+    const r = await fetch(`/api/transactions/${tx.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (r.ok) {
+      const updated = await r.json();
+      const cat = categories.find(c => c.id === updated.category_id);
+      setTransactions(prev => prev.map(t =>
+        t.id === updated.id
+          ? { ...updated, category_name: cat?.name, category_color: cat?.color }
+          : t
+      ));
+      setEditId(null);
+    }
+  }
+
+  const totalSpent = transactions.reduce((s, t) => t.amount < 0 ? s + Math.abs(t.amount) : s, 0);
+
+  return (
+    <Layout>
+      <div className="page-header">
+        <h1 className="page-title">Transakce</h1>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          {period && (
+            <div className="month-nav">
+              <button className="btn btn-ghost btn-icon" onClick={() => setPeriod(p => addPeriods(p, -1))}>
+                <ChevronLeft size={18} />
+              </button>
+              <span className="month-label">{formatPeriod(periodStart, periodEnd)}</span>
+              <button
+                className="btn btn-ghost btn-icon"
+                onClick={() => setPeriod(p => addPeriods(p, 1))}
+                disabled={period >= currentPeriod}
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          )}
+          <select
+            className="input"
+            style={{ maxWidth: 180, fontSize: 13 }}
+            value={filterCat}
+            onChange={e => setFilterCat(e.target.value)}
+          >
+            <option value="">Všechny kategorie</option>
+            <option value="none">— bez kategorie —</option>
+            {categories.map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="page-loading">Načítání…</div>
+      ) : transactions.length === 0 ? (
+        <div className="empty-state">
+          <p>Žádné transakce pro toto období.</p>
+        </div>
+      ) : (
+        <>
+          <div className="tx-summary">
+            <span className="text-muted" style={{ fontSize: 13 }}>{transactions.length} transakcí</span>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>Výdaje: {formatCurrency(totalSpent)}</span>
+          </div>
+
+          <div className="tx-list">
+            {transactions.map(tx => editId === tx.id ? (
+              <div key={tx.id} className="tx-edit-row">
+                <div className="tx-edit-grid">
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: 11 }}>Datum</label>
+                    <input
+                      className="input"
+                      type="date"
+                      value={editData.date}
+                      onChange={e => setEditData(d => ({ ...d, date: e.target.value }))}
+                      style={{ maxWidth: 140 }}
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: 11 }}>Popis</label>
+                    <input
+                      className="input"
+                      value={editData.description}
+                      onChange={e => setEditData(d => ({ ...d, description: e.target.value }))}
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: 11 }}>Kategorie</label>
+                    <select
+                      className="input"
+                      value={editData.category_id}
+                      onChange={e => setEditData(d => ({ ...d, category_id: e.target.value }))}
+                    >
+                      <option value="">— bez kategorie —</option>
+                      {categories.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: 11 }}>Částka (Kč)</label>
+                    <input
+                      className="input"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={editData.amount}
+                      onChange={e => setEditData(d => ({ ...d, amount: e.target.value }))}
+                      style={{ maxWidth: 120 }}
+                    />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+                  <button className="btn btn-ghost" onClick={() => setEditId(null)}>
+                    <X size={14} /> Zrušit
+                  </button>
+                  <button className="btn btn-primary" onClick={() => saveEdit(tx)}>
+                    <Check size={14} /> Uložit
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div key={tx.id} className="tx-row">
+                <span className="tx-date">{formatDate(tx.date)}</span>
+                <span className="tx-desc">{tx.description || <span className="text-muted">—</span>}</span>
+                <span className="tx-cat">
+                  {tx.category_name ? (
+                    <span className="tx-cat-badge" style={{ background: (tx.category_color || '#6366f1') + '33', color: tx.category_color || '#6366f1' }}>
+                      {tx.category_name}
+                    </span>
+                  ) : (
+                    <span className="text-muted" style={{ fontSize: 12 }}>—</span>
+                  )}
+                </span>
+                <span className={`tx-amount ${tx.amount < 0 ? 'tx-amount-out' : 'tx-amount-in'}`}>
+                  {tx.amount < 0 ? '−' : '+'}{formatCurrency(Math.abs(tx.amount))}
+                </span>
+                <span className="tx-actions">
+                  <button className="btn btn-ghost btn-icon" onClick={() => startEdit(tx)} title="Upravit">
+                    <Pencil size={14} />
+                  </button>
+                  <button className="btn btn-ghost btn-icon" onClick={() => handleDelete(tx.id)} title="Smazat">
+                    <Trash2 size={14} />
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </Layout>
+  );
+}

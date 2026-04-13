@@ -4,13 +4,14 @@ const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
 const { currentPeriodKey, getPeriodDates } = require('../utils/period');
 
-// GET /api/settings
+// GET /api/settings?period=YYYY-MM
 router.get('/', requireAuth, (req, res) => {
   const row = db.prepare('SELECT billing_day FROM settings WHERE user_id = ?').get(req.user.id);
   const billingDay = row?.billing_day ?? 1;
-  const periodKey = currentPeriodKey(billingDay);
+  const currentKey = currentPeriodKey(billingDay);
+  const periodKey = req.query.period || currentKey;
   const { start, end } = getPeriodDates(billingDay, periodKey);
-  res.json({ billing_day: billingDay, current_period: periodKey, period_start: start, period_end: end });
+  res.json({ billing_day: billingDay, current_period: currentKey, period_start: start, period_end: end });
 });
 
 // PUT /api/settings

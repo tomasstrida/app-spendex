@@ -499,3 +499,100 @@
   accent-color: var(--accent);
   cursor: pointer;
 }
+
+/* ── Transactions ── */
+.tx-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0 14px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.tx-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.tx-row {
+  display: grid;
+  grid-template-columns: 56px 1fr 160px 110px 72px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+.tx-row:hover { background: var(--bg2); border-radius: 8px; }
+
+.tx-date {
+  font-size: 13px;
+  color: var(--text2);
+  white-space: nowrap;
+}
+
+.tx-desc {
+  font-size: 14px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tx-cat {
+  display: flex;
+  align-items: center;
+}
+
+.tx-cat-badge {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 9px;
+  border-radius: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+  display: inline-block;
+}
+
+.tx-amount {
+  font-size: 14px;
+  font-weight: 600;
+  text-align: right;
+}
+.tx-amount-out { color: var(--danger); }
+.tx-amount-in  { color: var(--success); }
+
+.tx-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.tx-row:hover .tx-actions { opacity: 1; }
+
+.tx-edit-row {
+  padding: 16px;
+  background: var(--bg2);
+  border-radius: 10px;
+  margin-bottom: 2px;
+  border: 1px solid var(--border);
+}
+
+.tx-edit-grid {
+  display: grid;
+  grid-template-columns: 140px 1fr 180px 130px;
+  gap: 12px;
+  align-items: end;
+}
+
+@media (max-width: 768px) {
+  .tx-row {
+    grid-template-columns: 48px 1fr 90px 60px;
+  }
+  .tx-cat { display: none; }
+  .tx-edit-grid { grid-template-columns: 1fr 1fr; }
+}

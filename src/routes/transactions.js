@@ -6,17 +6,17 @@ const { requireAuth } = require('../middleware/auth');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
-// GET /api/transactions?month=2025-01&category_id=&limit=&offset=
+// GET /api/transactions?from=2026-04-19&to=2026-05-18&category_id=&limit=&offset=
 router.get('/', requireAuth, (req, res) => {
-  const { month, category_id, limit = 100, offset = 0 } = req.query;
-  let query = 'SELECT t.*, c.name as category_name, c.color as category_color, c.icon as category_icon FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.user_id = ?';
+  const { from, to, category_id, limit = 200, offset = 0 } = req.query;
+  let query = 'SELECT t.*, c.name as category_name, c.color as category_color FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.user_id = ?';
   const params = [req.user.id];
 
-  if (month) {
-    query += ' AND strftime(\'%Y-%m\', t.date) = ?';
-    params.push(month);
-  }
-  if (category_id) {
+  if (from) { query += ' AND t.date >= ?'; params.push(from); }
+  if (to)   { query += ' AND t.date <= ?'; params.push(to); }
+  if (category_id === 'none') {
+    query += ' AND t.category_id IS NULL';
+  } else if (category_id) {
     query += ' AND t.category_id = ?';
     params.push(category_id);
   }
