@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, X, Check } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
@@ -119,6 +120,7 @@ function BudgetForm({ initial, categories, period, periodLabel, existingCategory
 }
 
 export default function BudgetsPage() {
+  const navigate = useNavigate();
   const [period, setPeriod] = useState(null);
   const [periodStart, setPeriodStart] = useState(null);
   const [periodEnd, setPeriodEnd] = useState(null);
@@ -243,7 +245,11 @@ export default function BudgetsPage() {
                 />
               </div>
             ) : (
-              <div key={b.category_id} className="budget-item">
+              <div
+                key={b.category_id}
+                className="budget-item budget-item-clickable"
+                onClick={() => navigate(`/transactions?category_id=${b.category_id}&period=${period}`)}
+              >
                 <div className="budget-item-header">
                   <div className="budget-item-name">
                     <span className="budget-dot" style={{ background: b.category_color || '#6366f1' }} />
@@ -254,10 +260,10 @@ export default function BudgetsPage() {
                       <span className={over ? 'text-danger' : ''}>{formatCurrency(b.spent)}</span>
                       <span className="text-muted"> / {formatCurrency(b.amount)}</span>
                     </div>
-                    <button className="btn btn-ghost btn-icon" title="Upravit" onClick={() => { setShowForm(false); setEditItem(b); }}>
+                    <button className="btn btn-ghost btn-icon" title="Upravit" onClick={e => { e.stopPropagation(); setShowForm(false); setEditItem(b); }}>
                       <Pencil size={14} />
                     </button>
-                    <button className="btn btn-ghost btn-icon" title="Smazat" onClick={() => handleDelete(b)}>
+                    <button className="btn btn-ghost btn-icon" title="Smazat" onClick={e => { e.stopPropagation(); handleDelete(b); }}>
                       <Trash2 size={14} />
                     </button>
                   </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Pencil, Trash2, Check, X, Columns3 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { formatCurrency, formatPeriod, addPeriods } from '../i18n';
@@ -33,13 +34,14 @@ function formatDate(iso) {
 }
 
 export default function TransactionsPage() {
-  const [period, setPeriod] = useState(null);
+  const [searchParams] = useSearchParams();
+  const [period, setPeriod] = useState(searchParams.get('period') || null);
   const [periodStart, setPeriodStart] = useState(null);
   const [periodEnd, setPeriodEnd] = useState(null);
   const [currentPeriod, setCurrentPeriod] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [filterCat, setFilterCat] = useState('');
+  const [filterCat, setFilterCat] = useState(searchParams.get('category_id') || '');
   const [loading, setLoading] = useState(true);
   const [editId, setEditId] = useState(null);
   const [editData, setEditData] = useState({});
@@ -57,8 +59,8 @@ export default function TransactionsPage() {
       fetch('/api/settings').then(r => r.json()),
       fetch('/api/categories').then(r => r.json()),
     ]).then(([s, cats]) => {
-      setPeriod(s.current_period);
       setCurrentPeriod(s.current_period);
+      setPeriod(p => p || s.current_period);
       setPeriodStart(s.period_start);
       setPeriodEnd(s.period_end);
       setCustomFrom(s.period_start);

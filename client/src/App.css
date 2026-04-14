@@ -290,6 +290,14 @@
   flex-direction: column;
   gap: 10px;
 }
+.budget-item-clickable {
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.budget-item-clickable:hover {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 15%, transparent);
+}
 
 .budget-item-header {
   display: flex;
