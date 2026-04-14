@@ -1,15 +1,20 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, TrendingDown } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
 
-function BudgetBar({ budget }) {
+function BudgetBar({ budget, period }) {
+  const navigate = useNavigate();
   const pct = budget.amount > 0 ? Math.min((budget.spent / budget.amount) * 100, 100) : 0;
   const over = budget.spent > budget.amount;
   const remaining = budget.amount - budget.spent;
 
   return (
-    <div className="budget-item">
+    <div
+      className="budget-item budget-item-clickable"
+      onClick={() => navigate(`/transactions?category_id=${budget.category_id}&period=${period}`)}
+    >
       <div className="budget-item-header">
         <div className="budget-item-name">
           <span className="budget-dot" style={{ background: budget.category_color || '#6366f1' }} />
@@ -113,7 +118,7 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="budget-list">
-                {budgets.map(b => <BudgetBar key={b.id} budget={b} />)}
+                {budgets.map(b => <BudgetBar key={b.category_id} budget={b} period={period} />)}
               </div>
             )}
           </section>
