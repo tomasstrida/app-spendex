@@ -11,6 +11,7 @@ function Thermometer({ spent, amount, periodStart, periodEnd, color }) {
   const today = new Date();
   const start = new Date(periodStart + 'T00:00:00');
   const end = new Date(periodEnd + 'T00:00:00');
+  const periodOver = today > end;
   const totalDays = Math.round((end - start) / 86400000) + 1;
   const daysPassed = Math.max(0, Math.min(Math.round((today - start) / 86400000), totalDays));
   const dayPct = Math.min((daysPassed / totalDays) * 100, 100);
@@ -25,7 +26,7 @@ function Thermometer({ spent, amount, periodStart, periodEnd, color }) {
         <div className={`budget-bar-fill${over ? ' over' : ''}`} style={{ width: `${spentPct}%`, background: fillColor }} />
         {dayPct > 0 && dayPct < 100 && <div className="budget-bar-day-marker" style={{ left: `${dayPct}%` }} />}
       </div>
-      {projection > 0 && projectionOver && (
+      {!periodOver && projection > 0 && projectionOver && (
         <div className="budget-projection">
           projekce: <strong>{formatCurrency(projection)}</strong>
           <span className="text-danger"> (+{formatCurrency(projection - amount)})</span>
@@ -39,7 +40,7 @@ function BudgetBar({ budget, period, periodStart, periodEnd }) {
   const navigate = useNavigate();
   const over = budget.spent > budget.amount;
   const remaining = budget.amount - budget.spent;
-  const pct = budget.amount > 0 ? Math.min((budget.spent / budget.amount) * 100, 100) : 0;
+  const pct = budget.amount > 0 ? (budget.spent / budget.amount) * 100 : 0;
 
   return (
     <div
