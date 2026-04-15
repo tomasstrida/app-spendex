@@ -335,19 +335,22 @@
   height: 100%;
   border-radius: 99px;
   transition: width 0.4s ease;
+  position: relative;
+  z-index: 1;
 }
 .budget-bar-fill.over { background: var(--danger) !important; }
 
 /* Svislá čárka = dnešní den v billing období */
 .budget-bar-day-marker {
   position: absolute;
-  top: -3px;
+  top: -4px;
   width: 2px;
-  height: 14px;
-  background: var(--text-muted);
+  height: 16px;
+  background: var(--text);
   border-radius: 2px;
   transform: translateX(-50%);
-  opacity: 0.5;
+  z-index: 2;
+  opacity: 0.35;
 }
 
 /* Projekce pod barem */
