@@ -51,6 +51,7 @@ app.use('/auth', require('./routes/auth'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/budgets', require('./routes/budgets'));
+app.use('/api/annual-budgets', require('./routes/annual-budgets'));
 app.use('/api/stats', require('./routes/stats'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/import', require('./routes/import'));

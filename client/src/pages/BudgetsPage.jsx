@@ -4,6 +4,66 @@ import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, X, Check } from 'lucid
 import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
 
+function AnnualBudgetForm({ initial, categories, existingCategoryIds, onSave, onCancel }) {
+  const isNew = !initial;
+  const [categoryId, setCategoryId] = useState(initial?.category_id ? String(initial.category_id) : '');
+  const [amount, setAmount] = useState(initial?.amount ? String(initial.amount) : '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const availableCategories = categories.filter(c =>
+    !existingCategoryIds.includes(c.id) || c.id === initial?.category_id
+  );
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!categoryId) { setError('Vyberte kategorii.'); return; }
+    const amt = parseFloat(amount);
+    if (!amt || amt <= 0) { setError('Zadejte kladnou částku.'); return; }
+    setSaving(true); setError('');
+    try {
+      const r = await fetch('/api/annual-budgets', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category_id: parseInt(categoryId), amount: amt }),
+      });
+      const d = await r.json();
+      if (!r.ok) { setError(d.error || 'Chyba.'); return; }
+      onSave();
+    } catch {
+      setError('Chyba připojení.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form className="category-form" onSubmit={handleSubmit}>
+      <h3 className="category-form-title">{isNew ? 'Přidat roční rozpočet' : 'Upravit roční rozpočet'}</h3>
+      {error && <div className="alert alert-error">{error}</div>}
+      <div className="form-group">
+        <label className="form-label">Kategorie</label>
+        <select className="input" value={categoryId} onChange={e => setCategoryId(e.target.value)} disabled={!isNew}>
+          <option value="">— vyberte kategorii —</option>
+          {availableCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </div>
+      <div className="form-group">
+        <label className="form-label">Roční limit (Kč)</label>
+        <input
+          className="input" type="number" min="1" step="1" placeholder="10 000"
+          value={amount} onChange={e => setAmount(e.target.value)}
+          autoFocus={!isNew} style={{ maxWidth: 160 }}
+        />
+      </div>
+      <div className="form-actions">
+        <button type="button" className="btn btn-ghost" onClick={onCancel}><X size={15} /> Zrušit</button>
+        <button type="submit" className="btn btn-primary" disabled={saving}><Check size={15} /> {saving ? '…' : t.categories.save}</button>
+      </div>
+    </form>
+  );
+}
+
 const i = {
   title: 'Rozpočty',
   addBudget: 'Přidat rozpočet',
@@ -131,6 +191,12 @@ export default function BudgetsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
 
+  const [annualBudgets, setAnnualBudgets] = useState([]);
+  const [annualYear, setAnnualYear] = useState(new Date().getFullYear());
+  const [annualLoading, setAnnualLoading] = useState(true);
+  const [showAnnualForm, setShowAnnualForm] = useState(false);
+  const [editAnnualItem, setEditAnnualItem] = useState(null);
+
   useEffect(() => {
     Promise.all([
       fetch('/api/settings').then(r => r.json()),
@@ -158,6 +224,22 @@ export default function BudgetsPage() {
     if (!period) return;
     loadBudgets(period);
   }, [period]);
+
+  function loadAnnualBudgets(y) {
+    setAnnualLoading(true);
+    fetch(`/api/annual-budgets?year=${y}`)
+      .then(r => r.json())
+      .then(d => setAnnualBudgets(d.budgets || []))
+      .finally(() => setAnnualLoading(false));
+  }
+
+  useEffect(() => { loadAnnualBudgets(annualYear); }, [annualYear]);
+
+  async function handleDeleteAnnual(b) {
+    if (!confirm('Smazat tento roční rozpočet?')) return;
+    const r = await fetch(`/api/annual-budgets/${b.id}`, { method: 'DELETE' });
+    if (r.ok) loadAnnualBudgets(annualYear);
+  }
 
   const existingCategoryIds = budgets.map(b => b.category_id);
 
@@ -278,6 +360,104 @@ export default function BudgetsPage() {
                   {over
                     ? <span className="text-danger">{formatCurrency(Math.abs(remaining))} {i.over}</span>
                     : <span className="text-muted">{formatCurrency(remaining)} {i.remaining}</span>
+                  }
+                  <span className="text-muted">{Math.round(p)} %</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {/* ── Roční rozpočty ── */}
+      <div className="page-header" style={{ marginTop: 32 }}>
+        <h2 className="section-title" style={{ margin: 0 }}>Roční rozpočty</h2>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div className="month-nav">
+            <button className="btn btn-ghost btn-icon" onClick={() => { setAnnualYear(y => y - 1); setShowAnnualForm(false); setEditAnnualItem(null); }}>
+              <ChevronLeft size={18} />
+            </button>
+            <span className="month-label">{annualYear}</span>
+            <button className="btn btn-ghost btn-icon" onClick={() => { setAnnualYear(y => y + 1); setShowAnnualForm(false); setEditAnnualItem(null); }}>
+              <ChevronRight size={18} />
+            </button>
+          </div>
+          {!showAnnualForm && !editAnnualItem && categories.length > 0 && (
+            <button className="btn btn-primary" onClick={() => setShowAnnualForm(true)}>
+              <Plus size={16} /> Přidat roční rozpočet
+            </button>
+          )}
+        </div>
+      </div>
+
+      {showAnnualForm && (
+        <div className="card" style={{ maxWidth: 480, marginBottom: 24 }}>
+          <AnnualBudgetForm
+            categories={categories}
+            existingCategoryIds={annualBudgets.map(b => b.category_id)}
+            onSave={() => { setShowAnnualForm(false); loadAnnualBudgets(annualYear); }}
+            onCancel={() => setShowAnnualForm(false)}
+          />
+        </div>
+      )}
+
+      {annualLoading ? (
+        <div className="page-loading">{t.common.loading}</div>
+      ) : annualBudgets.length === 0 && !showAnnualForm ? (
+        <div className="empty-state">
+          <p>Žádné roční rozpočty.</p>
+          <p className="text-muted">Přidejte roční rozpočet pro nepravidelné výdaje (léky, servis, pojistky…).</p>
+        </div>
+      ) : (
+        <div className="budget-list">
+          {annualBudgets.map(b => {
+            const over = b.spent > b.amount;
+            const remaining = b.amount - b.spent;
+            const p = b.amount > 0 ? Math.min((b.spent / b.amount) * 100, 100) : 0;
+
+            return editAnnualItem?.id === b.id ? (
+              <div key={b.id} className="card" style={{ maxWidth: 640 }}>
+                <AnnualBudgetForm
+                  initial={b}
+                  categories={categories}
+                  existingCategoryIds={annualBudgets.map(x => x.category_id)}
+                  onSave={() => { setEditAnnualItem(null); loadAnnualBudgets(annualYear); }}
+                  onCancel={() => setEditAnnualItem(null)}
+                />
+              </div>
+            ) : (
+              <div
+                key={b.id}
+                className="budget-item budget-item-clickable"
+                onClick={() => navigate(`/transactions?category_id=${b.category_id}&from=${annualYear}-01-01&to=${annualYear}-12-31`)}
+              >
+                <div className="budget-item-header">
+                  <div className="budget-item-name">
+                    <span className="budget-dot" style={{ background: b.category_color || '#6366f1' }} />
+                    {b.category_name}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div className="budget-item-amounts">
+                      <span className={over ? 'text-danger' : ''}>{formatCurrency(b.spent)}</span>
+                      <span className="text-muted"> / {formatCurrency(b.amount)}</span>
+                    </div>
+                    <button className="btn btn-ghost btn-icon" title="Upravit" onClick={e => { e.stopPropagation(); setShowAnnualForm(false); setEditAnnualItem(b); }}>
+                      <Pencil size={14} />
+                    </button>
+                    <button className="btn btn-ghost btn-icon" title="Smazat" onClick={e => { e.stopPropagation(); handleDeleteAnnual(b); }}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+                <div className="budget-bar-track">
+                  <div
+                    className={`budget-bar-fill${over ? ' over' : ''}`}
+                    style={{ width: `${p}%`, background: over ? undefined : (b.category_color || '#6366f1') }}
+                  />
+                </div>
+                <div className="budget-item-footer">
+                  {over
+                    ? <span className="text-danger">{formatCurrency(Math.abs(remaining))} přečerpáno za rok</span>
+                    : <span className="text-muted">{formatCurrency(remaining)} zbývá do konce roku</span>
                   }
                   <span className="text-muted">{Math.round(p)} %</span>
                 </div>

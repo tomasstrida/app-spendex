@@ -91,10 +91,22 @@ function initSchema() {
       FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS annual_budgets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      category_id INTEGER NOT NULL,
+      amount REAL NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE,
+      UNIQUE (user_id, category_id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, date);
     CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category_id);
     CREATE INDEX IF NOT EXISTS idx_budgets_user_month ON budgets(user_id, month);
     CREATE INDEX IF NOT EXISTS idx_categories_user ON categories(user_id);
+    CREATE INDEX IF NOT EXISTS idx_annual_budgets_user ON annual_budgets(user_id);
   `);
 
   // Migrace: budgety bez 'default' záznamu — vezmi nejnovější per user+category a nastav jako default

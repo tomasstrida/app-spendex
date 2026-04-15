@@ -42,6 +42,44 @@ function BudgetBar({ budget, period }) {
   );
 }
 
+function AnnualBudgetBar({ budget, year }) {
+  const navigate = useNavigate();
+  const pct = budget.amount > 0 ? Math.min((budget.spent / budget.amount) * 100, 100) : 0;
+  const over = budget.spent > budget.amount;
+  const remaining = budget.amount - budget.spent;
+
+  return (
+    <div
+      className="budget-item budget-item-clickable"
+      onClick={() => navigate(`/transactions?category_id=${budget.category_id}&from=${year}-01-01&to=${year}-12-31`)}
+    >
+      <div className="budget-item-header">
+        <div className="budget-item-name">
+          <span className="budget-dot" style={{ background: budget.category_color || '#6366f1' }} />
+          {budget.category_name}
+        </div>
+        <div className="budget-item-amounts">
+          <span className={over ? 'text-danger' : ''}>{formatCurrency(budget.spent)}</span>
+          <span className="text-muted"> / {formatCurrency(budget.amount)}</span>
+        </div>
+      </div>
+      <div className="budget-bar-track">
+        <div
+          className={`budget-bar-fill${over ? ' over' : ''}`}
+          style={{ width: `${pct}%`, background: over ? undefined : (budget.category_color || '#6366f1') }}
+        />
+      </div>
+      <div className="budget-item-footer">
+        {over
+          ? <span className="text-danger">{formatCurrency(Math.abs(remaining))} přečerpáno za rok</span>
+          : <span className="text-muted">{formatCurrency(remaining)} zbývá do konce roku</span>
+        }
+        <span className="text-muted">{Math.round(pct)} %</span>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [period, setPeriod] = useState(null);   // periodKey "YYYY-MM"
   const [periodStart, setPeriodStart] = useState(null);
@@ -49,6 +87,7 @@ export default function DashboardPage() {
   const [currentPeriod, setCurrentPeriod] = useState(null);
   const [data, setData] = useState(null);
   const [budgets, setBudgets] = useState(null);
+  const [annualBudgets, setAnnualBudgets] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Načti nastavení → zjisti aktuální období
@@ -65,14 +104,17 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!period) return;
     setLoading(true);
+    const year = new Date().getFullYear();
     Promise.all([
       fetch(`/api/stats/overview?period=${period}`).then(r => r.json()),
       fetch(`/api/budgets?period=${period}`).then(r => r.json()),
-    ]).then(([stats, buds]) => {
+      fetch(`/api/annual-budgets?year=${year}`).then(r => r.json()),
+    ]).then(([stats, buds, annual]) => {
       setData(stats);
       setPeriodStart(stats.period_start);
       setPeriodEnd(stats.period_end);
       setBudgets(buds.budgets);
+      setAnnualBudgets(annual.budgets);
     }).finally(() => setLoading(false));
   }, [period]);
 
@@ -122,6 +164,15 @@ export default function DashboardPage() {
               </div>
             )}
           </section>
+
+          {annualBudgets?.length > 0 && (
+            <section className="section">
+              <h2 className="section-title">Roční rozpočty</h2>
+              <div className="budget-list">
+                {annualBudgets.map(b => <AnnualBudgetBar key={b.id} budget={b} year={new Date().getFullYear()} />)}
+              </div>
+            </section>
+          )}
         </div>
       )}
     </Layout>

@@ -35,6 +35,8 @@ function formatDate(iso) {
 
 export default function TransactionsPage() {
   const [searchParams] = useSearchParams();
+  const urlFrom = searchParams.get('from');
+  const urlTo = searchParams.get('to');
   const [period, setPeriod] = useState(searchParams.get('period') || null);
   const [periodStart, setPeriodStart] = useState(null);
   const [periodEnd, setPeriodEnd] = useState(null);
@@ -43,15 +45,15 @@ export default function TransactionsPage() {
   const [categories, setCategories] = useState([]);
   const [filterCat, setFilterCat] = useState(searchParams.get('category_id') || '');
   const [loading, setLoading] = useState(true);
+  const [customMode, setCustomMode] = useState(!!(urlFrom && urlTo));
+  const [customFrom, setCustomFrom] = useState(urlFrom || '');
+  const [customTo, setCustomTo] = useState(urlTo || '');
   const [editId, setEditId] = useState(null);
   const [editData, setEditData] = useState({});
   const [visibleCols, setVisibleCols] = useState(loadCols);
   const [colPickerOpen, setColPickerOpen] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
-  const [customMode, setCustomMode] = useState(false);
-  const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo] = useState('');
   const pickerRef = useRef();
 
   useEffect(() => {
@@ -63,8 +65,8 @@ export default function TransactionsPage() {
       setPeriod(p => p || s.current_period);
       setPeriodStart(s.period_start);
       setPeriodEnd(s.period_end);
-      setCustomFrom(s.period_start);
-      setCustomTo(s.period_end);
+      if (!urlFrom) setCustomFrom(s.period_start);
+      if (!urlTo) setCustomTo(s.period_end);
       setCategories(cats);
     });
   }, []);
