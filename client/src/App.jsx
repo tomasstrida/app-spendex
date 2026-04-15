@@ -10,6 +10,7 @@ import CategoriesPage from './pages/CategoriesPage';
 import BudgetsPage from './pages/BudgetsPage';
 import ImportPage from './pages/ImportPage';
 import SettingsPage from './pages/SettingsPage';
+import ReportPage from './pages/ReportPage';
 
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
@@ -60,6 +61,7 @@ export default function App() {
           <Route path="/transactions" element={<R el={<TransactionsPage />} />} />
           <Route path="/categories"   element={<R el={<CategoriesPage />} />} />
           <Route path="/budgets"      element={<R el={<BudgetsPage />} />} />
+          <Route path="/report"       element={<R el={<ReportPage />} />} />
           <Route path="/import"       element={<R el={<ImportPage />} />} />
           <Route path="/settings"     element={<R el={<SettingsPage />} />} />
         </Routes>

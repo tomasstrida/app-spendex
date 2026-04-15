@@ -367,6 +367,89 @@
   font-size: 12px;
 }
 
+/* ── Report / Schůzka ── */
+.report-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 720px;
+}
+.report-section {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+}
+.report-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.report-section-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+.btn-sm { font-size: 12px; padding: 4px 10px; }
+
+/* Income rows */
+.report-income-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.report-income-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+.report-income-person { font-weight: 500; min-width: 80px; }
+.report-income-amount { margin-left: auto; font-weight: 600; }
+
+/* Income form */
+.income-form { margin-bottom: 12px; }
+.income-form-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* Budget rows */
+.report-budget-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.report-budget-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.report-budget-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.report-budget-name { flex: 1; }
+.report-budget-spent { font-weight: 600; text-align: right; min-width: 80px; }
+.report-budget-limit { min-width: 80px; }
+.report-budget-status { min-width: 24px; text-align: center; }
+
+/* Subtotal */
+.report-subtotal {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+/* Bilance */
+.report-section--bilance { background: var(--bg3); }
+.report-bilance-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  padding: 4px 0;
+}
+.report-bilance-result {
+  font-size: 17px;
+  font-weight: 700;
+  padding-top: 10px;
+  margin-top: 6px;
+  border-top: 2px solid var(--border);
+}
+.text-warn { color: #f97316; }
+
 /* Typ kategorie badge */
 .cat-type-badge {
   font-size: 11px;
