@@ -17,7 +17,7 @@ router.get('/overview', requireAuth, (req, res) => {
   `).get(req.user.id, start, end);
 
   const byCategory = db.prepare(`
-    SELECT c.id, c.name, c.color, c.icon,
+    SELECT c.id, c.name, c.color, c.icon, c.type,
       COALESCE(SUM(ABS(t.amount)), 0) as spent,
       COUNT(t.id) as tx_count
     FROM categories c
