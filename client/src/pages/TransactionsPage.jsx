@@ -50,6 +50,7 @@ export default function TransactionsPage() {
   const [customTo, setCustomTo] = useState(urlTo || '');
   const [editId, setEditId] = useState(null);
   const [editData, setEditData] = useState({});
+  const [catEditId, setCatEditId] = useState(null);
   const [visibleCols, setVisibleCols] = useState(loadCols);
   const [colPickerOpen, setColPickerOpen] = useState(false);
   const [selected, setSelected] = useState(new Set());
@@ -158,7 +159,25 @@ export default function TransactionsPage() {
     }
   }
 
+  async function saveCatQuick(tx, categoryId) {
+    const body = { category_id: categoryId ? parseInt(categoryId) : null };
+    const r = await fetch(`/api/transactions/${tx.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (r.ok) {
+      const updated = await r.json();
+      const cat = categories.find(c => c.id === updated.category_id);
+      setTransactions(prev => prev.map(t =>
+        t.id === updated.id ? { ...updated, category_name: cat?.name, category_color: cat?.color } : t
+      ));
+    }
+    setCatEditId(null);
+  }
+
   function startEdit(tx) {
+    setCatEditId(null);
     setEditId(tx.id);
     setEditData({
       description: tx.description || '',
@@ -407,7 +426,39 @@ export default function TransactionsPage() {
                 </span>
                 {cols.map(c => (
                   <span key={c.key} className={`tx-cell tx-cell-${c.key}`}>
-                    {renderCell(c.key, tx, categories)}
+                    {c.key === 'category_name' ? (
+                      catEditId === tx.id ? (
+                        <select
+                          className="input tx-cat-select"
+                          autoFocus
+                          defaultValue={tx.category_id ? String(tx.category_id) : ''}
+                          onChange={e => saveCatQuick(tx, e.target.value)}
+                          onBlur={() => setCatEditId(null)}
+                        >
+                          <option value="">— bez kategorie —</option>
+                          {categories.map(cat => (
+                            <option key={cat.id} value={cat.id}>{cat.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span
+                          className="tx-cat-cell"
+                          onClick={() => setCatEditId(tx.id)}
+                          title="Klikněte pro změnu kategorie"
+                        >
+                          {tx.category_name ? (
+                            <span className="tx-cat-badge" style={{
+                              background: (tx.category_color || '#6366f1') + '33',
+                              color: tx.category_color || '#6366f1',
+                            }}>
+                              {tx.category_name}
+                            </span>
+                          ) : (
+                            <span className="tx-cat-empty">— přiřadit —</span>
+                          )}
+                        </span>
+                      )
+                    ) : renderCell(c.key, tx, categories)}
                   </span>
                 ))}
                 <span className="tx-actions">

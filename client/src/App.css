@@ -705,6 +705,29 @@
   max-width: 160px;
   display: inline-block;
 }
+.tx-cat-cell {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+.tx-cat-cell:hover .tx-cat-badge {
+  filter: brightness(1.15);
+}
+.tx-cat-empty {
+  font-size: 12px;
+  color: var(--text2);
+  opacity: 0.5;
+}
+.tx-cat-cell:hover .tx-cat-empty {
+  opacity: 1;
+  color: var(--accent);
+}
+.tx-cat-select {
+  font-size: 12px;
+  padding: 2px 4px;
+  height: 26px;
+  max-width: 140px;
+}
 
 .tx-amount {
   font-size: 14px;
