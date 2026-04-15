@@ -4,6 +4,46 @@ import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, X, Check } from 'lucid
 import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
 
+function BudgetThermometer({ spent, amount, periodStart, periodEnd, color }) {
+  const spentPct = amount > 0 ? Math.min((spent / amount) * 100, 100) : 0;
+  const over = spent > amount;
+
+  // Pozice dnešního dne v rámci billing období
+  const today = new Date();
+  const start = new Date(periodStart + 'T00:00:00');
+  const end = new Date(periodEnd + 'T00:00:00');
+  const totalDays = Math.round((end - start) / 86400000) + 1;
+  const daysPassed = Math.max(0, Math.min(Math.round((today - start) / 86400000), totalDays));
+  const dayPct = Math.min((daysPassed / totalDays) * 100, 100);
+
+  // Projekce na konec období
+  const projection = daysPassed > 0 ? Math.round((spent / daysPassed) * totalDays) : 0;
+  const projectionOver = projection > amount;
+
+  // Barva výplně: překročeno → červená, tempo vyšší než den → oranžová, OK → barva kategorie
+  const fillColor = over ? undefined : (spentPct > dayPct ? '#f97316' : (color || '#6366f1'));
+
+  return (
+    <div>
+      <div className="budget-bar-track" style={{ position: 'relative' }}>
+        <div
+          className={`budget-bar-fill${over ? ' over' : ''}`}
+          style={{ width: `${spentPct}%`, background: fillColor }}
+        />
+        {dayPct > 0 && dayPct < 100 && (
+          <div className="budget-bar-day-marker" style={{ left: `${dayPct}%` }} />
+        )}
+      </div>
+      {projection > 0 && projectionOver && (
+        <div className="budget-projection">
+          projekce: <strong>{formatCurrency(projection)}</strong>
+          <span className="text-danger"> (+{formatCurrency(projection - amount)})</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AnnualBudgetForm({ initial, categories, existingCategoryIds, onSave, onCancel }) {
   const isNew = !initial;
   const [categoryId, setCategoryId] = useState(initial?.category_id ? String(initial.category_id) : '');
@@ -350,12 +390,13 @@ export default function BudgetsPage() {
                     </button>
                   </div>
                 </div>
-                <div className="budget-bar-track">
-                  <div
-                    className={`budget-bar-fill${over ? ' over' : ''}`}
-                    style={{ width: `${p}%`, background: over ? undefined : (b.category_color || '#6366f1') }}
-                  />
-                </div>
+                <BudgetThermometer
+                  spent={b.spent}
+                  amount={b.amount}
+                  periodStart={periodStart}
+                  periodEnd={periodEnd}
+                  color={b.category_color}
+                />
                 <div className="budget-item-footer">
                   {over
                     ? <span className="text-danger">{formatCurrency(Math.abs(remaining))} {i.over}</span>

@@ -129,13 +129,14 @@ function initSchema() {
     insertDefault.run(row.user_id, row.category_id, row.amount);
   }
 
-  // Migrace: nové sloupce pro Air Bank metadata
+  // Migrace: nové sloupce pro Air Bank metadata + typ kategorie
   const migrations = [
     'ALTER TABLE transactions ADD COLUMN tx_time TEXT',
     'ALTER TABLE transactions ADD COLUMN tx_type TEXT',
     'ALTER TABLE transactions ADD COLUMN counterparty_account TEXT',
     'ALTER TABLE transactions ADD COLUMN entered_by TEXT',
     'ALTER TABLE transactions ADD COLUMN place TEXT',
+    'ALTER TABLE categories ADD COLUMN type INTEGER DEFAULT 1',
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* sloupec již existuje */ }

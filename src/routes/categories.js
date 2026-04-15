@@ -14,12 +14,12 @@ router.get('/', requireAuth, (req, res) => {
 
 // POST /api/categories
 router.post('/', requireAuth, writeLimiter, (req, res) => {
-  const { name, color, icon } = req.body;
+  const { name, color, icon, type } = req.body;
   if (!name) return res.status(400).json({ error: 'Název kategorie je povinný.' });
 
   const result = db.prepare(
-    'INSERT INTO categories (user_id, name, color, icon) VALUES (?, ?, ?, ?)'
-  ).run(req.user.id, name, color || '#6366f1', icon || 'tag');
+    'INSERT INTO categories (user_id, name, color, icon, type) VALUES (?, ?, ?, ?, ?)'
+  ).run(req.user.id, name, color || '#6366f1', icon || 'tag', type || 1);
 
   res.status(201).json(db.prepare('SELECT * FROM categories WHERE id = ?').get(result.lastInsertRowid));
 });
@@ -29,9 +29,9 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
   const cat = db.prepare('SELECT * FROM categories WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!cat) return res.status(404).json({ error: 'Kategorie nenalezena.' });
 
-  const { name, color, icon } = req.body;
-  db.prepare('UPDATE categories SET name = ?, color = ?, icon = ? WHERE id = ?').run(
-    name ?? cat.name, color ?? cat.color, icon ?? cat.icon, cat.id
+  const { name, color, icon, type } = req.body;
+  db.prepare('UPDATE categories SET name = ?, color = ?, icon = ?, type = ? WHERE id = ?').run(
+    name ?? cat.name, color ?? cat.color, icon ?? cat.icon, type ?? cat.type ?? 1, cat.id
   );
   res.json(db.prepare('SELECT * FROM categories WHERE id = ?').get(cat.id));
 });

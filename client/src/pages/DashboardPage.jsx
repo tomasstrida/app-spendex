@@ -4,11 +4,42 @@ import { ChevronLeft, ChevronRight, TrendingDown } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
 
-function BudgetBar({ budget, period }) {
+function Thermometer({ spent, amount, periodStart, periodEnd, color }) {
+  const spentPct = amount > 0 ? Math.min((spent / amount) * 100, 100) : 0;
+  const over = spent > amount;
+
+  const today = new Date();
+  const start = new Date(periodStart + 'T00:00:00');
+  const end = new Date(periodEnd + 'T00:00:00');
+  const totalDays = Math.round((end - start) / 86400000) + 1;
+  const daysPassed = Math.max(0, Math.min(Math.round((today - start) / 86400000), totalDays));
+  const dayPct = Math.min((daysPassed / totalDays) * 100, 100);
+
+  const projection = daysPassed > 0 ? Math.round((spent / daysPassed) * totalDays) : 0;
+  const projectionOver = projection > amount;
+  const fillColor = over ? undefined : (spentPct > dayPct ? '#f97316' : (color || '#6366f1'));
+
+  return (
+    <div>
+      <div className="budget-bar-track" style={{ position: 'relative' }}>
+        <div className={`budget-bar-fill${over ? ' over' : ''}`} style={{ width: `${spentPct}%`, background: fillColor }} />
+        {dayPct > 0 && dayPct < 100 && <div className="budget-bar-day-marker" style={{ left: `${dayPct}%` }} />}
+      </div>
+      {projection > 0 && projectionOver && (
+        <div className="budget-projection">
+          projekce: <strong>{formatCurrency(projection)}</strong>
+          <span className="text-danger"> (+{formatCurrency(projection - amount)})</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BudgetBar({ budget, period, periodStart, periodEnd }) {
   const navigate = useNavigate();
-  const pct = budget.amount > 0 ? Math.min((budget.spent / budget.amount) * 100, 100) : 0;
   const over = budget.spent > budget.amount;
   const remaining = budget.amount - budget.spent;
+  const pct = budget.amount > 0 ? Math.min((budget.spent / budget.amount) * 100, 100) : 0;
 
   return (
     <div
@@ -25,12 +56,7 @@ function BudgetBar({ budget, period }) {
           <span className="text-muted"> / {formatCurrency(budget.amount)}</span>
         </div>
       </div>
-      <div className="budget-bar-track">
-        <div
-          className={`budget-bar-fill${over ? ' over' : ''}`}
-          style={{ width: `${pct}%`, background: over ? undefined : (budget.category_color || '#6366f1') }}
-        />
-      </div>
+      <Thermometer spent={budget.spent} amount={budget.amount} periodStart={periodStart} periodEnd={periodEnd} color={budget.category_color} />
       <div className="budget-item-footer">
         {over
           ? <span className="text-danger">{formatCurrency(Math.abs(remaining))} {t.dashboard.over}</span>
@@ -160,7 +186,7 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="budget-list">
-                {budgets.map(b => <BudgetBar key={b.category_id} budget={b} period={period} />)}
+                {budgets.map(b => <BudgetBar key={b.category_id} budget={b} period={period} periodStart={periodStart} periodEnd={periodEnd} />)}
               </div>
             )}
           </section>

@@ -327,7 +327,8 @@
   height: 8px;
   background: var(--bg3);
   border-radius: 99px;
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
 }
 
 .budget-bar-fill {
@@ -337,10 +338,64 @@
 }
 .budget-bar-fill.over { background: var(--danger) !important; }
 
+/* Svislá čárka = dnešní den v billing období */
+.budget-bar-day-marker {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 14px;
+  background: var(--text-muted);
+  border-radius: 2px;
+  transform: translateX(-50%);
+  opacity: 0.5;
+}
+
+/* Projekce pod barem */
+.budget-projection {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  text-align: right;
+}
+
 .budget-item-footer {
   display: flex;
   justify-content: space-between;
   font-size: 12px;
+}
+
+/* Typ kategorie badge */
+.cat-type-badge {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  font-weight: 500;
+  margin-left: 8px;
+}
+.cat-type-badge--1 { background: color-mix(in srgb, #6366f1 15%, transparent); color: #6366f1; }
+.cat-type-badge--2 { background: color-mix(in srgb, #f97316 15%, transparent); color: #f97316; }
+.cat-type-badge--3 { background: color-mix(in srgb, #14b8a6 15%, transparent); color: #14b8a6; }
+
+/* Výběr typu v CategoryForm */
+.type-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.type-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.type-option input[type="radio"] { margin-top: 2px; }
+.type-option.selected {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
 }
 
 /* ── Card ── */

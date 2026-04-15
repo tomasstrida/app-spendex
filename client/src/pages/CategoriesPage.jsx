@@ -25,9 +25,16 @@ function ColorPicker({ value, onChange }) {
   );
 }
 
+const TYPE_OPTIONS = [
+  { value: 1, label: 'Měsíční', desc: 'Pravidelný měsíční limit' },
+  { value: 2, label: 'Roční / sezónní', desc: 'Nepravidelné výdaje s ročním limitem' },
+  { value: 3, label: 'Fond obnovy', desc: 'Jednorázové velké výdaje (brýle, telefon…)' },
+];
+
 function CategoryForm({ initial, onSave, onCancel }) {
   const [name, setName] = useState(initial?.name || '');
   const [color, setColor] = useState(initial?.color || COLORS[0]);
+  const [type, setType] = useState(initial?.type || 1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -42,7 +49,7 @@ function CategoryForm({ initial, onSave, onCancel }) {
       const r = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), color }),
+        body: JSON.stringify({ name: name.trim(), color, type }),
       });
       const d = await r.json();
       if (!r.ok) { setError(d.error || 'Chyba.'); return; }
@@ -71,6 +78,20 @@ function CategoryForm({ initial, onSave, onCancel }) {
       <div className="form-group">
         <label className="form-label">{t.categories.color}</label>
         <ColorPicker value={color} onChange={setColor} />
+      </div>
+      <div className="form-group">
+        <label className="form-label">Typ rozpočtu</label>
+        <div className="type-options">
+          {TYPE_OPTIONS.map(o => (
+            <label key={o.value} className={`type-option${type === o.value ? ' selected' : ''}`}>
+              <input type="radio" name="cat-type" checked={type === o.value} onChange={() => setType(o.value)} />
+              <div>
+                <div style={{ fontWeight: 500, fontSize: 13 }}>{o.label}</div>
+                <div className="text-muted" style={{ fontSize: 12 }}>{o.desc}</div>
+              </div>
+            </label>
+          ))}
+        </div>
       </div>
       <div className="form-actions">
         <button type="button" className="btn btn-ghost" onClick={onCancel}>
@@ -151,6 +172,9 @@ export default function CategoriesPage() {
                 <div className="category-row-info">
                   <span className="budget-dot" style={{ background: cat.color, width: 14, height: 14 }} />
                   <span className="category-row-name">{cat.name}</span>
+                  <span className={`cat-type-badge cat-type-badge--${cat.type || 1}`}>
+                    {TYPE_OPTIONS.find(o => o.value === (cat.type || 1))?.label}
+                  </span>
                 </div>
                 <div className="category-row-actions">
                   <button className="btn btn-ghost btn-icon" onClick={() => { setShowForm(false); setEditItem(cat); }}>
