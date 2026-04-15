@@ -28,7 +28,7 @@ function ColorPicker({ value, onChange }) {
 const TYPE_OPTIONS = [
   { value: 1, label: 'Měsíční', desc: 'Pravidelný měsíční limit' },
   { value: 2, label: 'Roční / sezónní', desc: 'Nepravidelné výdaje s ročním limitem' },
-  { value: 3, label: 'Fond obnovy', desc: 'Jednorázové velké výdaje (brýle, telefon…)' },
+  { value: 3, label: 'Drahé věci', desc: 'Jednorázové velké výdaje (brýle, telefon…)' },
 ];
 
 function CategoryForm({ initial, onSave, onCancel }) {

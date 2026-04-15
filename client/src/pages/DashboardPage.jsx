@@ -288,10 +288,10 @@ export default function DashboardPage() {
             </section>
           )}
 
-          {/* Typ 3 – Fond obnovy */}
+          {/* Typ 3 – Drahé věci */}
           {type3Cats.length > 0 && (
             <section className="section">
-              <h2 className="section-title">Fond obnovy</h2>
+              <h2 className="section-title">Drahé věci</h2>
               <div className="budget-list">
                 {funds.map(f => <FundCard key={f.id} fund={f} />)}
               </div>

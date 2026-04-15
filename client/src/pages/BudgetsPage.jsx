@@ -412,7 +412,7 @@ function Type3Section({ categories, year }) {
   if (type3Cats.length === 0) return (
     <div className="empty-state">
       <p>Žádné fondy obnovy.</p>
-      <p className="text-muted">Přiřaďte kategorii typ „Fond obnovy" v sekci Kategorie.</p>
+      <p className="text-muted">Přiřaďte kategorii typ „Drahé věci" v sekci Kategorie.</p>
     </div>
   );
 
@@ -652,9 +652,9 @@ export default function BudgetsPage() {
       </div>
       <Type2Section categories={categories} year={annualYear} />
 
-      {/* ── Typ 3 – Fond obnovy ── */}
+      {/* ── Typ 3 – Drahé věci ── */}
       <div className="page-header" style={{ marginTop: 40 }}>
-        <h2 className="section-title" style={{ margin: 0 }}>Fond obnovy</h2>
+        <h2 className="section-title" style={{ margin: 0 }}>Drahé věci</h2>
       </div>
       <Type3Section categories={categories} year={annualYear} />
     </Layout>
