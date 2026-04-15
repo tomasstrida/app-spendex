@@ -18,6 +18,7 @@ router.get('/', requireAuth, (req, res) => {
       ab.category_id,
       c.name  as category_name,
       c.color as category_color,
+      c.type  as category_type,
       ab.amount,
       COALESCE((
         SELECT SUM(ABS(t.amount))

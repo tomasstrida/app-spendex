@@ -17,7 +17,7 @@ router.get('/', requireAuth, (req, res) => {
   // Načti výchozí budgety + přepsání pro toto období
   const rows = db.prepare(`
     SELECT
-      c.id as category_id, c.name as category_name, c.color as category_color, c.icon as category_icon,
+      c.id as category_id, c.name as category_name, c.color as category_color, c.icon as category_icon, c.type as category_type,
       db.id       as default_id,
       db.amount   as default_amount,
       pb.id       as override_id,

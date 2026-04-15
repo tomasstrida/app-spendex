@@ -948,3 +948,54 @@
   font-size: 13px;
   color: var(--text);
 }
+
+/* ── Typ 2 – podpoložky ── */
+.type2-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+.type2-item-row {
+  display: grid;
+  grid-template-columns: 1fr 70px 90px 90px 90px 56px;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  padding: 4px 2px;
+  border-radius: 4px;
+}
+.type2-item-row:hover { background: var(--bg3); }
+.type2-items-list--compact .type2-item-row {
+  grid-template-columns: 1fr 70px 90px 90px 28px;
+}
+.type2-item-name { font-weight: 500; }
+.type2-item-window { font-size: 12px; }
+.type2-item-spent { font-weight: 600; text-align: right; }
+.type2-item-amount { font-size: 12px; }
+.type2-item-status { font-size: 12px; }
+.type2-item-actions { display: flex; gap: 2px; }
+
+/* ItemForm */
+.item-form { margin: 6px 0; }
+.item-form-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+/* ── Typ 3 – fond ── */
+.fund-info-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 8px;
+}
+.fund-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+.fund-info-item .text-muted { font-size: 11px; }

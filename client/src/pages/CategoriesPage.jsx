@@ -35,21 +35,39 @@ function CategoryForm({ initial, onSave, onCancel }) {
   const [name, setName] = useState(initial?.name || '');
   const [color, setColor] = useState(initial?.color || COLORS[0]);
   const [type, setType] = useState(initial?.type || 1);
+  const [typicalPrice, setTypicalPrice] = useState(initial?.typical_price != null ? String(initial.typical_price) : '');
+  const [frequencyMonths, setFrequencyMonths] = useState(initial?.frequency_months != null ? String(initial.frequency_months) : '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  const monthlyContrib = typicalPrice && frequencyMonths && parseFloat(frequencyMonths) > 0
+    ? Math.round(parseFloat(typicalPrice) / parseFloat(frequencyMonths))
+    : null;
 
   async function handleSubmit(e) {
     e.preventDefault();
     if (!name.trim()) { setError('Zadejte název.'); return; }
+    if (type === 3) {
+      if (!typicalPrice || parseFloat(typicalPrice) <= 0) { setError('Zadejte typickou cenu.'); return; }
+      if (!frequencyMonths || parseInt(frequencyMonths) <= 0) { setError('Zadejte frekvenci čerpání.'); return; }
+    }
     setSaving(true);
     setError('');
+    const body = { name: name.trim(), color, type };
+    if (type === 3) {
+      body.typical_price = parseFloat(typicalPrice);
+      body.frequency_months = parseInt(frequencyMonths);
+    } else {
+      body.typical_price = null;
+      body.frequency_months = null;
+    }
     try {
       const method = initial ? 'PATCH' : 'POST';
       const url = initial ? `/api/categories/${initial.id}` : '/api/categories';
       const r = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), color, type }),
+        body: JSON.stringify(body),
       });
       const d = await r.json();
       if (!r.ok) { setError(d.error || 'Chyba.'); return; }
@@ -93,6 +111,35 @@ function CategoryForm({ initial, onSave, onCancel }) {
           ))}
         </div>
       </div>
+
+      {type === 3 && (
+        <div className="form-group">
+          <label className="form-label">Konfigurace fondu</label>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div>
+              <div className="text-muted" style={{ fontSize: 11, marginBottom: 4 }}>Typická cena (Kč)</div>
+              <input
+                className="input" type="number" min="1" step="1" placeholder="25 000"
+                value={typicalPrice} onChange={e => setTypicalPrice(e.target.value)}
+                style={{ maxWidth: 130 }}
+              />
+            </div>
+            <div>
+              <div className="text-muted" style={{ fontSize: 11, marginBottom: 4 }}>Frekvence (měsíce)</div>
+              <input
+                className="input" type="number" min="1" step="1" placeholder="36"
+                value={frequencyMonths} onChange={e => setFrequencyMonths(e.target.value)}
+                style={{ maxWidth: 100 }}
+              />
+            </div>
+            {monthlyContrib && (
+              <div className="text-muted" style={{ fontSize: 12, paddingBottom: 8 }}>
+                ≈ <strong style={{ color: 'var(--text)' }}>{monthlyContrib.toLocaleString('cs-CZ')} Kč</strong> / měsíc
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       <div className="form-actions">
         <button type="button" className="btn btn-ghost" onClick={onCancel}>
           <X size={15} /> {t.categories.cancel}
