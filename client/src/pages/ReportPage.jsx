@@ -261,7 +261,8 @@ export default function ReportPage() {
 
   const totalFixed   = fixedExpenses.reduce((s, f) => s + f.amount, 0);
   const totalIncome  = income.reduce((s, i) => s + i.amount, 0);
-  const totalType1   = budgets.reduce((s, b) => s + b.spent, 0);
+  const totalType1       = budgets.reduce((s, b) => s + b.spent, 0);
+  const totalType1Budget = budgets.reduce((s, b) => s + b.amount, 0);
   const totalType2   = type2Spent.reduce((s, c) => s + c.spent, 0);
   const totalType3   = type3Spent.reduce((s, c) => s + c.spent, 0);
   const totalSpent   = stats?.total_spent || 0;
@@ -411,7 +412,12 @@ export default function ReportPage() {
             )}
             <div className="report-subtotal">
               <span>Měsíční výdaje celkem</span>
-              <span>{formatCurrency(totalType1)}</span>
+              <span>
+                {formatCurrency(totalType1)}
+                {totalType1Budget > 0 && (
+                  <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(totalType1Budget)}</span>
+                )}
+              </span>
             </div>
           </section>
 
