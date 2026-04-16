@@ -24,13 +24,29 @@ router.post('/preview', requireAuth, express.text({ limit: '10mb', type: '*/*' }
     const abCategories = [...new Set(parsed.map(t => t.ab_category).filter(Boolean))].sort();
 
     // Načti uložená mapování pro tohoto uživatele
-    const rows = db.prepare(
+    const mappingRows = db.prepare(
       'SELECT ab_category, category_id FROM airbank_category_mappings WHERE user_id = ?'
     ).all(req.user.id);
     const savedMappings = {};
-    rows.forEach(r => { savedMappings[r.ab_category] = r.category_id; });
+    mappingRows.forEach(r => { savedMappings[r.ab_category] = r.category_id; });
 
-    res.json({ transactions: parsed, ab_categories: abCategories, saved_mappings: savedMappings });
+    // Detekce účtu: najdi čísla účtů /3030 z protistrany – kandidáti jsou vlastní účty v DB
+    const counterpartyNums = new Set(
+      parsed
+        .map(t => t.counterparty_account?.match(/^(\d+)\/\d+/)?.[1])
+        .filter(Boolean)
+    );
+    const userAccounts = db.prepare('SELECT * FROM accounts WHERE user_id = ? ORDER BY name ASC').all(req.user.id);
+    // Účty jejichž číslo se NEVYSKYTUJE jako protistrana jsou kandidáti na zdrojový účet
+    const candidates = userAccounts.filter(a => a.account_number && !counterpartyNums.has(a.account_number));
+
+    res.json({
+      transactions: parsed,
+      ab_categories: abCategories,
+      saved_mappings: savedMappings,
+      accounts: userAccounts,
+      detected_account_ids: candidates.map(a => a.id),
+    });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -38,14 +54,22 @@ router.post('/preview', requireAuth, express.text({ limit: '10mb', type: '*/*' }
 
 // POST /api/import/confirm
 router.post('/confirm', requireAuth, (req, res) => {
-  const { transactions, category_map = {}, skip_incoming = true } = req.body;
+  const { transactions, category_map = {}, skip_incoming = true, account_id = null } = req.body;
   if (!Array.isArray(transactions)) return res.status(400).json({ error: 'Neplatná data.' });
+
+  // Ověř že account_id patří tomuto uživateli
+  let resolvedAccountId = null;
+  if (account_id) {
+    const acc = db.prepare('SELECT id FROM accounts WHERE id = ? AND user_id = ?').get(account_id, req.user.id);
+    if (!acc) return res.status(400).json({ error: 'Neplatný účet.' });
+    resolvedAccountId = acc.id;
+  }
 
   const insert = db.prepare(`
     INSERT OR IGNORE INTO transactions
       (user_id, category_id, amount, currency, date, description, note, source, external_id,
-       tx_time, tx_type, counterparty_account, entered_by, place)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'airbank', ?, ?, ?, ?, ?, ?)
+       tx_time, tx_type, counterparty_account, entered_by, place, account_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'airbank', ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const upsertMapping = db.prepare(`
@@ -68,6 +92,7 @@ router.post('/confirm', requireAuth, (req, res) => {
         t.description, t.note || '', t.external_id || null,
         t.tx_time || null, t.tx_type || null,
         t.counterparty_account || null, t.entered_by || null, t.place || null,
+        resolvedAccountId,
       );
       if (result.changes > 0) imported++;
       else skipped++;

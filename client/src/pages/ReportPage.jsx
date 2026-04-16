@@ -208,7 +208,7 @@ export default function ReportPage() {
     setLoading(true);
     Promise.all([
       fetch(`/api/income?period=${period}`).then(r => r.json()),
-      fetch('/api/fixed-expenses').then(r => r.json()),
+      fetch(`/api/fixed-expenses?period=${period}`).then(r => r.json()),
       fetch(`/api/budgets?period=${period}`).then(r => r.json()),
       fetch(`/api/stats/overview?period=${period}`).then(r => r.json()),
     ]).then(([inc, fixed, bud, st]) => {
@@ -419,6 +419,18 @@ export default function ReportPage() {
                 )}
               </span>
             </div>
+            {budgets.length > 0 && (() => {
+              const ok   = budgets.filter(b => budgetStatus(b.spent, b.amount) === 'ok').length;
+              const warn = budgets.filter(b => budgetStatus(b.spent, b.amount) === 'warn').length;
+              const over = budgets.filter(b => budgetStatus(b.spent, b.amount) === 'over').length;
+              return (
+                <div style={{ display: 'flex', gap: 16, fontSize: 13, marginTop: 4 }}>
+                  {ok   > 0 && <span>✅ {ok} splněno</span>}
+                  {warn > 0 && <span>⚠️ {warn} mírně přes</span>}
+                  {over > 0 && <span>🔴 {over} překročeno</span>}
+                </div>
+              );
+            })()}
           </section>
 
           {/* ── ROČNÍ / SEZÓNNÍ (Typ 2) ── */}
@@ -496,7 +508,7 @@ export default function ReportPage() {
               <span>− {formatCurrency(totalSpent)}</span>
             </div>
             <div className={`report-bilance-row report-bilance-result ${bilance >= 0 ? '' : 'text-danger'}`}>
-              <span>Bilance</span>
+              <span>Na spořicí účet</span>
               <span>{bilance >= 0 ? '+' : '−'} {formatCurrency(Math.abs(bilance))}</span>
             </div>
           </section>

@@ -31,6 +31,9 @@ router.get('/', requireAuth, (req, res) => {
           AND t.category_id = db.category_id
           AND t.date >= ? AND t.date <= ?
           AND t.amount < 0
+          AND (t.account_id IS NULL OR EXISTS (
+            SELECT 1 FROM accounts a WHERE a.id = t.account_id AND a.role = 'spending'
+          ))
       ), 0) as spent
     FROM budgets db
     JOIN categories c ON c.id = db.category_id AND c.user_id = db.user_id

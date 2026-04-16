@@ -58,6 +58,7 @@ app.use('/api/income', require('./routes/income'));
 app.use('/api/stats', require('./routes/stats'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/import', require('./routes/import'));
+app.use('/api/accounts', require('./routes/accounts'));
 
 // --- Frontend (production) ---
 const clientDist = path.join(__dirname, '../client/dist');

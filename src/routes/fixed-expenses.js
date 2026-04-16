@@ -6,12 +6,41 @@ const { requireAuth } = require('../middleware/auth');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
-// GET /api/fixed-expenses
+// GET /api/fixed-expenses?period=YYYY-MM
+// Vrátí manuální položky + sumované odchozí transakce z 'fixed' účtů pro dané období.
 router.get('/', requireAuth, (req, res) => {
-  const rows = db.prepare(
-    'SELECT * FROM fixed_expenses WHERE user_id = ? ORDER BY sort_order ASC, id ASC'
+  const manual = db.prepare(
+    'SELECT *, \'manual\' as source FROM fixed_expenses WHERE user_id = ? ORDER BY sort_order ASC, id ASC'
   ).all(req.user.id);
-  res.json(rows);
+
+  if (!req.query.period) return res.json(manual);
+
+  // Načti transakce z fixed účtů pro toto období
+  const { getPeriodDates, getUserBillingDay } = require('../utils/period');
+  const billingDay = getUserBillingDay(db, req.user.id);
+  const { start, end } = getPeriodDates(billingDay, req.query.period);
+
+  const fromAccounts = db.prepare(`
+    SELECT
+      NULL as id,
+      t.description as name,
+      SUM(ABS(t.amount)) as amount,
+      NULL as note,
+      0 as sort_order,
+      'account' as source,
+      a.name as account_name,
+      a.id as account_id
+    FROM transactions t
+    JOIN accounts a ON a.id = t.account_id
+    WHERE t.user_id = ?
+      AND a.role = 'fixed'
+      AND t.amount < 0
+      AND t.date >= ? AND t.date <= ?
+    GROUP BY t.description, a.id
+    ORDER BY a.name ASC, SUM(ABS(t.amount)) DESC
+  `).all(req.user.id, start, end);
+
+  res.json([...manual, ...fromAccounts]);
 });
 
 // POST /api/fixed-expenses

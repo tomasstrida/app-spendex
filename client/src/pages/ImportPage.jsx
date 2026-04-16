@@ -1,16 +1,141 @@
 import { useState, useEffect, useRef } from 'react';
-import { Upload, Check, AlertCircle, SkipForward } from 'lucide-react';
+import { Upload, Check, AlertCircle, Plus, Pencil, Trash2, X } from 'lucide-react';
 import Layout from '../components/Layout';
 import { formatCurrency } from '../i18n';
 
 const STEP = { UPLOAD: 'upload', MAPPING: 'mapping', DONE: 'done' };
 
+const ROLE_LABELS = {
+  spending: 'Výdaje',
+  fixed:    'Fixní',
+  ignored:  'Ignorovat',
+};
+
+const ROLE_HINTS = {
+  spending: 'Transakce vstupují do kategorií a budgetů.',
+  fixed:    'Transakce jsou fixní výdaje (nájem, energie…), nezapočítávají se do budgetů.',
+  ignored:  'Transakce jsou ignorovány (OSVČ, splátky, daně…).',
+};
+
+function AccountSelector({ accounts, selectedId, detectedIds, onSelect, onCreated }) {
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newRole, setNewRole] = useState('spending');
+  const [newNumber, setNewNumber] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+
+  async function handleCreate(e) {
+    e.preventDefault();
+    if (!newName.trim()) { setErr('Zadejte název.'); return; }
+    setSaving(true); setErr('');
+    try {
+      const r = await fetch('/api/accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName.trim(), role: newRole, account_number: newNumber.trim() || null }),
+      });
+      const d = await r.json();
+      if (!r.ok) { setErr(d.error || 'Chyba.'); return; }
+      onCreated(d);
+      onSelect(d.id);
+      setCreating(false);
+      setNewName(''); setNewRole('spending'); setNewNumber('');
+    } catch { setErr('Chyba připojení.'); }
+    finally { setSaving(false); }
+  }
+
+  const suggested = accounts.filter(a => detectedIds.includes(a.id));
+
+  return (
+    <div className="card" style={{ marginBottom: 0 }}>
+      <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: 'var(--text)' }}>
+        Účet
+      </h3>
+
+      {suggested.length > 0 && (
+        <p style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 8 }}>
+          Automaticky rozpoznán: <strong>{suggested.map(a => a.name).join(', ')}</strong>
+        </p>
+      )}
+
+      <select
+        className="input"
+        value={selectedId || ''}
+        onChange={e => onSelect(e.target.value ? parseInt(e.target.value) : null)}
+        style={{ width: '100%', marginBottom: 8 }}
+      >
+        <option value="">— bez přiřazení —</option>
+        {accounts.map(a => (
+          <option key={a.id} value={a.id}>
+            {a.name} ({ROLE_LABELS[a.role]})
+            {a.account_number ? ` · ${a.account_number}` : ''}
+          </option>
+        ))}
+      </select>
+
+      {selectedId && (() => {
+        const acc = accounts.find(a => a.id === selectedId);
+        return acc ? (
+          <p style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 4 }}>
+            {ROLE_HINTS[acc.role]}
+          </p>
+        ) : null;
+      })()}
+
+      {!creating ? (
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          style={{ marginTop: 4 }}
+          onClick={() => setCreating(true)}
+        >
+          <Plus size={13} /> Nový účet
+        </button>
+      ) : (
+        <form onSubmit={handleCreate} style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {err && <div className="alert alert-error" style={{ padding: '6px 10px', fontSize: 12 }}>{err}</div>}
+          <input
+            className="input"
+            placeholder="Název účtu (Společný, Licence…)"
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            autoFocus
+          />
+          <input
+            className="input"
+            placeholder="Číslo účtu (volitelně, napr. 1679014023)"
+            value={newNumber}
+            onChange={e => setNewNumber(e.target.value)}
+          />
+          <select className="input" value={newRole} onChange={e => setNewRole(e.target.value)}>
+            {Object.entries(ROLE_LABELS).map(([v, l]) => (
+              <option key={v} value={v}>{l} – {ROLE_HINTS[v]}</option>
+            ))}
+          </select>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
+              <Check size={13} /> {saving ? 'Ukládám…' : 'Vytvořit'}
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setCreating(false); setErr(''); }}>
+              <X size={13} /> Zrušit
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
 export default function ImportPage() {
   const [step, setStep] = useState(STEP.UPLOAD);
   const [categories, setCategories] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [abCategories, setAbCategories] = useState([]);
   const [categoryMap, setCategoryMap] = useState({});
+  const [selectedAccountId, setSelectedAccountId] = useState(null);
+  const [detectedAccountIds, setDetectedAccountIds] = useState([]);
   const [skipIncoming, setSkipIncoming] = useState(true);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -19,6 +144,7 @@ export default function ImportPage() {
 
   useEffect(() => {
     fetch('/api/categories').then(r => r.json()).then(setCategories);
+    fetch('/api/accounts').then(r => r.json()).then(setAccounts);
   }, []);
 
   async function handleFile(e) {
@@ -37,7 +163,9 @@ export default function ImportPage() {
       if (!r.ok) { setError(d.error); return; }
       setTransactions(d.transactions);
       setAbCategories(d.ab_categories);
-      // Předvyplň mapování: 1) uložené mapování, 2) shoda názvu
+      setAccounts(d.accounts || accounts);
+
+      // Předvyplň kategorii
       const saved = d.saved_mappings || {};
       const map = {};
       d.ab_categories.forEach(abCat => {
@@ -49,6 +177,12 @@ export default function ImportPage() {
         }
       });
       setCategoryMap(map);
+
+      // Auto-select detekovaného kandidáta pokud je právě jeden
+      const detected = d.detected_account_ids || [];
+      setDetectedAccountIds(detected);
+      setSelectedAccountId(detected.length === 1 ? detected[0] : null);
+
       setStep(STEP.MAPPING);
     } catch {
       setError('Chyba při čtení souboru.');
@@ -62,7 +196,6 @@ export default function ImportPage() {
     setLoading(true);
     setError('');
     try {
-      // Převeď categoryMap na čísla nebo null
       const map = {};
       Object.entries(categoryMap).forEach(([k, v]) => {
         if (v) map[k] = parseInt(v);
@@ -71,7 +204,12 @@ export default function ImportPage() {
       const r = await fetch('/api/import/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transactions, category_map: map, skip_incoming: skipIncoming }),
+        body: JSON.stringify({
+          transactions,
+          category_map: map,
+          skip_incoming: skipIncoming,
+          account_id: selectedAccountId || null,
+        }),
       });
       const d = await r.json();
       if (!r.ok) { setError(d.error); return; }
@@ -89,13 +227,14 @@ export default function ImportPage() {
     setTransactions([]);
     setAbCategories([]);
     setCategoryMap({});
+    setSelectedAccountId(null);
+    setDetectedAccountIds([]);
     setResult(null);
     setError('');
   }
 
   const newTx = transactions.filter(t => !t.duplicate && !(skipIncoming && t.direction === 'Příchozí'));
   const dupCount = transactions.filter(t => t.duplicate).length;
-  const incomingCount = skipIncoming ? transactions.filter(t => !t.duplicate && t.direction === 'Příchozí').length : 0;
 
   return (
     <Layout>
@@ -120,7 +259,7 @@ export default function ImportPage() {
         </div>
       )}
 
-      {/* STEP 2 — Mapování kategorií + potvrzení */}
+      {/* STEP 2 — Výběr účtu + mapování + potvrzení */}
       {step === STEP.MAPPING && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 560 }}>
 
@@ -141,6 +280,15 @@ export default function ImportPage() {
               </div>
             )}
           </div>
+
+          {/* Výběr účtu */}
+          <AccountSelector
+            accounts={accounts}
+            selectedId={selectedAccountId}
+            detectedIds={detectedAccountIds}
+            onSelect={setSelectedAccountId}
+            onCreated={acc => setAccounts(prev => [...prev, acc].sort((a, b) => a.name.localeCompare(b.name)))}
+          />
 
           {/* Příchozí transakce */}
           {transactions.some(t => t.direction === 'Příchozí') && (
