@@ -43,7 +43,14 @@ export default function TransactionsPage() {
   const [currentPeriod, setCurrentPeriod] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [filterCat, setFilterCat] = useState(searchParams.get('category_id') || '');
+  const [filterCats, setFilterCats] = useState(() => {
+    const initial = searchParams.get('category_id');
+    return new Set(initial ? [initial] : []);
+  });
+  const [amountMin, setAmountMin] = useState(searchParams.get('amount_min') || '');
+  const [amountMax, setAmountMax] = useState(searchParams.get('amount_max') || '');
+  const [appliedAmountMin, setAppliedAmountMin] = useState(amountMin);
+  const [appliedAmountMax, setAppliedAmountMax] = useState(amountMax);
   const [loading, setLoading] = useState(true);
   const [customMode, setCustomMode] = useState(!!(urlFrom && urlTo));
   const [customFrom, setCustomFrom] = useState(urlFrom || '');
@@ -72,12 +79,27 @@ export default function TransactionsPage() {
     });
   }, []);
 
+  // Debounce textových amount inputů, ať se request neposílá při každém stisku
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setAppliedAmountMin(amountMin);
+      setAppliedAmountMax(amountMax);
+    }, 300);
+    return () => clearTimeout(id);
+  }, [amountMin, amountMax]);
+
+  const buildFilterParams = useCallback((params) => {
+    if (filterCats.size > 0) params.set('category_ids', [...filterCats].join(','));
+    if (appliedAmountMin !== '') params.set('amount_min', appliedAmountMin);
+    if (appliedAmountMax !== '') params.set('amount_max', appliedAmountMax);
+    return params;
+  }, [filterCats, appliedAmountMin, appliedAmountMax]);
+
   const loadTransactions = useCallback(() => {
     if (customMode) {
       if (!customFrom || !customTo) return;
       setLoading(true);
-      const params = new URLSearchParams({ from: customFrom, to: customTo });
-      if (filterCat) params.set('category_id', filterCat);
+      const params = buildFilterParams(new URLSearchParams({ from: customFrom, to: customTo }));
       fetch(`/api/transactions?${params}`)
         .then(r => r.json())
         .then(data => { setTransactions(data); setSelected(new Set()); })
@@ -91,13 +113,12 @@ export default function TransactionsPage() {
       .then(s => {
         setPeriodStart(s.period_start);
         setPeriodEnd(s.period_end);
-        const params = new URLSearchParams({ from: s.period_start, to: s.period_end });
-        if (filterCat) params.set('category_id', filterCat);
+        const params = buildFilterParams(new URLSearchParams({ from: s.period_start, to: s.period_end }));
         return fetch(`/api/transactions?${params}`).then(r => r.json());
       })
       .then(data => { setTransactions(data); setSelected(new Set()); })
       .finally(() => setLoading(false));
-  }, [period, filterCat, customMode, customFrom, customTo]);
+  }, [period, customMode, customFrom, customTo, buildFilterParams]);
 
   useEffect(() => { loadTransactions(); }, [loadTransactions]);
 
@@ -149,6 +170,21 @@ export default function TransactionsPage() {
       s.has(id) ? s.delete(id) : s.add(id);
       return s;
     });
+  }
+
+  function toggleCatChip(value) {
+    setFilterCats(prev => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+  }
+
+  function clearAllFilters() {
+    setFilterCats(new Set());
+    setAmountMin('');
+    setAmountMax('');
   }
 
   function toggleSelectAll() {
@@ -268,19 +304,6 @@ export default function TransactionsPage() {
           >
             {customMode ? 'Billing období' : 'Vlastní rozsah'}
           </button>
-          <select
-            className="input"
-            style={{ maxWidth: 180, fontSize: 13 }}
-            value={filterCat}
-            onChange={e => setFilterCat(e.target.value)}
-          >
-            <option value="">Všechny kategorie</option>
-            <option value="none">— bez kategorie —</option>
-            {categories.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-
           {/* Přepínač sloupců */}
           <div className="col-picker-wrap" ref={pickerRef}>
             <button
@@ -306,6 +329,72 @@ export default function TransactionsPage() {
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      <div className="tx-filters">
+        <div className="tx-chip-row">
+          <button
+            type="button"
+            className={`tx-chip tx-chip-none${filterCats.has('none') ? ' tx-chip-active' : ''}`}
+            onClick={() => toggleCatChip('none')}
+            title="Transakce bez kategorie"
+          >
+            Bez kategorie
+          </button>
+          {categories.map(c => {
+            const active = filterCats.has(String(c.id));
+            const color = c.color || '#6366f1';
+            return (
+              <button
+                type="button"
+                key={c.id}
+                className={`tx-chip${active ? ' tx-chip-active' : ''}`}
+                onClick={() => toggleCatChip(String(c.id))}
+                style={active ? {
+                  background: color + '33',
+                  color: color,
+                  borderColor: color + '66',
+                } : { '--chip-dot': color }}
+              >
+                <span className="tx-chip-dot" style={{ background: color }} />
+                {c.name}
+              </button>
+            );
+          })}
+        </div>
+        <div className="tx-amount-filter">
+          <span className="tx-filter-label">Částka:</span>
+          <input
+            className="input tx-amount-input"
+            type="number"
+            min="0"
+            step="1"
+            placeholder="od"
+            value={amountMin}
+            onChange={e => setAmountMin(e.target.value)}
+          />
+          <span className="text-muted" style={{ fontSize: 13 }}>–</span>
+          <input
+            className="input tx-amount-input"
+            type="number"
+            min="0"
+            step="1"
+            placeholder="do"
+            value={amountMax}
+            onChange={e => setAmountMax(e.target.value)}
+          />
+          <span className="text-muted" style={{ fontSize: 12 }}>Kč</span>
+          {(filterCats.size > 0 || amountMin !== '' || amountMax !== '') && (
+            <button
+              type="button"
+              className="btn btn-ghost tx-filter-clear"
+              onClick={clearAllFilters}
+              title="Zrušit všechny filtry"
+            >
+              <X size={14} /> Vymazat filtry
+            </button>
+          )}
         </div>
       </div>
 

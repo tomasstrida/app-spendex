@@ -6,19 +6,46 @@ const { requireAuth } = require('../middleware/auth');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
-// GET /api/transactions?from=2026-04-19&to=2026-05-18&category_id=&limit=&offset=
+// GET /api/transactions?from=...&to=...&category_id=&category_ids=1,2,none&amount_min=&amount_max=&limit=&offset=
 router.get('/', requireAuth, (req, res) => {
-  const { from, to, category_id, limit = 200, offset = 0 } = req.query;
+  const { from, to, category_id, category_ids, amount_min, amount_max, limit = 200, offset = 0 } = req.query;
   let query = 'SELECT t.*, c.name as category_name, c.color as category_color FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.user_id = ?';
   const params = [req.user.id];
 
   if (from) { query += ' AND t.date >= ?'; params.push(from); }
   if (to)   { query += ' AND t.date <= ?'; params.push(to); }
-  if (category_id === 'none') {
+
+  if (category_ids) {
+    const ids = String(category_ids).split(',').map(s => s.trim()).filter(Boolean);
+    const hasNone = ids.includes('none');
+    const numericIds = ids
+      .filter(id => id !== 'none')
+      .map(id => parseInt(id))
+      .filter(n => Number.isFinite(n));
+    const conditions = [];
+    if (hasNone) conditions.push('t.category_id IS NULL');
+    if (numericIds.length > 0) {
+      const placeholders = numericIds.map(() => '?').join(',');
+      conditions.push(`t.category_id IN (${placeholders})`);
+      params.push(...numericIds);
+    }
+    if (conditions.length > 0) {
+      query += ` AND (${conditions.join(' OR ')})`;
+    }
+  } else if (category_id === 'none') {
     query += ' AND t.category_id IS NULL';
   } else if (category_id) {
     query += ' AND t.category_id = ?';
     params.push(category_id);
+  }
+
+  if (amount_min !== undefined && amount_min !== '') {
+    const v = parseFloat(amount_min);
+    if (Number.isFinite(v)) { query += ' AND ABS(t.amount) >= ?'; params.push(v); }
+  }
+  if (amount_max !== undefined && amount_max !== '') {
+    const v = parseFloat(amount_max);
+    if (Number.isFinite(v)) { query += ' AND ABS(t.amount) <= ?'; params.push(v); }
   }
 
   query += ' ORDER BY t.date DESC, t.id DESC LIMIT ? OFFSET ?';

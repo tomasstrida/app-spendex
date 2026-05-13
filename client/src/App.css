@@ -649,6 +649,98 @@
   cursor: pointer;
 }
 
+/* ── Tx filters (chips + amount) ── */
+.tx-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 0 18px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+
+.tx-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.tx-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text2);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.tx-chip:hover {
+  background: var(--bg3);
+  color: var(--text);
+}
+
+.tx-chip-active {
+  color: var(--text);
+}
+
+.tx-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.tx-chip-none {
+  font-style: italic;
+}
+.tx-chip-none .tx-chip-dot { display: none; }
+.tx-chip-none {
+  padding-left: 10px;
+}
+.tx-chip-none.tx-chip-active {
+  background: var(--bg3);
+  color: var(--text);
+  border-color: var(--text2);
+}
+
+.tx-amount-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tx-filter-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tx-amount-input {
+  max-width: 90px;
+  font-size: 13px;
+}
+
+.tx-filter-clear {
+  margin-left: auto;
+  font-size: 12px;
+  padding: 4px 10px;
+  color: var(--text2);
+}
+.tx-filter-clear:hover { color: var(--danger); }
+
 /* ── Transactions ── */
 .tx-summary {
   display: flex;
