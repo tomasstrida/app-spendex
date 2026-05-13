@@ -1,6 +1,6 @@
 {
   "name": "spendex",
-  "version": "1.1.16",
+  "version": "1.1.17",
   "description": "Spendex – personal finance management app",
   "main": "src/index.js",
   "scripts": {
@@ -8,7 +8,7 @@
     "dev": "nodemon src/index.js",
     "dev:client": "cd client && npm run dev",
     "build": "cd client && npm run build",
-    "prepare": "husky"
+    "prepare": "husky || true"
   },
   "dependencies": {
     "better-sqlite3": "^9.4.3",
