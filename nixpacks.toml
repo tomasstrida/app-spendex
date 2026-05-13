@@ -2,7 +2,9 @@
 nixPkgs = ["nodejs_22", "python3", "gcc", "gnumake"]
 
 [phases.install]
-cmds = ["npm install", "cd client && npm install"]
+# --include=dev kvůli NODE_ENV=production na Railway: bez něj se přeskočí
+# husky (root) i vite (client) a build phase pak padne na "vite: not found".
+cmds = ["npm install --include=dev", "cd client && npm install --include=dev"]
 
 [phases.build]
 cmds = ["cd client && npm run build", "npm prune --omit=dev"]
