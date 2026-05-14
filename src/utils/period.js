@@ -6,21 +6,23 @@
  */
 function getPeriodDates(billingDay, periodKey) {
   const [year, month] = periodKey.split('-').map(Number);
+  const fmt = (y, m, d) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 
   // Start: billingDay daného měsíce (clamped na poslední den)
-  const daysInStart = new Date(year, month, 0).getDate();
+  const daysInStart = new Date(Date.UTC(year, month, 0)).getUTCDate();
   const startDay = Math.min(billingDay, daysInStart);
-  const start = new Date(year, month - 1, startDay);
 
-  // End: den před billingDay příštího měsíce
-  const end = new Date(start);
-  end.setMonth(end.getMonth() + 1);
-  end.setDate(end.getDate() - 1);
+  // End: den před billingDay příštího měsíce (s clampem na poslední den příštího měsíce)
+  const nextYear = month === 12 ? year + 1 : year;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const daysInNext = new Date(Date.UTC(nextYear, nextMonth, 0)).getUTCDate();
+  const nextStartDay = Math.min(billingDay, daysInNext);
 
-  return {
-    start: start.toISOString().slice(0, 10),
-    end: end.toISOString().slice(0, 10),
-  };
+  const end = nextStartDay > 1
+    ? fmt(nextYear, nextMonth, nextStartDay - 1)
+    : fmt(year, month, daysInStart);
+
+  return { start: fmt(year, month, startDay), end };
 }
 
 /**
