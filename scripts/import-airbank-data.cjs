@@ -13,8 +13,9 @@ const Database = require('better-sqlite3');
 const { parseAirBankCSV } = require('../src/utils/csvParser');
 
 const DB_PATH  = process.env.DB_PATH  || path.join(__dirname, '../data.db');
-const CSV_DIR  = process.env.CSV_DIR  || '/Users/tomas/AI/projekt-finance/2026-04-16_export-AirBank';
+const CSV_DIR  = process.env.CSV_DIR  || '/Users/tomas/AI/projekt-finance/Airbank-export-komplet-ucty';
 const USER_ID  = parseInt(process.env.USER_ID || '1', 10);
+const CLEAN_FIRST = process.env.CLEAN_FIRST === '1';
 
 const db = new Database(DB_PATH);
 
@@ -35,27 +36,38 @@ const CATEGORIES = [
   { name: 'Výlety & akce',      color: '#14b8a6', icon: 'map',             type: 2 },
   { name: 'Vzdělávání',         color: '#a855f7', icon: 'book',            type: 2 },
   { name: 'Elektronika',        color: '#3b82f6', icon: 'cpu',             type: 3 },
+  { name: 'Drahé věci',         color: '#0ea5e9', icon: 'package',         type: 3 },
+  { name: 'Příjmy',             color: '#16a34a', icon: 'banknote',        type: 1 },
   { name: 'Ostatní',            color: '#6b7280', icon: 'tag',             type: 1 },
 ];
 
 // AB kategorie → název Spendex kategorie
 const AB_MAPPINGS = {
   'Nakupy Jidlo':        'Nákupy - jídlo',
+  'Jídlo':               'Nákupy - jídlo',
   'Restaurace':          'Restaurace',
   'Zábava':              'Fitness & sport',   // MAX FITNESS dominuje
   'Sport':               'Fitness & sport',
   'Doprava':             'Doprava',
   'Lékárna':             'Drogerie & léky',
   'Zdravotní':           'Koučink',           // Mgr. Petr Hrdina = koučink/terapie
+  'Terapie':             'Koučink',
   'Služby':              'Osobní péče',       // Salon Vladimir
   'Licence Apple apod':  'Licence & software',
   'Bydlení':             'Domácnost',
+  'Pravidelne mesicni':  'Domácnost',
   'Cizí':                'Výlety & akce',     // skupinové výdaje, chalupa
   'Podcast':             'Výlety & akce',     // Zmátlo Pavel – Silvester
   'Vzdelavani':          'Vzdělávání',
+  'Drahe-veci':          'Drahé věci',
   'Nákupy':              'Ostatní',
   'Výběr hotovosti':     'Ostatní',
   'OSVC':                'Ostatní',
+  'Sociální':            'Ostatní',
+  'Dárky':               'Ostatní',
+  'Splátky':             'Ostatní',
+  'Pojištění':           'Domácnost',         // pojištění bytu apod.
+  'Příchozí úhrada':     'Příjmy',
 };
 
 // Patterny na description transakce → název Spendex kategorie
@@ -109,14 +121,16 @@ const ACCOUNTS = [
   { number: '1679014103', name: 'Dane-doplatek',     role: 'ignored'  },
 ];
 
-// CSV soubor pro každý účet
-const CSV_FILES = {
-  '1679014023': 'airbank_1679014023_2026-04-16_09-18.csv',
-  '1679014058': 'airbank_1679014058_2026-04-16_09-19.csv',
-  '1679014074': 'airbank_1679014074_2026-04-16_09-18.csv',
-  '1679014111': 'airbank_1679014111_2026-04-16_09-17.csv',
-  '1679014066': 'airbank_1679014066_2026-04-16_09-16.csv',
-};
+// CSV soubor pro každý účet (auto-detekce v CSV_DIR podle čísla účtu v názvu)
+const CSV_FILES = (() => {
+  if (!fs.existsSync(CSV_DIR)) return {};
+  const out = {};
+  for (const f of fs.readdirSync(CSV_DIR)) {
+    const m = f.match(/airbank_(\d+)/);
+    if (m && f.endsWith('.csv')) out[m[1]] = f;
+  }
+  return out;
+})();
 
 // ── Spuštění ─────────────────────────────────────────────────────────────────
 
@@ -125,6 +139,14 @@ console.log(`📁  CSV: ${CSV_DIR}`);
 console.log(`👤  user_id: ${USER_ID}\n`);
 
 db.transaction(() => {
+
+  // 0. Vyčistit transakce, pokud je CLEAN_FIRST=1
+  if (CLEAN_FIRST) {
+    const before = db.prepare('SELECT COUNT(*) as n FROM transactions WHERE user_id = ?').get(USER_ID).n;
+    const r = db.prepare('DELETE FROM transactions WHERE user_id = ?').run(USER_ID);
+    console.log(`── Cleanup ─────────────────────────────────`);
+    console.log(`  Smazáno ${r.changes} transakcí (před: ${before})\n`);
+  }
 
   // 1. Kategorie
   console.log('── Kategorie ───────────────────────────────');
@@ -190,11 +212,15 @@ db.transaction(() => {
 
   let totalImported = 0;
   let totalSkipped  = 0;
+  let totalIncome   = 0;
+  let totalExpense  = 0;
 
   for (const acc of ACCOUNTS) {
-    if (acc.role === 'ignored') continue; // ignorované účty nepřeskakovat CSV parsing
     const csvFile = CSV_FILES[acc.number];
-    if (!csvFile) continue;
+    if (!csvFile) {
+      console.log(`  ${acc.name.padEnd(22)} ⏭  žádný CSV soubor pro ${acc.number}`);
+      continue;
+    }
 
     const csvPath = path.join(CSV_DIR, csvFile);
     if (!fs.existsSync(csvPath)) {
@@ -208,29 +234,37 @@ db.transaction(() => {
 
     let imported = 0;
     let skipped  = 0;
+    let inc      = 0;
+    let exp      = 0;
 
     for (const t of transactions) {
-      // Přeskočit příchozí platby
-      if (t.direction === 'Příchozí') { skipped++; continue; }
-
       const categoryId = abCatMap[t.ab_category] || null;
+      // external_id rozlišený per účet, aby interní převody (stejné ref_number na obou stranách)
+      // nepadly na UNIQUE(user_id, external_id) – jinak by se importovala jen jedna strana
+      const externalId = t.external_id ? `${t.external_id}-${acc.number}` : null;
       const result = insertTx.run(
         USER_ID, categoryId, t.amount, t.currency, t.date,
-        t.description, t.note || '', t.external_id || null,
+        t.description, t.note || '', externalId,
         t.tx_time || null, t.tx_type || null,
         t.counterparty_account || null, t.entered_by || null, t.place || null,
         accountId,
       );
-      if (result.changes > 0) imported++;
-      else skipped++;
+      if (result.changes > 0) {
+        imported++;
+        if (t.amount > 0) inc++; else exp++;
+      } else {
+        skipped++;
+      }
     }
 
-    console.log(`  ${acc.name.padEnd(22)} +${String(imported).padStart(3)} importováno, ${String(skipped).padStart(3)} přeskočeno`);
+    console.log(`  ${acc.name.padEnd(22)} +${String(imported).padStart(4)} (in:${String(inc).padStart(3)}, out:${String(exp).padStart(3)}), skipped ${skipped}`);
     totalImported += imported;
     totalSkipped  += skipped;
+    totalIncome   += inc;
+    totalExpense  += exp;
   }
 
-  console.log(`\n  Celkem: +${totalImported} importováno, ${totalSkipped} přeskočeno`);
+  console.log(`\n  Celkem: +${totalImported} importováno (příjmů ${totalIncome}, výdajů ${totalExpense}), ${totalSkipped} duplicit`);
 
   // 5. Aplikuj description rules na transakce bez kategorie
   console.log('\n── Description rules ───────────────────────');
@@ -270,7 +304,10 @@ db.transaction(() => {
 
 // Ověření
 const stats = db.prepare(`
-  SELECT a.name as acc, a.role, COUNT(t.id) as cnt, ROUND(SUM(ABS(t.amount))) as total
+  SELECT a.name as acc, a.role,
+    COUNT(t.id) as cnt,
+    ROUND(SUM(CASE WHEN t.amount > 0 THEN t.amount ELSE 0 END)) as income,
+    ROUND(SUM(CASE WHEN t.amount < 0 THEN t.amount ELSE 0 END)) as expense
   FROM transactions t
   JOIN accounts a ON a.id = t.account_id
   WHERE t.user_id = ?
@@ -279,12 +316,15 @@ const stats = db.prepare(`
 `).all(USER_ID);
 
 console.log('\n── Výsledek v DB ───────────────────────────');
+let allIn = 0, allOut = 0, allCnt = 0;
 stats.forEach(s => {
-  console.log(`  ${s.acc.padEnd(22)} ${String(s.cnt).padStart(4)} tx, ${String(s.total).padStart(8)} Kč`);
+  console.log(`  ${s.acc.padEnd(22)} ${s.role.padEnd(9)} ${String(s.cnt).padStart(4)} tx | in ${String(s.income).padStart(9)} | out ${String(s.expense).padStart(10)} Kč`);
+  allIn += s.income; allOut += s.expense; allCnt += s.cnt;
 });
+console.log(`  ${'CELKEM'.padEnd(32)} ${String(allCnt).padStart(4)} tx | in ${String(allIn).padStart(9)} | out ${String(allOut).padStart(10)} Kč | net ${Math.round(allIn + allOut)} Kč`);
 
 const uncategorized = db.prepare(
-  'SELECT COUNT(*) as n FROM transactions WHERE user_id = ? AND category_id IS NULL AND amount < 0'
+  'SELECT COUNT(*) as n FROM transactions WHERE user_id = ? AND category_id IS NULL'
 ).get(USER_ID);
 console.log(`\n  Bez kategorie: ${uncategorized.n} transakcí`);
 console.log('\n✅ Hotovo\n');

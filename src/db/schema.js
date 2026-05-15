@@ -189,9 +189,13 @@ function initSchema() {
     'ALTER TABLE categories ADD COLUMN typical_price REAL',
     'ALTER TABLE categories ADD COLUMN frequency_months INTEGER',
     'ALTER TABLE transactions ADD COLUMN account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL',
+    // Datová integrita: kategorie unikátní per uživatel. Bez tohoto INSERT OR IGNORE
+    // v import skriptu nikdy neignoruje a zakládá duplicity. Selže tiše, pokud
+    // duplicity už existují – v tom případě je nutné je nejdřív vyčistit ručně.
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_user_name ON categories(user_id, name)',
   ];
   for (const sql of migrations) {
-    try { db.exec(sql); } catch { /* sloupec již existuje */ }
+    try { db.exec(sql); } catch { /* sloupec/index již existuje nebo nelze aplikovat */ }
   }
 }
 

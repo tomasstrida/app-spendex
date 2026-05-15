@@ -62,11 +62,17 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
   const { name, color, icon, type, typical_price, frequency_months } = req.body;
   if (!name) return res.status(400).json({ error: 'Název kategorie je povinný.' });
 
-  const result = db.prepare(
-    'INSERT INTO categories (user_id, name, color, icon, type, typical_price, frequency_months) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(req.user.id, name, color || '#6366f1', icon || 'tag', type || 1,
-    typical_price != null ? parseFloat(typical_price) : null,
-    frequency_months != null ? parseInt(frequency_months) : null);
+  let result;
+  try {
+    result = db.prepare(
+      'INSERT INTO categories (user_id, name, color, icon, type, typical_price, frequency_months) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(req.user.id, name, color || '#6366f1', icon || 'tag', type || 1,
+      typical_price != null ? parseFloat(typical_price) : null,
+      frequency_months != null ? parseInt(frequency_months) : null);
+  } catch (e) {
+    if (/UNIQUE/i.test(e.message)) return res.status(409).json({ error: 'Kategorie s tímto názvem už existuje.' });
+    throw e;
+  }
 
   res.status(201).json(db.prepare('SELECT * FROM categories WHERE id = ?').get(result.lastInsertRowid));
 });
@@ -77,19 +83,24 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
   if (!cat) return res.status(404).json({ error: 'Kategorie nenalezena.' });
 
   const { name, color, icon, type, typical_price, frequency_months } = req.body;
-  db.prepare(`
-    UPDATE categories
-    SET name = ?, color = ?, icon = ?, type = ?, typical_price = ?, frequency_months = ?
-    WHERE id = ?
-  `).run(
-    name ?? cat.name,
-    color ?? cat.color,
-    icon ?? cat.icon,
-    type ?? cat.type ?? 1,
-    typical_price !== undefined ? (typical_price != null ? parseFloat(typical_price) : null) : cat.typical_price,
-    frequency_months !== undefined ? (frequency_months != null ? parseInt(frequency_months) : null) : cat.frequency_months,
-    cat.id
-  );
+  try {
+    db.prepare(`
+      UPDATE categories
+      SET name = ?, color = ?, icon = ?, type = ?, typical_price = ?, frequency_months = ?
+      WHERE id = ?
+    `).run(
+      name ?? cat.name,
+      color ?? cat.color,
+      icon ?? cat.icon,
+      type ?? cat.type ?? 1,
+      typical_price !== undefined ? (typical_price != null ? parseFloat(typical_price) : null) : cat.typical_price,
+      frequency_months !== undefined ? (frequency_months != null ? parseInt(frequency_months) : null) : cat.frequency_months,
+      cat.id
+    );
+  } catch (e) {
+    if (/UNIQUE/i.test(e.message)) return res.status(409).json({ error: 'Kategorie s tímto názvem už existuje.' });
+    throw e;
+  }
   res.json(db.prepare('SELECT * FROM categories WHERE id = ?').get(cat.id));
 });
 
