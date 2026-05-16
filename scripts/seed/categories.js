@@ -1,0 +1,28 @@
+'use strict';
+// 24 kanonických kategorií. type: 1=měsíční, 2=roční/sezónní, 3=fond.
+module.exports = [
+  { name: 'Jídlo a běžné nákupy', type: 1 },
+  { name: 'Auto Moto - PHM', type: 1 },
+  { name: 'Sport', type: 1 },
+  { name: 'Nákupy bydlení', type: 1 },
+  { name: 'Oblečení', type: 1 },
+  { name: 'Zábava', type: 1 },
+  { name: 'Restaurace a kávičky', type: 1 },
+  { name: 'Dárky', type: 1 },
+  { name: 'Beauty', type: 1 },
+  { name: 'Terapie', type: 1 },
+  { name: 'Y - Lítačka', type: 2 },
+  { name: 'Y - Auto Moto - Servis', type: 2 },
+  { name: 'Y - Tom cvíčo', type: 2 },
+  { name: 'Licence', type: 2 },
+  { name: 'Tom osobní', type: 1 },
+  { name: 'Martin osobní', type: 1 },
+  { name: 'Y - Beach volejbal', type: 2 },
+  { name: 'Y - Léky, PrEP, Optika', type: 2 },
+  { name: 'Y - Pojistky', type: 2 },
+  { name: 'Drahé věci', type: 1 },
+  { name: 'Ostatní', type: 1 },
+  { name: 'Příjmy', type: 1 },
+  { name: 'Převody', type: 1 },
+  { name: 'Pravidelné platby', type: 1 },
+];
