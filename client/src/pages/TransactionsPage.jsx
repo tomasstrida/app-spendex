@@ -10,6 +10,7 @@ const ALL_COLS = [
   { key: 'description',          label: 'Popis',           default: true,  always: true },
   { key: 'tx_type',              label: 'Typ úhrady',      default: false },
   { key: 'category_name',        label: 'Kategorie',       default: true },
+  { key: 'ab_category',          label: 'AirBank kat.',    default: true },
   { key: 'entered_by',           label: 'Kdo zadal',       default: false },
   { key: 'counterparty_account', label: 'Číslo účtu',      default: false },
   { key: 'place',                label: 'Obchodní místo',  default: false },
@@ -17,7 +18,7 @@ const ALL_COLS = [
   { key: 'amount',               label: 'Částka',          default: true,  always: true },
 ];
 
-const LS_KEY = 'spendex_tx_cols';
+const LS_KEY = 'spendex_tx_cols_v2';
 
 function loadCols() {
   try {
@@ -573,6 +574,7 @@ function colsToGrid(cols) {
     if (c.key === 'tx_time') return '52px';
     if (c.key === 'amount') return '110px';
     if (c.key === 'category_name') return '140px';
+    if (c.key === 'ab_category') return '130px';
     if (c.key === 'tx_type') return '130px';
     if (c.key === 'entered_by') return '120px';
     if (c.key === 'counterparty_account') return '140px';
@@ -600,6 +602,8 @@ function renderCell(key, tx, categories) {
           {tx.category_name}
         </span>
       ) : <span className="text-muted" style={{ fontSize: 12 }}>—</span>;
+    case 'ab_category':
+      return <span className="text-muted" style={{ fontSize: 12 }}>{tx.ab_category || '—'}</span>;
     case 'entered_by':
       return <span style={{ fontSize: 13 }}>{tx.entered_by || '—'}</span>;
     case 'counterparty_account':
