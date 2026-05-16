@@ -1,7 +1,7 @@
 'use strict';
 /**
  * Čistý rebuild Spendex DB z verzované konfigurace.
- * Env: DB_PATH (povinné), CSV_DIR (povinné), DRY_RUN (default '1'), CONFIRM ('1' = commit).
+ * Env: DB_PATH (povinné), CSV_DIR (povinné), CONFIRM ('1' = ostrý běh; jinak dry-run + ROLLBACK).
  * Bez CONFIRM=1 se transakce vrátí (ROLLBACK) a vytiskne jen report.
  */
 const fs = require('fs');
@@ -150,9 +150,9 @@ try {
   if (CONFIRM) { db.exec('COMMIT'); console.log('✅ COMMIT (ostrý běh)'); }
   else { db.exec('ROLLBACK'); console.log('🧪 ROLLBACK (dry-run; pro ostrý běh nastav CONFIRM=1)'); }
 } catch (e) {
-  db.exec('ROLLBACK');
+  try { db.exec('ROLLBACK'); } catch { /* žádná aktivní transakce */ }
   console.error('❌ CHYBA, ROLLBACK:', e.message);
-  db.close();
+  try { db.close(); } catch { /* connection už zavřená */ }
   process.exit(1);
 }
 
