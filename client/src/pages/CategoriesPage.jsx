@@ -180,6 +180,36 @@ export default function CategoriesPage() {
     if (r.ok) setCategories(prev => prev.filter(c => c.id !== cat.id));
   }
 
+  const renderItem = (cat) => (
+    editItem?.id === cat.id ? (
+      <div key={cat.id} className="card" style={{ maxWidth: 480 }}>
+        <CategoryForm
+          initial={cat}
+          onSave={handleSaved}
+          onCancel={() => setEditItem(null)}
+        />
+      </div>
+    ) : (
+      <div key={cat.id} className="category-row">
+        <div className="category-row-info">
+          <span className="budget-dot" style={{ background: cat.color, width: 14, height: 14 }} />
+          <span className="category-row-name">{cat.name}</span>
+          <span className={`cat-type-badge cat-type-badge--${cat.type || 1}`}>
+            {TYPE_OPTIONS.find(o => o.value === (cat.type || 1))?.label}
+          </span>
+        </div>
+        <div className="category-row-actions">
+          <button className="btn btn-ghost btn-icon" onClick={() => { setShowForm(false); setEditItem(cat); }}>
+            <Pencil size={15} />
+          </button>
+          <button className="btn btn-ghost btn-icon" onClick={() => handleDelete(cat)}>
+            <Trash2 size={15} />
+          </button>
+        </div>
+      </div>
+    )
+  );
+
   return (
     <Layout>
       <div className="page-header">
@@ -204,36 +234,20 @@ export default function CategoriesPage() {
           <p>{t.categories.noCategories}</p>
         </div>
       ) : (
-        <div className="category-list">
-          {categories.map(cat => (
-            editItem?.id === cat.id ? (
-              <div key={cat.id} className="card" style={{ maxWidth: 480 }}>
-                <CategoryForm
-                  initial={cat}
-                  onSave={handleSaved}
-                  onCancel={() => setEditItem(null)}
-                />
-              </div>
-            ) : (
-              <div key={cat.id} className="category-row">
-                <div className="category-row-info">
-                  <span className="budget-dot" style={{ background: cat.color, width: 14, height: 14 }} />
-                  <span className="category-row-name">{cat.name}</span>
-                  <span className={`cat-type-badge cat-type-badge--${cat.type || 1}`}>
-                    {TYPE_OPTIONS.find(o => o.value === (cat.type || 1))?.label}
-                  </span>
+        <div className="category-columns">
+          {TYPE_OPTIONS
+            .filter(opt => categories.some(c => (c.type || 1) === opt.value))
+            .map(opt => {
+              const items = categories.filter(c => (c.type || 1) === opt.value);
+              return (
+                <div key={opt.value} className="category-column">
+                  <div className="category-column-head">
+                    {opt.label} <span className="text-muted">({items.length})</span>
+                  </div>
+                  {items.map(renderItem)}
                 </div>
-                <div className="category-row-actions">
-                  <button className="btn btn-ghost btn-icon" onClick={() => { setShowForm(false); setEditItem(cat); }}>
-                    <Pencil size={15} />
-                  </button>
-                  <button className="btn btn-ghost btn-icon" onClick={() => handleDelete(cat)}>
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-              </div>
-            )
-          ))}
+              );
+            })}
         </div>
       )}
     </Layout>
