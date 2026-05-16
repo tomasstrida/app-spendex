@@ -122,6 +122,9 @@ try {
     for (const t of txs) {
       const catName = applyRules(t, a, rules);
       const cId = needCat(catName);
+      // external_id rozlišený per účet kvůli UNIQUE(user_id, external_id) a interním převodům.
+      // Pozn.: bez ref. čísla je NULL → SQLite NULL je v UNIQUE distinktní, takže taková
+      // tx by se při opakovaném běhu duplikovala. AirBank CSV ref. číslo vždy má (0 duplicit).
       const extId = t.external_id ? `${t.external_id}-${a.account_number}` : null;
       const res = insTx.run(USER_ID, cId, t.amount, t.currency, t.date,
         t.description, t.note || '', extId, t.tx_time || null, t.tx_type || null,
