@@ -109,8 +109,8 @@ try {
   const insTx = db.prepare(`
     INSERT OR IGNORE INTO transactions
       (user_id, category_id, amount, currency, date, description, note, source,
-       external_id, tx_time, tx_type, counterparty_account, entered_by, place, account_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'airbank', ?, ?, ?, ?, ?, ?, ?)
+       external_id, tx_time, tx_type, counterparty_account, entered_by, place, account_id, ab_category)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'airbank', ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   let imported = 0;
   const byCat = {};
@@ -128,7 +128,8 @@ try {
       const extId = t.external_id ? `${t.external_id}-${a.account_number}` : null;
       const res = insTx.run(USER_ID, cId, t.amount, t.currency, t.date,
         t.description, t.note || '', extId, t.tx_time || null, t.tx_type || null,
-        t.counterparty_account || null, t.entered_by || null, t.place || null, accId);
+        t.counterparty_account || null, t.entered_by || null, t.place || null, accId,
+        t.ab_category || null);
       if (res.changes > 0) { imported++; byCat[catName] = (byCat[catName] || 0) + 1; }
     }
   }

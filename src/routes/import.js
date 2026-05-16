@@ -68,8 +68,8 @@ router.post('/confirm', requireAuth, (req, res) => {
   const insert = db.prepare(`
     INSERT OR IGNORE INTO transactions
       (user_id, category_id, amount, currency, date, description, note, source, external_id,
-       tx_time, tx_type, counterparty_account, entered_by, place, account_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'airbank', ?, ?, ?, ?, ?, ?, ?)
+       tx_time, tx_type, counterparty_account, entered_by, place, account_id, ab_category)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'airbank', ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const upsertMapping = db.prepare(`
@@ -92,7 +92,7 @@ router.post('/confirm', requireAuth, (req, res) => {
         t.description, t.note || '', t.external_id || null,
         t.tx_time || null, t.tx_type || null,
         t.counterparty_account || null, t.entered_by || null, t.place || null,
-        resolvedAccountId,
+        resolvedAccountId, t.ab_category || null,
       );
       if (result.changes > 0) imported++;
       else skipped++;

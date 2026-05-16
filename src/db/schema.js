@@ -189,6 +189,7 @@ function initSchema() {
     'ALTER TABLE categories ADD COLUMN typical_price REAL',
     'ALTER TABLE categories ADD COLUMN frequency_months INTEGER',
     'ALTER TABLE transactions ADD COLUMN account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL',
+    'ALTER TABLE transactions ADD COLUMN ab_category TEXT',
     // Datová integrita: kategorie unikátní per uživatel. Bez tohoto INSERT OR IGNORE
     // v import skriptu nikdy neignoruje a zakládá duplicity. Selže tiše, pokud
     // duplicity už existují – v tom případě je nutné je nejdřív vyčistit ručně.
