@@ -133,11 +133,19 @@ Digitální předplatné NEpatří do trackeru, řeší se jako kategorie (rozho
 - `ČESKÁ TELEVIZE` → kategorie **`Pravidelné platby`** (rozhodnutí uživatele, ne Licence)
 - `RAILWAY` se NEpřidává (kolize s jízdným)
 
-### 5.3 RAV přepis kategorie
+### 5.3 Přepis kategorie tracker plateb
 
-`textOverrides` (L3): `Toyota Financial` → kategorie **`Pravidelné platby`**. Tím se splní původní backlog #1 (RAV zmizí z „Auto Moto - PHM"). Ostatní tracker platby (nájem, PRE, T-Mobile, Nordic) si ponechají přirozenou kategorizaci — k potvrzení v review specu.
+`textOverrides` (L3) — **všech 5 tracker patternů** → kategorie **`Pravidelné platby`** (Typ 1):
 
-Tracker fixních plateb je jinak čistě čtecí — kromě tohoto explicitního RAV override nepřidává L3 patterny; matchuje jen pro výpočet stavu, kategorie ostatních transakcí se nemění.
+- `JANA HRDLIČKOVÁ` → `Pravidelné platby`
+- `Pražská energetika` → `Pravidelné platby`
+- `Toyota Financial` → `Pravidelné platby`
+- `T-Mobile` → `Pravidelné platby`
+- `Nordic Telecom` → `Pravidelné platby`
+
+Důvod: fixní platby nepatří do měsíčních variabilních budgetů (rozhodnutí uživatele). Soustředěním do `Pravidelné platby` zmizí RAV z „Auto Moto - PHM" (splní původní backlog #1) a žádná z těchto plateb nenafoukne jiný měsíční budget.
+
+Tracker výpočet stavu (✅/⚠️/❌) je na kategorizaci nezávislý — matchuje patterny přímo nad `description`, ne přes `category_id`. Kategorizace a tracker jsou dvě oddělené vrstvy nad stejnými patterny.
 
 ## 6. Frontend (`ReportPage.jsx`)
 
@@ -189,7 +197,7 @@ Styl `node:test` jako `scripts/seed/seed.test.js` a `scripts/lib/apply-rules.tes
 
 Změny se šíří přes `scripts/rebuild.cjs` — destruktivní full rebuild (smaže a znovu naseeduje per-user data, re-importuje transakce, re-kategorizuje). Schema `ALTER TABLE` musí proběhnout před rebuildem; zajištěno, protože `schema.js` běží přes db singleton při startu i v rebuildu. Deploy dle CLAUDE.md workflow (staging → na pokyn main).
 
-## 10. Otevřené body k potvrzení v review specu
+## 10. Otevřené body
 
-1. RAV → `Pravidelné platby`: přepsat jen RAV, nebo i ostatní tracker platby pro konzistenci? (návrh: jen RAV)
+1. ~~RAV → `Pravidelné platby`: jen RAV, nebo všechny?~~ **Vyřešeno: všech 5 tracker plateb → `Pravidelné platby` (viz 5.3).**
 2. Texty popisků na stránce (čeština, `i18n.js`) — finální znění při implementaci.
