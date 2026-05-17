@@ -52,5 +52,19 @@ module.exports = {
     { pattern: 'PrEP', category: 'Y - Léky, PrEP, Optika' },
     { pattern: 'ROHLIK', category: 'Jídlo a běžné nákupy' },
     { pattern: 'ROHLÍK', category: 'Jídlo a běžné nákupy' },
+    // Tracker fixních plateb → Pravidelné platby (mimo měsíční budgety)
+    { pattern: 'JANA HRDLIČKOVÁ', category: 'Pravidelné platby' },
+    { pattern: 'Pražská energetika', category: 'Pravidelné platby' },
+    { pattern: 'Toyota Financial', category: 'Pravidelné platby' },
+    { pattern: 'T-Mobile', category: 'Pravidelné platby' },
+    { pattern: 'Nordic Telecom', category: 'Pravidelné platby' },
+    { pattern: 'ČESKÁ TELEVIZE', category: 'Pravidelné platby' },
+    // Digitální předplatné → Licence (Typ 2, roční)
+    { pattern: 'OPENAI', category: 'Licence' },
+    { pattern: 'Google Workspace', category: 'Licence' },
+    { pattern: 'DISCORD', category: 'Licence' },
+    { pattern: 'NUELINK', category: 'Licence' },
+    { pattern: 'OPUS CLIP', category: 'Licence' },
+    { pattern: 'P.SKOOL.COM', category: 'Licence' },
   ],
 };

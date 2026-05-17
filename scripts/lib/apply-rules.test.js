@@ -55,3 +55,13 @@ test('prázdná protistrana neaktivuje L0', () => {
   const tx = { counterparty_account: '', ab_category: 'Sport', description: '', note: '' };
   assert.equal(applyRules(tx, acc('1679014023'), rules), 'Sport');
 });
+
+test('L3 Toyota Financial → Pravidelné platby', () => {
+  const tx = { counterparty_account: 'EXTERNAL999', ab_category: 'Splátky', description: 'Toyota Financial Services Czech s.r.o.', note: '' };
+  assert.equal(applyRules(tx, acc('1679014023'), rules), 'Pravidelné platby');
+});
+
+test('L3 OPENAI → Licence', () => {
+  const tx = { counterparty_account: 'EXTERNAL999', ab_category: 'Licence Apple apod', description: 'OPENAI *CHATGPT SUBSCR', note: '' };
+  assert.equal(applyRules(tx, acc('1679014023'), rules), 'Licence');
+});
