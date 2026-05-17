@@ -19,9 +19,9 @@ const STATUS = {
 // ── Status fixních plateb ─────────────────────────────────────────────────────
 
 const FIXED_STATUS = {
-  ok:       { icon: '✅', text: '' },
-  mismatch: { icon: '⚠️', text: 'jiná částka' },
-  missing:  { icon: '❌', text: 'chybí' },
+  ok:       { icon: '✅' },
+  mismatch: { icon: '⚠️' },
+  missing:  { icon: '❌' },
 };
 
 // ── Donut chart (SVG) ────────────────────────────────────────────────────────
@@ -277,7 +277,6 @@ export default function ReportPage() {
   const totalType2   = type2Spent.reduce((s, c) => s + c.spent, 0);
   const totalType3   = type3Spent.reduce((s, c) => s + c.spent, 0);
   const totalSpent   = stats?.total_spent || 0;
-  const bilance      = totalIncome - totalFixed - totalSpent;
   const usedPersons  = income.map(i => i.person);
   const savings      = stats?.savings || { net: 0 };
   const reserve      = stats?.reserve || { balance: 0 };
