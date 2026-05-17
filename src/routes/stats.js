@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
 const { getPeriodDates, getUserBillingDay, currentPeriodKey } = require('../utils/period');
+const { savingsNet, reserveBalance, savingsAccount, reserveAccount, reservePaidPatterns } = require('../utils/recurring');
 
 // GET /api/stats/overview?period=2026-04
 router.get('/overview', requireAuth, (req, res) => {
@@ -53,6 +54,38 @@ router.get('/overview', requireAuth, (req, res) => {
     LIMIT 12
   `).all(req.user.id);
 
+  const sav = db.prepare(`
+    SELECT
+      COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) AS deposits,
+      COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS withdrawals
+    FROM transactions
+    WHERE user_id = ? AND counterparty_account LIKE ? || '%'
+      AND date >= ? AND date <= ?
+  `).get(req.user.id, savingsAccount, start, end);
+  const savings = { deposits: sav.deposits, withdrawals: sav.withdrawals, net: savingsNet(sav) };
+
+  const envCol = db.prepare(`
+    SELECT
+      COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) AS envelopeDeposits,
+      COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS envelopeReturns
+    FROM transactions
+    WHERE user_id = ? AND counterparty_account LIKE ? || '%' AND date <= ?
+  `).get(req.user.id, reserveAccount, end);
+  const paidStmt = db.prepare(`
+    SELECT COALESCE(SUM(ABS(amount)), 0) AS s
+    FROM transactions
+    WHERE user_id = ? AND amount < 0 AND date <= ? AND description LIKE '%' || ? || '%'
+  `);
+  const najemSum = paidStmt.get(req.user.id, end, reservePaidPatterns[0]).s;
+  const preSum   = paidStmt.get(req.user.id, end, reservePaidPatterns[1]).s;
+  const reserve = {
+    balance: reserveBalance({
+      envelopeDeposits: envCol.envelopeDeposits,
+      najemSum, preSum,
+      envelopeReturns: envCol.envelopeReturns,
+    }),
+  };
+
   res.json({
     period: periodKey,
     period_start: start,
@@ -61,6 +94,8 @@ router.get('/overview', requireAuth, (req, res) => {
     total_spent: total.total_spent,
     by_category: byCategory,
     monthly_trend: trend,
+    savings,
+    reserve,
   });
 });
 
