@@ -9,6 +9,8 @@ const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 // GET /api/fixed-expenses?period=YYYY-MM
 // Vrátí manuální položky + sumované odchozí transakce z 'fixed' účtů pro dané období.
 router.get('/', requireAuth, (req, res) => {
+  const { paymentStatus } = require('../utils/recurring');
+
   const manual = db.prepare(
     'SELECT *, \'manual\' as source FROM fixed_expenses WHERE user_id = ? ORDER BY sort_order ASC, id ASC'
   ).all(req.user.id);
@@ -19,6 +21,24 @@ router.get('/', requireAuth, (req, res) => {
   const { getPeriodDates, getUserBillingDay } = require('../utils/period');
   const billingDay = getUserBillingDay(db, req.user.id);
   const { start, end } = getPeriodDates(billingDay, req.query.period);
+
+  const matchStmt = db.prepare(`
+    SELECT COALESCE(SUM(ABS(amount)), 0) AS actual, COUNT(*) AS tx_count
+    FROM transactions
+    WHERE user_id = ? AND amount < 0 AND date >= ? AND date <= ?
+      AND description LIKE '%' || ? || '%'
+  `);
+
+  const manualWithStatus = manual.map(row => {
+    if (!row.match_pattern) return row;
+    const m = matchStmt.get(req.user.id, start, end, row.match_pattern);
+    return {
+      ...row,
+      actual: m.actual,
+      tx_count: m.tx_count,
+      status: paymentStatus(row.amount, m.actual, m.tx_count),
+    };
+  });
 
   const fromAccounts = db.prepare(`
     SELECT
@@ -40,16 +60,17 @@ router.get('/', requireAuth, (req, res) => {
     ORDER BY a.name ASC, SUM(ABS(t.amount)) DESC
   `).all(req.user.id, start, end);
 
-  res.json([...manual, ...fromAccounts]);
+  res.json([...manualWithStatus, ...fromAccounts]);
 });
 
 // POST /api/fixed-expenses
 router.post('/', requireAuth, writeLimiter, (req, res) => {
-  const { name, amount, note, sort_order } = req.body;
+  const { name, amount, note, sort_order, match_pattern } = req.body;
   if (!name || amount == null) return res.status(400).json({ error: 'Název a částka jsou povinné.' });
   const result = db.prepare(
-    'INSERT INTO fixed_expenses (user_id, name, amount, note, sort_order) VALUES (?, ?, ?, ?, ?)'
-  ).run(req.user.id, name.trim(), parseFloat(amount), note || null, sort_order ?? 0);
+    'INSERT INTO fixed_expenses (user_id, name, amount, note, sort_order, match_pattern) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(req.user.id, name.trim(), parseFloat(amount), note || null, sort_order ?? 0,
+    match_pattern && match_pattern.trim() ? match_pattern.trim() : null);
   res.status(201).json(db.prepare('SELECT * FROM fixed_expenses WHERE id = ?').get(result.lastInsertRowid));
 });
 
@@ -57,12 +78,13 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
 router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
   const row = db.prepare('SELECT * FROM fixed_expenses WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!row) return res.status(404).json({ error: 'Záznam nenalezen.' });
-  const { name, amount, note, sort_order } = req.body;
-  db.prepare('UPDATE fixed_expenses SET name = ?, amount = ?, note = ?, sort_order = ? WHERE id = ?').run(
+  const { name, amount, note, sort_order, match_pattern } = req.body;
+  db.prepare('UPDATE fixed_expenses SET name = ?, amount = ?, note = ?, sort_order = ?, match_pattern = ? WHERE id = ?').run(
     name ?? row.name,
     amount != null ? parseFloat(amount) : row.amount,
     note !== undefined ? (note || null) : row.note,
     sort_order ?? row.sort_order,
+    match_pattern !== undefined ? (match_pattern && match_pattern.trim() ? match_pattern.trim() : null) : row.match_pattern,
     row.id
   );
   res.json(db.prepare('SELECT * FROM fixed_expenses WHERE id = ?').get(row.id));
