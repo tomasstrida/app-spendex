@@ -6,3 +6,6 @@ client/dist/
 *.db-shm
 *.db-wal
 .DS_Store
+
+# Visual companion (brainstorming)
+.superpowers/
