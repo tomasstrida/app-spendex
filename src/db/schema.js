@@ -194,6 +194,7 @@ function initSchema() {
     // v import skriptu nikdy neignoruje a zakládá duplicity. Selže tiše, pokud
     // duplicity už existují – v tom případě je nutné je nejdřív vyčistit ručně.
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_user_name ON categories(user_id, name)',
+    'ALTER TABLE fixed_expenses ADD COLUMN match_pattern TEXT',
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* sloupec/index již existuje nebo nelze aplikovat */ }
