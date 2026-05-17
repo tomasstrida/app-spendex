@@ -86,8 +86,8 @@ try {
   for (const b of budgets) insBud.run(USER_ID, needCat(b.category), b.amount);
 
   // 5. SEED fixní výdaje
-  const insFx = db.prepare('INSERT INTO fixed_expenses (user_id, name, amount, sort_order) VALUES (?, ?, ?, ?)');
-  for (const f of fixedExpenses) insFx.run(USER_ID, f.name, f.amount, f.sort_order);
+  const insFx = db.prepare('INSERT INTO fixed_expenses (user_id, name, amount, sort_order, match_pattern) VALUES (?, ?, ?, ?, ?)');
+  for (const f of fixedExpenses) insFx.run(USER_ID, f.name, f.amount, f.sort_order, f.match_pattern || null);
 
   // 6. SEED roční budgety + položky
   const insAnn = db.prepare('INSERT INTO annual_budgets (user_id, category_id, amount) VALUES (?, ?, ?)');

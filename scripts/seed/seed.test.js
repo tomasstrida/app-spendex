@@ -38,7 +38,21 @@ test('annual a budget_items odkazují existující kategorie', () => {
 });
 
 test('fixed_expenses a income mají správný tvar', () => {
-  assert.equal(fixed.length, 8);
+  assert.equal(fixed.length, 5);
   assert.equal(income.length, 4);
   for (const i of income) assert.match(i.period, /^\d{4}-\d{2}$/);
+});
+
+test('fixní výdaje: skupina A, každý má match_pattern a kladnou částku', () => {
+  assert.equal(fixed.length, 5);
+  const names = fixed.map(f => f.name);
+  assert.deepEqual(names, [
+    'Nájem Stodůlky', 'Záloha energie PRE', 'Splátka auta RAV4',
+    'Telefon T-Mobile', 'Internet Nordic',
+  ]);
+  for (const f of fixed) {
+    assert.ok(f.match_pattern && f.match_pattern.length > 0, f.name);
+    assert.ok(f.amount > 0, f.name);
+    assert.ok(Number.isInteger(f.sort_order), f.name);
+  }
 });
