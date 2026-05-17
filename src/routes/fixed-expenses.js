@@ -9,8 +9,6 @@ const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 // GET /api/fixed-expenses?period=YYYY-MM
 // Vrátí manuální položky + sumované odchozí transakce z 'fixed' účtů pro dané období.
 router.get('/', requireAuth, (req, res) => {
-  const { paymentStatus } = require('../utils/recurring');
-
   const manual = db.prepare(
     'SELECT *, \'manual\' as source FROM fixed_expenses WHERE user_id = ? ORDER BY sort_order ASC, id ASC'
   ).all(req.user.id);
@@ -19,6 +17,7 @@ router.get('/', requireAuth, (req, res) => {
 
   // Načti transakce z fixed účtů pro toto období
   const { getPeriodDates, getUserBillingDay } = require('../utils/period');
+  const { paymentStatus } = require('../utils/recurring');
   const billingDay = getUserBillingDay(db, req.user.id);
   const { start, end } = getPeriodDates(billingDay, req.query.period);
 
