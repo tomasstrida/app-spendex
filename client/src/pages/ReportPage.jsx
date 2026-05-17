@@ -16,6 +16,14 @@ const STATUS = {
   over: { icon: '🔴', cls: 'text-danger' },
 };
 
+// ── Status fixních plateb ─────────────────────────────────────────────────────
+
+const FIXED_STATUS = {
+  ok:       { icon: '✅', text: '' },
+  mismatch: { icon: '⚠️', text: 'jiná částka' },
+  missing:  { icon: '❌', text: 'chybí' },
+};
+
 // ── Donut chart (SVG) ────────────────────────────────────────────────────────
 
 function polarToXY(cx, cy, r, deg) {
@@ -86,6 +94,7 @@ function FixedExpenseForm({ initial, onSave, onCancel }) {
   const [name, setName] = useState(initial?.name || '');
   const [amount, setAmount] = useState(initial?.amount != null ? String(initial.amount) : '');
   const [note, setNote] = useState(initial?.note || '');
+  const [matchPattern, setMatchPattern] = useState(initial?.match_pattern || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -98,7 +107,7 @@ function FixedExpenseForm({ initial, onSave, onCancel }) {
     try {
       const method = isNew ? 'POST' : 'PATCH';
       const url = isNew ? '/api/fixed-expenses' : `/api/fixed-expenses/${initial.id}`;
-      const body = { name: name.trim(), amount: amt, note: note || null };
+      const body = { name: name.trim(), amount: amt, note: note || null, match_pattern: matchPattern.trim() || null };
       const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const d = await r.json();
       if (!r.ok) { setError(d.error || 'Chyba.'); return; }
@@ -117,6 +126,8 @@ function FixedExpenseForm({ initial, onSave, onCancel }) {
           value={amount} onChange={e => setAmount(e.target.value)} style={{ maxWidth: 130 }} />
         <input className="input" placeholder="Poznámka (volitelně)"
           value={note} onChange={e => setNote(e.target.value)} style={{ maxWidth: 180 }} />
+        <input className="input" placeholder="Pattern transakce (volitelně)"
+          value={matchPattern} onChange={e => setMatchPattern(e.target.value)} style={{ maxWidth: 180 }} />
         <button type="submit" className="btn btn-primary btn-icon" disabled={saving}><Check size={15} /></button>
         <button type="button" className="btn btn-ghost btn-icon" onClick={onCancel}><X size={15} /></button>
       </div>
@@ -268,6 +279,8 @@ export default function ReportPage() {
   const totalSpent   = stats?.total_spent || 0;
   const bilance      = totalIncome - totalFixed - totalSpent;
   const usedPersons  = income.map(i => i.person);
+  const savings      = stats?.savings || { net: 0 };
+  const reserve      = stats?.reserve || { balance: 0 };
 
   return (
     <Layout>
@@ -336,10 +349,10 @@ export default function ReportPage() {
             </div>
           </section>
 
-          {/* ── PEVNÉ VÝDAJE ── */}
+          {/* ── FIXNÍ PLATBY ── */}
           <section className="report-section">
             <div className="report-section-header">
-              <h2 className="report-section-title">Pevné výdaje</h2>
+              <h2 className="report-section-title">Fixní platby</h2>
               {!showFixedForm && !editFixed && (
                 <button className="btn btn-ghost btn-sm" onClick={() => setShowFixedForm(true)}>
                   <Plus size={14} /> Přidat
@@ -366,8 +379,18 @@ export default function ReportPage() {
                     />
                   ) : (
                     <div key={row.id} className="report-income-row">
+                      {row.status && <span title={row.status}>{FIXED_STATUS[row.status].icon}</span>}
                       <span className="report-income-person">{row.name}</span>
                       {row.note && <span className="text-muted" style={{ fontSize: 12 }}>{row.note}</span>}
+                      {row.status === 'mismatch' && (
+                        <span className="text-muted" style={{ fontSize: 12 }}>
+                          {row.actual > row.amount ? '+' : '−'}{formatCurrency(Math.abs(row.actual - row.amount))} oproti plánu
+                          {row.tx_count > 1 ? ` · ${row.tx_count} platby` : ''}
+                        </span>
+                      )}
+                      {row.status === 'missing' && (
+                        <span className="text-muted" style={{ fontSize: 12 }}>chybí</span>
+                      )}
                       <span className="report-income-amount">{formatCurrency(row.amount)}</span>
                       <button className="btn btn-ghost btn-icon"
                         onClick={() => { setShowFixedForm(false); setEditFixed(row); }}>
@@ -381,8 +404,18 @@ export default function ReportPage() {
                 ))}
               </div>
             )}
+            {fixedExpenses.some(f => f.status) && (() => {
+              const s = k => fixedExpenses.filter(f => f.status === k).length;
+              return (
+                <div style={{ display: 'flex', gap: 16, fontSize: 13, marginTop: 4 }}>
+                  {s('ok') > 0 && <span>✅ {s('ok')} proběhly</span>}
+                  {s('mismatch') > 0 && <span>⚠️ {s('mismatch')} jiná částka</span>}
+                  {s('missing') > 0 && <span>❌ {s('missing')} chybí</span>}
+                </div>
+              );
+            })()}
             <div className="report-subtotal">
-              <span>Pevné výdaje celkem</span>
+              <span>Fixní platby celkem</span>
               <span>{formatCurrency(totalFixed)}</span>
             </div>
           </section>
@@ -491,6 +524,28 @@ export default function ReportPage() {
             </section>
           )}
 
+          {/* ── SPOŘENÍ & REZERVA ── */}
+          <section className="report-section">
+            <div className="report-section-header">
+              <h2 className="report-section-title">Spoření &amp; rezerva</h2>
+            </div>
+            <div className="report-budget-list">
+              <div className="report-budget-row">
+                <span className="report-budget-name">Skutečně nasporeno (za období)</span>
+                <span className="report-budget-spent" style={{ color: savings.net >= 0 ? 'var(--ok, #16a34a)' : 'var(--danger)' }}>
+                  {savings.net >= 0 ? '+ ' : '− '}{formatCurrency(Math.abs(savings.net))}
+                </span>
+              </div>
+              <div className="report-budget-row">
+                <span className="report-budget-name">Harmonická rezerva (kumulativně)</span>
+                <span className="report-budget-spent">{formatCurrency(reserve.balance)}</span>
+              </div>
+            </div>
+            <div className="report-pill text-muted" style={{ fontSize: 12, marginTop: 6 }}>
+              netto převodů na spořicí účet · zůstatek obálky po nájmu a PRE
+            </div>
+          </section>
+
           {/* ── BILANCE ── */}
           <section className="report-section report-section--bilance">
             <div className="report-bilance-row">
@@ -499,7 +554,7 @@ export default function ReportPage() {
             </div>
             {totalFixed > 0 && (
               <div className="report-bilance-row">
-                <span>Pevné výdaje</span>
+                <span>Fixní platby</span>
                 <span>− {formatCurrency(totalFixed)}</span>
               </div>
             )}
@@ -507,9 +562,12 @@ export default function ReportPage() {
               <span>Variabilní výdaje</span>
               <span>− {formatCurrency(totalSpent)}</span>
             </div>
-            <div className={`report-bilance-row report-bilance-result ${bilance >= 0 ? '' : 'text-danger'}`}>
-              <span>Na spořicí účet</span>
-              <span>{bilance >= 0 ? '+' : '−'} {formatCurrency(Math.abs(bilance))}</span>
+            <div className={`report-bilance-row report-bilance-result ${savings.net >= 0 ? '' : 'text-danger'}`}>
+              <span>Skutečně nasporeno</span>
+              <span>{savings.net >= 0 ? '+' : '−'} {formatCurrency(Math.abs(savings.net))}</span>
+            </div>
+            <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
+              Výsledek je měřené netto převodů, ne aritmetický rozdíl rozpadu výše.
             </div>
           </section>
 
