@@ -62,6 +62,6 @@ test('L3 Toyota Financial → Pravidelné platby', () => {
 });
 
 test('L3 OPENAI → Licence', () => {
-  const tx = { counterparty_account: 'EXTERNAL999', ab_category: 'Licence Apple apod', description: 'OPENAI *CHATGPT SUBSCR', note: '' };
+  const tx = { counterparty_account: 'EXTERNAL999', ab_category: 'Nezařazeno', description: 'OPENAI *CHATGPT SUBSCR', note: '' };
   assert.equal(applyRules(tx, acc('1679014023'), rules), 'Licence');
 });

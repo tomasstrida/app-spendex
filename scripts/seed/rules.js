@@ -56,6 +56,7 @@ module.exports = {
     { pattern: 'JANA HRDLIČKOVÁ', category: 'Pravidelné platby' },
     { pattern: 'Pražská energetika', category: 'Pravidelné platby' },
     { pattern: 'Toyota Financial', category: 'Pravidelné platby' },
+    // T-Mobile: substring match → chytne i případný nákup HW/dobíječky u T-Mobile (vědomý tradeoff, domácnost má 1 tarif)
     { pattern: 'T-Mobile', category: 'Pravidelné platby' },
     { pattern: 'Nordic Telecom', category: 'Pravidelné platby' },
     { pattern: 'ČESKÁ TELEVIZE', category: 'Pravidelné platby' },
