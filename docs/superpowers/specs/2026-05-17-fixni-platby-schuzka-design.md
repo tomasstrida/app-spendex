@@ -181,6 +181,7 @@ Rozpad (Příjmy / − Fixní platby / − Variabilní výdaje) zůstává **inf
 - `expected ≤ 0` → žádný stav (ochrana proti dělení nulou; POST už vyžaduje kladnou částku).
 - Rezerva kumulativní `date ≤ end` přes celou historii.
 - Backend nové dotazy jsou jen čtecí. Jediný nový write je volitelné `match_pattern` na stávajícím POST/PATCH.
+- **Known limitation (rezerva):** `najemSum`/`preSum` sčítají jen `amount < 0`. Pokud v budoucnu přijde roční přeplatek energií jako kladná transakce s popisem „Pražská energetika", nebude od rezervy odečten (rezerva vyjde níž). V aktuálních datech žádné kladné PRE/JANA transakce nejsou — řešit iterativně, až roční vyúčtování dorazí. Předpoklad: `reservePaidPatterns` platby jsou jednosměrné.
 - Frontend: chybí-li `savings`/`reserve` v response → default 0 / blok skrýt.
 
 ## 8. Testy
