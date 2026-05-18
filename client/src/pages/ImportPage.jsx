@@ -19,13 +19,15 @@ const ROLE_HINTS = {
   income:   'Příchozí platby se sčítají jako příjmy (Tom, Martin, Sudo nájem).',
 };
 
-function AccountSelector({ accounts, selectedId, detectedIds, onSelect, onCreated }) {
+function AccountSelector({ accounts, selectedId, detectedIds, onSelect, onCreated, onUpdated }) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState('spending');
   const [newNumber, setNewNumber] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  const [savingRole, setSavingRole] = useState(false);
+  const [roleErr, setRoleErr] = useState('');
 
   async function handleCreate(e) {
     e.preventDefault();
@@ -45,6 +47,21 @@ function AccountSelector({ accounts, selectedId, detectedIds, onSelect, onCreate
       setNewName(''); setNewRole('spending'); setNewNumber('');
     } catch { setErr('Chyba připojení.'); }
     finally { setSaving(false); }
+  }
+
+  async function handleRoleChange(acc, role) {
+    setSavingRole(true); setRoleErr('');
+    try {
+      const r = await fetch(`/api/accounts/${acc.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
+      const d = await r.json();
+      if (!r.ok) { setRoleErr(d.error || 'Chyba.'); return; }
+      onUpdated(d);
+    } catch { setRoleErr('Chyba připojení.'); }
+    finally { setSavingRole(false); }
   }
 
   const suggested = accounts.filter(a => detectedIds.includes(a.id));
@@ -79,9 +96,27 @@ function AccountSelector({ accounts, selectedId, detectedIds, onSelect, onCreate
       {selectedId && (() => {
         const acc = accounts.find(a => a.id === selectedId);
         return acc ? (
-          <p style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 4 }}>
-            {ROLE_HINTS[acc.role]}
-          </p>
+          <div style={{ marginBottom: 4 }}>
+            <p style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 4 }}>
+              {ROLE_HINTS[acc.role]}
+            </p>
+            <select
+              className="input"
+              value={acc.role}
+              disabled={savingRole}
+              onChange={e => handleRoleChange(acc, e.target.value)}
+              style={{ width: '100%' }}
+            >
+              {Object.entries(ROLE_LABELS).map(([v, l]) => (
+                <option key={v} value={v}>{l} – {ROLE_HINTS[v]}</option>
+              ))}
+            </select>
+            {roleErr && (
+              <div className="alert alert-error" style={{ padding: '6px 10px', fontSize: 12, marginTop: 6 }}>
+                {roleErr}
+              </div>
+            )}
+          </div>
         ) : null;
       })()}
 
@@ -224,6 +259,10 @@ export default function ImportPage() {
     }
   }
 
+  function handleAccountUpdated(acc) {
+    setAccounts(prev => prev.map(a => a.id === acc.id ? acc : a));
+  }
+
   function reset() {
     setStep(STEP.UPLOAD);
     setTransactions([]);
@@ -290,6 +329,7 @@ export default function ImportPage() {
             detectedIds={detectedAccountIds}
             onSelect={setSelectedAccountId}
             onCreated={acc => setAccounts(prev => [...prev, acc].sort((a, b) => a.name.localeCompare(b.name)))}
+            onUpdated={handleAccountUpdated}
           />
 
           {/* Příchozí transakce */}
