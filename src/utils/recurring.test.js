@@ -37,3 +37,29 @@ test('reserveBalance: vklady − nájem − PRE − vratky', () => {
 test('MATCH_TOLERANCE_PCT je 5', () => {
   assert.equal(MATCH_TOLERANCE_PCT, 5);
 });
+
+const { incomeStatus } = require('./recurring');
+
+test('incomeStatus: žádná transakce → missing', () => {
+  assert.equal(incomeStatus(140000, 0, 0), 'missing');
+});
+
+test('incomeStatus: přesně plán → ok', () => {
+  assert.equal(incomeStatus(140000, 140000, 1), 'ok');
+});
+
+test('incomeStatus: víc než plán → ok (přebytek je v pohodě)', () => {
+  assert.equal(incomeStatus(140000, 190000, 1), 'ok');
+});
+
+test('incomeStatus: přesně 5 % pod plán → ok (hranice)', () => {
+  assert.equal(incomeStatus(140000, 133000, 1), 'ok'); // 140000*0.95
+});
+
+test('incomeStatus: těsně pod 5 % → mismatch', () => {
+  assert.equal(incomeStatus(140000, 132999, 1), 'mismatch');
+});
+
+test('incomeStatus: plán ≤ 0 → null', () => {
+  assert.equal(incomeStatus(0, 100, 1), null);
+});

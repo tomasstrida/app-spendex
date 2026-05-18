@@ -18,6 +18,18 @@ function paymentStatus(expected, actual, txCount) {
   return diffPct <= MATCH_TOLERANCE_PCT ? 'ok' : 'mismatch';
 }
 
+/**
+ * Stav příjmu za období. Na rozdíl od paymentStatus je přebytek (skutečnost
+ * nad plán) v pořádku – penalizuje se jen výpadek pod plán.
+ * @returns 'ok' | 'mismatch' | 'missing' | null
+ */
+function incomeStatus(expected, actual, txCount) {
+  if (!(expected > 0)) return null;
+  if (!txCount || txCount === 0) return 'missing';
+  const floor = expected * (1 - MATCH_TOLERANCE_PCT / 100);
+  return actual >= floor ? 'ok' : 'mismatch';
+}
+
 function savingsNet({ deposits, withdrawals }) {
   return deposits - withdrawals;
 }
@@ -32,6 +44,7 @@ module.exports = {
   reserveAccount,
   reservePaidPatterns,
   paymentStatus,
+  incomeStatus,
   savingsNet,
   reserveBalance,
 };
