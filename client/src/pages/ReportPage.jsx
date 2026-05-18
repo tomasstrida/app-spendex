@@ -135,28 +135,28 @@ function FixedExpenseForm({ initial, onSave, onCancel }) {
   );
 }
 
-// ── Formulář příjmů ───────────────────────────────────────────────────────────
+// ── Formulář příjmových zdrojů ────────────────────────────────────────────────
 
-function IncomeForm({ initial, period, usedPersons, onSave, onCancel }) {
+function IncomeSourceForm({ initial, onSave, onCancel }) {
   const isNew = !initial;
   const [person, setPerson] = useState(initial?.person || '');
-  const [amount, setAmount] = useState(initial?.amount != null ? String(initial.amount) : '');
-  const [note, setNote] = useState(initial?.note || '');
+  const [planned, setPlanned] = useState(initial?.planned_amount != null ? String(initial.planned_amount) : '');
+  const [matchPattern, setMatchPattern] = useState(initial?.match_pattern || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   async function handleSubmit(e) {
     e.preventDefault();
     if (!person.trim()) { setError('Zadejte jméno / zdroj.'); return; }
-    const amt = parseFloat(amount);
-    if (!amt || amt <= 0) { setError('Zadejte kladnou částku.'); return; }
     setSaving(true); setError('');
     try {
       const method = isNew ? 'POST' : 'PATCH';
       const url = isNew ? '/api/income' : `/api/income/${initial.id}`;
-      const body = isNew
-        ? { person: person.trim(), amount: amt, period, note }
-        : { person: person.trim(), amount: amt, note };
+      const body = {
+        person: person.trim(),
+        planned_amount: parseFloat(planned) || 0,
+        match_pattern: matchPattern.trim() || null,
+      };
       const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const d = await r.json();
       if (!r.ok) { setError(d.error || 'Chyba.'); return; }
@@ -165,24 +165,16 @@ function IncomeForm({ initial, period, usedPersons, onSave, onCancel }) {
     finally { setSaving(false); }
   }
 
-  const SUGGESTIONS = ['Tom', 'Martin', 'Sudo'].filter(p => !usedPersons.includes(p) || p === initial?.person);
-
   return (
     <form className="income-form" onSubmit={handleSubmit}>
       {error && <div className="alert alert-error" style={{ marginBottom: 8 }}>{error}</div>}
       <div className="income-form-row">
-        <div style={{ flex: 1 }}>
-          <input className="input" placeholder="Kdo / zdroj (Tom, Martin, Sudo…)"
-            value={person} onChange={e => setPerson(e.target.value)}
-            list="income-persons" autoFocus style={{ width: '100%' }} />
-          <datalist id="income-persons">
-            {SUGGESTIONS.map(s => <option key={s} value={s} />)}
-          </datalist>
-        </div>
-        <input className="input" type="number" min="0" step="1" placeholder="Částka"
-          value={amount} onChange={e => setAmount(e.target.value)} style={{ maxWidth: 130 }} />
-        <input className="input" placeholder="Poznámka (volitelně)"
-          value={note} onChange={e => setNote(e.target.value)} style={{ maxWidth: 180 }} />
+        <input className="input" placeholder="Kdo / zdroj (Tom, Martin, Sudo nájem…)"
+          value={person} onChange={e => setPerson(e.target.value)} autoFocus style={{ flex: 1 }} />
+        <input className="input" type="number" min="0" step="1" placeholder="Plán"
+          value={planned} onChange={e => setPlanned(e.target.value)} style={{ maxWidth: 130 }} />
+        <input className="input" placeholder="Pattern transakce (volitelně)"
+          value={matchPattern} onChange={e => setMatchPattern(e.target.value)} style={{ maxWidth: 200 }} />
         <button type="submit" className="btn btn-primary btn-icon" disabled={saving}><Check size={15} /></button>
         <button type="button" className="btn btn-ghost btn-icon" onClick={onCancel}><X size={15} /></button>
       </div>
@@ -197,7 +189,7 @@ export default function ReportPage() {
   const [periodStart, setPeriodStart] = useState(null);
   const [periodEnd, setPeriodEnd] = useState(null);
   const [currentPeriod, setCurrentPeriod] = useState(null);
-  const [income, setIncome] = useState([]);
+  const [incomeSources, setIncomeSources] = useState([]);
   const [fixedExpenses, setFixedExpenses] = useState([]);
   const [budgets, setBudgets] = useState([]);       // Typ 1
   const [stats, setStats] = useState(null);          // total_spent + by_category
@@ -223,7 +215,7 @@ export default function ReportPage() {
       fetch(`/api/budgets?period=${period}`).then(r => r.json()),
       fetch(`/api/stats/overview?period=${period}`).then(r => r.json()),
     ]).then(([inc, fixed, bud, st]) => {
-      setIncome(inc.income || []);
+      setIncomeSources(inc.sources || []);
       setFixedExpenses(Array.isArray(fixed) ? fixed : []);
       setBudgets((bud.budgets || []).filter(b => !b.category_type || b.category_type === 1));
       setPeriodStart(bud.period_start);
@@ -250,18 +242,18 @@ export default function ReportPage() {
 
   function handleIncomeSaved(row) {
     if (editIncome) {
-      setIncome(prev => prev.map(i => i.id === row.id ? row : i));
+      setIncomeSources(prev => prev.map(i => i.id === row.id ? { ...i, ...row } : i));
       setEditIncome(null);
     } else {
-      setIncome(prev => [...prev, row]);
+      setIncomeSources(prev => [...prev, { ...row, actual: 0, tx_count: 0, status: null }]);
       setShowIncomeForm(false);
     }
   }
 
   async function handleDeleteIncome(id) {
-    if (!confirm('Smazat tento příjem?')) return;
+    if (!confirm('Smazat tento příjmový zdroj?')) return;
     const r = await fetch(`/api/income/${id}`, { method: 'DELETE' });
-    if (r.ok) setIncome(prev => prev.filter(i => i.id !== id));
+    if (r.ok) setIncomeSources(prev => prev.filter(i => i.id !== id));
   }
 
   // Výdaje dle typu kategorie (z by_category)
@@ -271,13 +263,12 @@ export default function ReportPage() {
   const chartData  = byCategory.filter(c => c.spent > 0);
 
   const totalFixed   = fixedExpenses.reduce((s, f) => s + f.amount, 0);
-  const totalIncome  = income.reduce((s, i) => s + i.amount, 0);
+  const totalIncome  = incomeSources.reduce((s, i) => s + (i.actual || 0), 0);
   const totalType1       = budgets.reduce((s, b) => s + b.spent, 0);
   const totalType1Budget = budgets.reduce((s, b) => s + b.amount, 0);
   const totalType2   = type2Spent.reduce((s, c) => s + c.spent, 0);
   const totalType3   = type3Spent.reduce((s, c) => s + c.spent, 0);
   const totalSpent   = stats?.total_spent || 0;
-  const usedPersons  = income.map(i => i.person);
   const savings      = stats?.savings || { net: 0 };
   const reserve      = stats?.reserve || { balance: 0 };
 
@@ -314,22 +305,33 @@ export default function ReportPage() {
               )}
             </div>
             {showIncomeForm && !editIncome && (
-              <IncomeForm period={period} usedPersons={usedPersons}
-                onSave={handleIncomeSaved} onCancel={() => setShowIncomeForm(false)} />
+              <IncomeSourceForm onSave={handleIncomeSaved} onCancel={() => setShowIncomeForm(false)} />
             )}
-            {income.length === 0 && !showIncomeForm ? (
-              <p className="text-muted" style={{ fontSize: 13 }}>Zatím žádné příjmy pro toto období.</p>
+            {incomeSources.length === 0 && !showIncomeForm ? (
+              <p className="text-muted" style={{ fontSize: 13 }}>
+                Žádné příjmové zdroje. Přidejte Tom / Martin / Sudo nájem.
+              </p>
             ) : (
               <div className="report-income-list">
-                {income.map(row => (
+                {incomeSources.map(row => (
                   editIncome?.id === row.id ? (
-                    <IncomeForm key={row.id} initial={row} period={period} usedPersons={usedPersons}
+                    <IncomeSourceForm key={row.id} initial={row}
                       onSave={handleIncomeSaved} onCancel={() => setEditIncome(null)} />
                   ) : (
                     <div key={row.id} className="report-income-row">
+                      {row.status && <span title={row.status}>{FIXED_STATUS[row.status].icon}</span>}
                       <span className="report-income-person">{row.person}</span>
-                      {row.note && <span className="text-muted" style={{ fontSize: 12 }}>{row.note}</span>}
-                      <span className="report-income-amount">{formatCurrency(row.amount)}</span>
+                      {row.status === 'mismatch' && (
+                        <span className="text-muted" style={{ fontSize: 12 }}>
+                          {row.actual > row.planned_amount ? '+' : '−'}
+                          {formatCurrency(Math.abs(row.actual - row.planned_amount))} oproti plánu
+                          {row.tx_count > 1 ? ` · ${row.tx_count} platby` : ''}
+                        </span>
+                      )}
+                      {row.status === 'missing' && (
+                        <span className="text-muted" style={{ fontSize: 12 }}>nepřišlo</span>
+                      )}
+                      <span className="report-income-amount">{formatCurrency(row.actual || 0)}</span>
                       <button className="btn btn-ghost btn-icon"
                         onClick={() => { setShowIncomeForm(false); setEditIncome(row); }}>
                         <Pencil size={13} />
