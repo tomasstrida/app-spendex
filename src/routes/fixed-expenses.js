@@ -6,60 +6,11 @@ const { requireAuth } = require('../middleware/auth');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
+const { fixedExpensesForPeriod } = require('../utils/fixed-expenses');
+
 // GET /api/fixed-expenses?period=YYYY-MM
-// Vrátí manuální položky + sumované odchozí transakce z 'fixed' účtů pro dané období.
 router.get('/', requireAuth, (req, res) => {
-  const manual = db.prepare(
-    'SELECT *, \'manual\' as source FROM fixed_expenses WHERE user_id = ? ORDER BY sort_order ASC, id ASC'
-  ).all(req.user.id);
-
-  if (!req.query.period) return res.json(manual);
-
-  // Načti transakce z fixed účtů pro toto období
-  const { getPeriodDates, getUserBillingDay } = require('../utils/period');
-  const { paymentStatus } = require('../utils/recurring');
-  const billingDay = getUserBillingDay(db, req.user.id);
-  const { start, end } = getPeriodDates(billingDay, req.query.period);
-
-  const matchStmt = db.prepare(`
-    SELECT COALESCE(SUM(ABS(amount)), 0) AS actual, COUNT(*) AS tx_count
-    FROM transactions
-    WHERE user_id = ? AND amount < 0 AND date >= ? AND date <= ?
-      AND description LIKE '%' || ? || '%'
-  `);
-
-  const manualWithStatus = manual.map(row => {
-    if (!row.match_pattern) return row;
-    const m = matchStmt.get(req.user.id, start, end, row.match_pattern);
-    return {
-      ...row,
-      actual: m.actual,
-      tx_count: m.tx_count,
-      status: paymentStatus(row.amount, m.actual, m.tx_count),
-    };
-  });
-
-  const fromAccounts = db.prepare(`
-    SELECT
-      NULL as id,
-      t.description as name,
-      SUM(ABS(t.amount)) as amount,
-      NULL as note,
-      0 as sort_order,
-      'account' as source,
-      a.name as account_name,
-      a.id as account_id
-    FROM transactions t
-    JOIN accounts a ON a.id = t.account_id
-    WHERE t.user_id = ?
-      AND a.role = 'fixed'
-      AND t.amount < 0
-      AND t.date >= ? AND t.date <= ?
-    GROUP BY t.description, a.id
-    ORDER BY a.name ASC, SUM(ABS(t.amount)) DESC
-  `).all(req.user.id, start, end);
-
-  res.json([...manualWithStatus, ...fromAccounts]);
+  res.json(fixedExpensesForPeriod(db, req.user.id, req.query.period));
 });
 
 // POST /api/fixed-expenses
