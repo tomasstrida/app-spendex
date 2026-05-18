@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
 
-const VALID_ROLES = ['spending', 'fixed', 'ignored'];
+const VALID_ROLES = ['spending', 'fixed', 'ignored', 'income'];
 
 // GET /api/accounts
 router.get('/', requireAuth, (req, res) => {

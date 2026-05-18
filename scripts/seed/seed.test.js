@@ -19,9 +19,11 @@ test('typy kategorií jsou 1, 2 nebo 3', () => {
   for (const c of categories) assert.ok([1, 2, 3].includes(c.type), c.name);
 });
 
-test('10 účtů s validní rolí', () => {
+test('10 účtů s validní rolí, Hlavní má roli income', () => {
   assert.equal(accounts.length, 10);
-  for (const a of accounts) assert.ok(['spending', 'fixed', 'ignored'].includes(a.role), a.name);
+  for (const a of accounts) assert.ok(['spending', 'fixed', 'ignored', 'income'].includes(a.role), a.name);
+  const hlavni = accounts.find(a => a.name === 'Hlavní');
+  assert.equal(hlavni.role, 'income');
 });
 
 test('budgety odkazují existující kategorie', () => {

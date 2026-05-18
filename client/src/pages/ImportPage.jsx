@@ -9,12 +9,14 @@ const ROLE_LABELS = {
   spending: 'Výdaje',
   fixed:    'Fixní',
   ignored:  'Ignorovat',
+  income:   'Příjmy',
 };
 
 const ROLE_HINTS = {
   spending: 'Transakce vstupují do kategorií a budgetů.',
   fixed:    'Transakce jsou fixní výdaje (nájem, energie…), nezapočítávají se do budgetů.',
   ignored:  'Transakce jsou ignorovány (OSVČ, splátky, daně…).',
+  income:   'Příchozí platby se sčítají jako příjmy (Tom, Martin, Sudo nájem).',
 };
 
 function AccountSelector({ accounts, selectedId, detectedIds, onSelect, onCreated }) {
