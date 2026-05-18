@@ -29,6 +29,8 @@ function AccountSelector({ accounts, selectedId, detectedIds, onSelect, onCreate
   const [savingRole, setSavingRole] = useState(false);
   const [roleErr, setRoleErr] = useState('');
 
+  useEffect(() => { setRoleErr(''); }, [selectedId]);
+
   async function handleCreate(e) {
     e.preventDefault();
     if (!newName.trim()) { setErr('Zadejte název.'); return; }
@@ -111,6 +113,9 @@ function AccountSelector({ accounts, selectedId, detectedIds, onSelect, onCreate
                 <option key={v} value={v}>{l} – {ROLE_HINTS[v]}</option>
               ))}
             </select>
+            {savingRole && (
+              <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 4 }}>Ukládám…</p>
+            )}
             {roleErr && (
               <div className="alert alert-error" style={{ padding: '6px 10px', fontSize: 12, marginTop: 6 }}>
                 {roleErr}
