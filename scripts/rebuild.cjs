@@ -16,6 +16,7 @@ const budgets = require('./seed/budgets');
 const fixedExpenses = require('./seed/fixed-expenses');
 const annual = require('./seed/annual');
 const income = require('./seed/income');
+const incomeSources = require('./seed/income-sources');
 const rules = require('./seed/rules');
 
 const DB_PATH = process.env.DB_PATH;
@@ -56,7 +57,7 @@ db.exec('BEGIN');
 try {
   // 1. WIPE v FK-bezpečném pořadí
   for (const t of ['budget_items', 'annual_budgets', 'budgets', 'category_rules',
-    'airbank_category_mappings', 'transactions', 'fixed_expenses', 'income',
+    'airbank_category_mappings', 'transactions', 'fixed_expenses', 'income', 'income_sources',
     'accounts', 'categories']) {
     db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(USER_ID);
   }
@@ -98,6 +99,9 @@ try {
   // 7. SEED příjmy
   const insInc = db.prepare('INSERT INTO income (user_id, person, amount, period) VALUES (?, ?, ?, ?)');
   for (const i of income) insInc.run(USER_ID, i.person, i.amount, i.period);
+
+  const insIncSrc = db.prepare('INSERT INTO income_sources (user_id, person, planned_amount, match_pattern, sort_order) VALUES (?, ?, ?, ?, ?)');
+  for (const s of incomeSources) insIncSrc.run(USER_ID, s.person, s.planned_amount, s.match_pattern, s.sort_order);
 
   // 8. SEED pravidla do DB (L2 → airbank_category_mappings, L3 → category_rules)
   const insMap = db.prepare('INSERT INTO airbank_category_mappings (user_id, ab_category, category_id) VALUES (?, ?, ?)');
@@ -148,6 +152,7 @@ try {
     prevody: prevody,
     fixed_expenses: db.prepare('SELECT COUNT(*) n FROM fixed_expenses WHERE user_id=?').get(USER_ID).n,
     income: db.prepare('SELECT COUNT(*) n FROM income WHERE user_id=?').get(USER_ID).n,
+    income_sources: db.prepare('SELECT COUNT(*) n FROM income_sources WHERE user_id=?').get(USER_ID).n,
     dead_category_fk: dead,
   };
 

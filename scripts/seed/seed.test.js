@@ -7,6 +7,7 @@ const budgets = require('./budgets');
 const fixed = require('./fixed-expenses');
 const annual = require('./annual');
 const income = require('./income');
+const incomeSources = require('./income-sources');
 
 const catNames = new Set(categories.map(c => c.name));
 
@@ -56,5 +57,16 @@ test('fixní výdaje: skupina A, každý má match_pattern a kladnou částku', 
     assert.ok(f.match_pattern && f.match_pattern.length > 0, f.name);
     assert.ok(f.amount > 0, f.name);
     assert.ok(Number.isInteger(f.sort_order), f.name);
+  }
+});
+
+test('income-sources: 3 zdroje s patternem a kladným plánem', () => {
+  assert.equal(incomeSources.length, 3);
+  const persons = incomeSources.map(s => s.person);
+  assert.deepEqual(persons, ['Tom', 'Martin', 'Sudo nájem']);
+  for (const s of incomeSources) {
+    assert.ok(s.match_pattern && s.match_pattern.length > 0, s.person);
+    assert.ok(s.planned_amount > 0, s.person);
+    assert.ok(Number.isInteger(s.sort_order), s.person);
   }
 });
