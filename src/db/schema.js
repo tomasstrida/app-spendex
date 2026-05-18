@@ -103,6 +103,17 @@ function initSchema() {
       UNIQUE(user_id, person, period)
     );
 
+    CREATE TABLE IF NOT EXISTS income_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      person TEXT NOT NULL,
+      planned_amount REAL NOT NULL DEFAULT 0,
+      match_pattern TEXT,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS annual_budgets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
