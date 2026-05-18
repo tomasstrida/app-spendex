@@ -323,8 +323,7 @@ export default function ReportPage() {
                       <span className="report-income-person">{row.person}</span>
                       {row.status === 'mismatch' && (
                         <span className="text-muted" style={{ fontSize: 12 }}>
-                          {row.actual > row.planned_amount ? '+' : '−'}
-                          {formatCurrency(Math.abs(row.actual - row.planned_amount))} oproti plánu
+                          o {formatCurrency(Math.max(0, row.planned_amount - row.actual))} méně, než plán
                           {row.tx_count > 1 ? ` · ${row.tx_count} platby` : ''}
                         </span>
                       )}
@@ -344,6 +343,16 @@ export default function ReportPage() {
                 ))}
               </div>
             )}
+            {incomeSources.some(i => i.status) && (() => {
+              const c = k => incomeSources.filter(i => i.status === k).length;
+              return (
+                <div style={{ display: 'flex', gap: 16, fontSize: 13, marginTop: 4 }}>
+                  {c('ok') > 0 && <span>✅ {c('ok')} přišlo</span>}
+                  {c('mismatch') > 0 && <span>⚠️ {c('mismatch')} nižší částka</span>}
+                  {c('missing') > 0 && <span>❌ {c('missing')} nepřišlo</span>}
+                </div>
+              );
+            })()}
             <div className="report-subtotal">
               <span>Příjmy celkem</span>
               <span>{formatCurrency(totalIncome)}</span>
