@@ -49,9 +49,10 @@ function findDuplicates(db, userId) {
 
 /**
  * True, pokud by `ids` smazaly VŠECHNY řádky některé vícečlenné
- * possible-skupiny (date+description+amount+account_id). Skupina velikosti 1
- * (žádné duplo) vrací false → běžné mazání jednotlivin neblokuje.
- * Pojistka hlídá possible-dimenzi (date+description+amount+account_id), ne probable.
+ * possible-skupiny (date+description+amount+account_id+tx_time); řádky
+ * s prázdným tx_time nejsou nikdy chráněná skupina (NULL = unikát, ne kopie).
+ * Skupina velikosti 1 (žádné duplo) vrací false → běžné mazání jednotlivin neblokuje.
+ * Pojistka hlídá possible-dimenzi, ne probable.
  */
 function wouldEmptyDuplicateGroup(db, userId, ids) {
   if (!Array.isArray(ids) || ids.length === 0) return false;

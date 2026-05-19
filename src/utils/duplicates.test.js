@@ -205,3 +205,15 @@ test('wouldEmptyDuplicateGroup: NULL-tx_time pár není chráněná skupina → 
   assert.equal(wouldEmptyDuplicateGroup(db, 1, [3]), false);
   cleanup(db, tmp);
 });
+
+test('Možné: jeden tx_time NULL + druhý vyplněný (jinak shodné) → NENÍ duplicita', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1,'a@b.cz')").run();
+  db.prepare("INSERT INTO accounts (id,user_id,name) VALUES (10,1,'H')").run();
+  ins(db,{user_id:1,amount:-33,date:'2026-05-05',description:'Mix',external_id:'m1',account_id:10,tx_time:'2026-05-05 12:00:00'});
+  ins(db,{user_id:1,amount:-33,date:'2026-05-05',description:'Mix',external_id:'m2',account_id:10}); // tx_time NULL
+  const { findDuplicates } = require('./duplicates');
+  const r = findDuplicates(db, 1);
+  cleanup(db, tmp);
+  assert.equal(r.possible.length, 0);
+});
