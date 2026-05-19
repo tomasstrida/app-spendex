@@ -24,7 +24,7 @@ function pushTo(map, key, row) {
 function findDuplicates(db, userId) {
   const rows = db.prepare(`
     SELECT t.id, t.date, t.description, t.amount, t.account_id, t.external_id,
-           t.source, t.created_at, a.name AS account_name
+           t.source, t.created_at, t.tx_time, a.name AS account_name
     FROM transactions t
     LEFT JOIN accounts a ON a.id = t.account_id
     WHERE t.user_id = ?
@@ -35,6 +35,7 @@ function findDuplicates(db, userId) {
   const poss = new Map();
   for (const r of rows) {
     const rr = rawRef(r.external_id);
+    r.ref = rr;
     if (rr) pushTo(prob, `${rr}|${r.account_id ?? null}`, r);
     pushTo(poss, `${r.date}|${r.description}|${r.amount}|${r.account_id ?? null}`, r);
   }

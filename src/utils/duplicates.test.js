@@ -129,3 +129,27 @@ test('wouldEmptyDuplicateGroup: skupina 3 — všechny 3 v ids → true; 2 ze 3 
   assert.equal(wouldEmptyDuplicateGroup(db, 1, [1, 2]), false);
   cleanup(db, tmp);
 });
+
+test('řádky duplicit mají ref (rawRef z external_id) a tx_time', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1,'a@b.cz')").run();
+  db.prepare("INSERT INTO accounts (id,user_id,name) VALUES (10,1,'H')").run();
+  db.prepare(`INSERT INTO transactions
+    (user_id, amount, currency, date, description, external_id, account_id, source, tx_time)
+    VALUES (1,-100,'CZK','2026-04-01','X','12345-1679014138',10,'airbank','01/04/2026 10:11:12')`).run();
+  db.prepare(`INSERT INTO transactions
+    (user_id, amount, currency, date, description, external_id, account_id, source, tx_time)
+    VALUES (1,-100,'CZK','2026-04-01','X','12345',10,'airbank',NULL)`).run();
+
+  const { findDuplicates } = require('./duplicates');
+  const r = findDuplicates(db, 1);
+  cleanup(db, tmp);
+
+  assert.equal(r.possible.length, 1);
+  const rows = r.possible[0].rows;
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows.map(x => x.ref).sort(), ['12345', '12345']);
+  const times = rows.map(x => x.tx_time);
+  assert.equal(times.includes('01/04/2026 10:11:12'), true);
+  assert.equal(times.includes(null), true);
+});
