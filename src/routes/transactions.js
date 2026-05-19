@@ -3,6 +3,7 @@ const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
+const { findDuplicates, wouldEmptyDuplicateGroup } = require('../utils/duplicates');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
@@ -55,6 +56,11 @@ router.get('/', requireAuth, (req, res) => {
   res.json(rows);
 });
 
+// GET /api/transactions/duplicates
+router.get('/duplicates', requireAuth, (req, res) => {
+  res.json(findDuplicates(db, req.user.id));
+});
+
 // POST /api/transactions
 router.post('/', requireAuth, writeLimiter, (req, res) => {
   const { amount, currency, date, description, note, category_id } = req.body;
@@ -97,10 +103,13 @@ router.delete('/:id', requireAuth, writeLimiter, (req, res) => {
   res.json({ ok: true });
 });
 
-// DELETE /api/transactions  body: { ids: [1,2,3] }
+// DELETE /api/transactions  body: { ids: [1,2,3], guardDuplicateGroups?: true }
 router.delete('/', requireAuth, writeLimiter, (req, res) => {
-  const { ids } = req.body;
+  const { ids, guardDuplicateGroups } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Neplatná data.' });
+  if (guardDuplicateGroups && wouldEmptyDuplicateGroup(db, req.user.id, ids)) {
+    return res.status(400).json({ error: 'Ve skupině duplicit musí zůstat alespoň jedna transakce.' });
+  }
   const placeholders = ids.map(() => '?').join(',');
   const result = db.prepare(
     `DELETE FROM transactions WHERE id IN (${placeholders}) AND user_id = ?`
