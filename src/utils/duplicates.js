@@ -24,7 +24,7 @@ function pushTo(map, key, row) {
 function findDuplicates(db, userId) {
   const rows = db.prepare(`
     SELECT t.id, t.date, t.description, t.amount, t.account_id, t.external_id,
-           t.source, t.created_at, t.tx_time, a.name AS account_name
+           t.source, t.created_at, t.tx_time, t.note, a.name AS account_name
     FROM transactions t
     LEFT JOIN accounts a ON a.id = t.account_id
     WHERE t.user_id = ?
@@ -37,7 +37,8 @@ function findDuplicates(db, userId) {
     const rr = rawRef(r.external_id);
     r.ref = rr;
     if (rr) pushTo(prob, `${rr}|${r.account_id ?? null}`, r);
-    pushTo(poss, `${r.date}|${r.description}|${r.amount}|${r.account_id ?? null}`, r);
+    const timeKey = r.tx_time ? r.tx_time : `NIL:${r.id}`;
+    pushTo(poss, `${r.date}|${r.description}|${r.amount}|${r.account_id ?? null}|${timeKey}`, r);
   }
   const toGroups = m => [...m.entries()]
     .filter(([, rs]) => rs.length > 1)
@@ -57,20 +58,22 @@ function wouldEmptyDuplicateGroup(db, userId, ids) {
   const idSet = new Set(ids.map(Number));
   const ph = ids.map(() => '?').join(',');
   const delRows = db.prepare(
-    `SELECT id, date, description, amount, account_id
+    `SELECT id, date, description, amount, account_id, tx_time
      FROM transactions WHERE user_id = ? AND id IN (${ph})`
   ).all(userId, ...ids);
 
   const groupStmt = db.prepare(
     `SELECT id FROM transactions
-     WHERE user_id = ? AND date = ? AND description = ? AND amount = ? AND account_id IS ?`
+     WHERE user_id = ? AND date = ? AND description = ? AND amount = ?
+       AND account_id IS ? AND tx_time = ?`
   );
   const seen = new Set();
   for (const r of delRows) {
-    const sig = JSON.stringify([r.date, r.description, r.amount, r.account_id]);
+    if (!r.tx_time) continue; // NULL/prázdný tx_time = nikdy chráněná skupina (pravidlo: unikát)
+    const sig = JSON.stringify([r.date, r.description, r.amount, r.account_id, r.tx_time]);
     if (seen.has(sig)) continue;
     seen.add(sig);
-    const groupIds = groupStmt.all(userId, r.date, r.description, r.amount, r.account_id);
+    const groupIds = groupStmt.all(userId, r.date, r.description, r.amount, r.account_id, r.tx_time);
     if (groupIds.length > 1 && groupIds.every(g => idSet.has(g.id))) return true;
   }
   return false;
