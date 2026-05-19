@@ -7,6 +7,7 @@ function GroupCard({ group, selected, onToggle }) {
   const r0 = group.rows[0];
   const colRef = { width: 120, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
   const colExt = { width: 150, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
+  const colNote = { width: 160, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
   const colSrc = { width: 70, flexShrink: 0 };
   const colTx = { width: 140, flexShrink: 0 };
   const colCre = { width: 130, flexShrink: 0 };
@@ -23,6 +24,7 @@ function GroupCard({ group, selected, onToggle }) {
         <span style={colRef}>AirBank ref</span>
         <span style={colExt}>ext. ID</span>
         <span style={colSrc}>zdroj</span>
+        <span style={colNote}>poznámka</span>
         <span style={colTx}>čas transakce</span>
         <span style={colCre}>vloženo do DB (UTC)</span>
       </div>
@@ -40,6 +42,7 @@ function GroupCard({ group, selected, onToggle }) {
             <span className="text-muted" style={{ ...colRef, fontSize: 12 }} title={row.ref || ''}>{row.ref || '—'}</span>
             <span className="text-muted" style={{ ...colExt, fontSize: 12 }} title={row.external_id || ''}>{row.external_id || '—'}</span>
             <span className="text-muted" style={{ ...colSrc, fontSize: 12 }}>{row.source || '—'}</span>
+            <span className="text-muted" style={{ ...colNote, fontSize: 12 }} title={row.note || ''}>{row.note || '—'}</span>
             <span className="text-muted" style={{ ...colTx, fontSize: 12 }}>{row.tx_time || '—'}</span>
             <span className="text-muted" style={{ ...colCre, fontSize: 12 }}>{row.created_at || '—'}</span>
           </label>
