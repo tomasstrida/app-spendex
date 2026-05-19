@@ -1,0 +1,76 @@
+'use strict';
+
+/** rawRef = external_id bez koncového "-<čísloúčtu>" suffixu (legacy bez suffixu → celé) */
+function rawRef(extId) {
+  if (!extId) return null;
+  const i = extId.lastIndexOf('-');
+  return i > 0 ? extId.slice(0, i) : extId;
+}
+
+function pushTo(map, key, row) {
+  let arr = map.get(key);
+  if (!arr) { arr = []; map.set(key, arr); }
+  arr.push(row);
+}
+
+/**
+ * Najde podezřelé duplicity uživatele ve dvou úrovních.
+ * probable: stejný rawRef + stejný account_id (interní převod = stejný rawRef
+ *           na různých účtech → různé skupiny → nikdy spolu).
+ * possible: stejné date + description + amount + account_id.
+ * @returns {{ probable: {key:string,rows:object[]}[], possible: {...}[] }}
+ */
+function findDuplicates(db, userId) {
+  const rows = db.prepare(`
+    SELECT t.id, t.date, t.description, t.amount, t.account_id, t.external_id,
+           t.source, t.created_at, a.name AS account_name
+    FROM transactions t
+    LEFT JOIN accounts a ON a.id = t.account_id
+    WHERE t.user_id = ?
+    ORDER BY t.id ASC
+  `).all(userId);
+
+  const prob = new Map();
+  const poss = new Map();
+  for (const r of rows) {
+    const rr = rawRef(r.external_id);
+    if (rr) pushTo(prob, `${rr}|${r.account_id}`, r);
+    pushTo(poss, `${r.date}|${r.description}|${r.amount}|${r.account_id}`, r);
+  }
+  const toGroups = m => [...m.entries()]
+    .filter(([, rs]) => rs.length > 1)
+    .map(([key, rs]) => ({ key, rows: rs }))
+    .sort((a, b) => (a.rows[0].date < b.rows[0].date ? 1 : a.rows[0].date > b.rows[0].date ? -1 : 0));
+  return { probable: toGroups(prob), possible: toGroups(poss) };
+}
+
+/**
+ * True, pokud by `ids` smazaly VŠECHNY řádky některé vícečlenné
+ * possible-skupiny (date+description+amount+account_id). Skupina velikosti 1
+ * (žádné duplo) vrací false → běžné mazání jednotlivin neblokuje.
+ */
+function wouldEmptyDuplicateGroup(db, userId, ids) {
+  if (!Array.isArray(ids) || ids.length === 0) return false;
+  const idSet = new Set(ids.map(Number));
+  const ph = ids.map(() => '?').join(',');
+  const delRows = db.prepare(
+    `SELECT id, date, description, amount, account_id
+     FROM transactions WHERE user_id = ? AND id IN (${ph})`
+  ).all(userId, ...ids);
+
+  const groupStmt = db.prepare(
+    `SELECT id FROM transactions
+     WHERE user_id = ? AND date = ? AND description = ? AND amount = ? AND account_id IS ?`
+  );
+  const seen = new Set();
+  for (const r of delRows) {
+    const sig = JSON.stringify([r.date, r.description, r.amount, r.account_id]);
+    if (seen.has(sig)) continue;
+    seen.add(sig);
+    const groupIds = groupStmt.all(userId, r.date, r.description, r.amount, r.account_id);
+    if (groupIds.length > 1 && groupIds.every(g => idSet.has(g.id))) return true;
+  }
+  return false;
+}
+
+module.exports = { findDuplicates, wouldEmptyDuplicateGroup, rawRef };
