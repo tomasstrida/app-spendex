@@ -6,6 +6,7 @@ const cs = {
     budgets: 'Rozpočty',
     report: 'Schůzka',
     import: 'Import',
+    duplicates: 'Duplicity',
     settings: 'Nastavení',
   },
   dashboard: {

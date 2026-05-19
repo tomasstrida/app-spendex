@@ -11,6 +11,7 @@ import {
   Upload,
   Settings,
   LogOut,
+  CopyX,
 } from 'lucide-react';
 
 const navItems = [
@@ -20,6 +21,7 @@ const navItems = [
   { to: '/budgets',      icon: PiggyBank,       label: t.nav.budgets },
   { to: '/report',       icon: ClipboardList,   label: t.nav.report },
   { to: '/import',       icon: Upload,          label: t.nav.import },
+  { to: '/duplicates',   icon: CopyX,           label: t.nav.duplicates },
   { to: '/settings',     icon: Settings,        label: t.nav.settings },
 ];
 

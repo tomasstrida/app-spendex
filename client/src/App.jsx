@@ -11,6 +11,7 @@ import BudgetsPage from './pages/BudgetsPage';
 import ImportPage from './pages/ImportPage';
 import SettingsPage from './pages/SettingsPage';
 import ReportPage from './pages/ReportPage';
+import DuplicatesPage from './pages/DuplicatesPage';
 
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
@@ -63,6 +64,7 @@ export default function App() {
           <Route path="/budgets"      element={<R el={<BudgetsPage />} />} />
           <Route path="/report"       element={<R el={<ReportPage />} />} />
           <Route path="/import"       element={<R el={<ImportPage />} />} />
+          <Route path="/duplicates"  element={<R el={<DuplicatesPage />} />} />
           <Route path="/settings"     element={<R el={<SettingsPage />} />} />
         </Routes>
       </BrowserRouter>
