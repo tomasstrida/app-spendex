@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Check, X } from 'lucide-react';
 import Layout from '../components/Layout';
 import { formatCurrency, formatPeriod, addPeriods } from '../i18n';
@@ -441,14 +442,30 @@ export default function ReportPage() {
               <div className="report-budget-list">
                 {budgets.map(b => {
                   const st = budgetStatus(b.spent, b.amount);
-                  return (
-                    <div key={b.category_id} className="report-budget-row">
+                  const inner = (
+                    <>
                       <span className="report-budget-dot" style={{ background: b.category_color || '#6366f1' }} />
                       <span className="report-budget-name">{b.category_name}</span>
                       <span className={`report-budget-spent ${STATUS[st].cls}`}>{formatCurrency(b.spent)}</span>
                       <span className="text-muted report-budget-limit">/ {formatCurrency(b.amount)}</span>
                       <span className="report-budget-status">{STATUS[st].icon}</span>
-                    </div>
+                    </>
+                  );
+                  if (b.category_id == null) {
+                    return (
+                      <div key={b.category_id} className="report-budget-row">{inner}</div>
+                    );
+                  }
+                  const to = `/transactions?category_id=${b.category_id}` + (period ? `&period=${period}` : '');
+                  return (
+                    <Link
+                      key={b.category_id}
+                      to={to}
+                      className="report-budget-row"
+                      style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                    >
+                      {inner}
+                    </Link>
                   );
                 })}
               </div>
