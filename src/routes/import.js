@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
 const { parseAirBankCSV } = require('../utils/csvParser');
+const { buildExternalId } = require('../utils/externalId');
 
 // POST /api/import/preview
 router.post('/preview', requireAuth, express.text({ limit: '10mb', type: '*/*' }), (req, res) => {
@@ -59,10 +60,12 @@ router.post('/confirm', requireAuth, (req, res) => {
 
   // Ověř že account_id patří tomuto uživateli
   let resolvedAccountId = null;
+  let resolvedAccountNumber = null;
   if (account_id) {
-    const acc = db.prepare('SELECT id FROM accounts WHERE id = ? AND user_id = ?').get(account_id, req.user.id);
+    const acc = db.prepare('SELECT id, account_number FROM accounts WHERE id = ? AND user_id = ?').get(account_id, req.user.id);
     if (!acc) return res.status(400).json({ error: 'Neplatný účet.' });
     resolvedAccountId = acc.id;
+    resolvedAccountNumber = acc.account_number || null;
   }
 
   const insert = db.prepare(`
@@ -81,21 +84,36 @@ router.post('/confirm', requireAuth, (req, res) => {
   let imported = 0;
   let skipped = 0;
 
+  // Autoritativní sada již uložených external_id pro tohoto uživatele
+  const existingIds = new Set(
+    db.prepare('SELECT external_id FROM transactions WHERE user_id = ? AND external_id IS NOT NULL')
+      .all(req.user.id)
+      .map(r => r.external_id)
+  );
+
   db.transaction(() => {
     for (const t of transactions) {
-      if (t.duplicate) { skipped++; continue; }
       if (skip_incoming && t.direction === 'Příchozí') { skipped++; continue; }
+
+      const extId = buildExternalId(t.external_id, resolvedAccountNumber);
+
+      // Autoritativní dedup přes kanonické external_id
+      if (extId && existingIds.has(extId)) { skipped++; continue; }
 
       const categoryId = category_map[t.ab_category] || null;
       const result = insert.run(
         req.user.id, categoryId, t.amount, t.currency, t.date,
-        t.description, t.note || '', t.external_id || null,
+        t.description, t.note || '', extId || null,
         t.tx_time || null, t.tx_type || null,
         t.counterparty_account || null, t.entered_by || null, t.place || null,
         resolvedAccountId, t.ab_category || null,
       );
-      if (result.changes > 0) imported++;
-      else skipped++;
+      if (result.changes > 0) {
+        imported++;
+        if (extId) existingIds.add(extId);
+      } else {
+        skipped++;
+      }
     }
 
     // Ulož mapování pro všechny AB kategorie kde bylo přiřazení

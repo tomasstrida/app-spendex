@@ -11,6 +11,7 @@ const path = require('path');
 const fs   = require('fs');
 const Database = require('better-sqlite3');
 const { parseAirBankCSV } = require('../src/utils/csvParser');
+const { buildExternalId } = require('../src/utils/externalId');
 
 const DB_PATH  = process.env.DB_PATH  || path.join(__dirname, '../data.db');
 const CSV_DIR  = process.env.CSV_DIR  || '/Users/tomas/AI/projekt-finance/Airbank-export-komplet-ucty';
@@ -241,7 +242,7 @@ db.transaction(() => {
       const categoryId = abCatMap[t.ab_category] || null;
       // external_id rozlišený per účet, aby interní převody (stejné ref_number na obou stranách)
       // nepadly na UNIQUE(user_id, external_id) – jinak by se importovala jen jedna strana
-      const externalId = t.external_id ? `${t.external_id}-${acc.number}` : null;
+      const externalId = buildExternalId(t.external_id, acc.number);
       const result = insertTx.run(
         USER_ID, categoryId, t.amount, t.currency, t.date,
         t.description, t.note || '', externalId,
