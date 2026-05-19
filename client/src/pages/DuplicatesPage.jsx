@@ -42,7 +42,7 @@ export default function DuplicatesPage() {
   const load = useCallback(() => {
     setLoading(true); setError('');
     fetch('/api/transactions/duplicates')
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
       .then(d => {
         const safe = { probable: d.probable || [], possible: d.possible || [] };
         setData(safe);
@@ -119,7 +119,7 @@ export default function DuplicatesPage() {
           {groups.map(g => (
             <GroupCard key={g.key} group={g} selected={selected} onToggle={toggle} />
           ))}
-          <div className="tx-bulk-bar" style={{ position: 'sticky', bottom: 0 }}>
+          <div className="tx-bulk-bar" style={{ position: 'sticky', bottom: 0, zIndex: 1 }}>
             <span className="text-muted" style={{ fontSize: 13 }}>
               Vybráno k smazání: <strong style={{ color: 'var(--text)' }}>{toDelete.length}</strong>
             </span>
