@@ -439,6 +439,14 @@ export default function ReportPage() {
             {budgets.length === 0 ? (
               <p className="text-muted" style={{ fontSize: 13 }}>Žádné měsíční rozpočty.</p>
             ) : (
+              <>
+                <div className="report-budget-row" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', marginBottom: 4 }}>
+                  <span className="report-budget-dot" style={{ background: 'transparent' }} />
+                  <span className="report-budget-name">Kategorie</span>
+                  <span className="report-budget-spent">Utraceno</span>
+                  <span className="report-budget-limit">Rozpočet</span>
+                  <span className="report-budget-status">Stav</span>
+                </div>
               <div className="report-budget-list">
                 {budgets.map(b => {
                   const st = budgetStatus(b.spent, b.amount);
@@ -469,6 +477,7 @@ export default function ReportPage() {
                   );
                 })}
               </div>
+              </>
             )}
             <div className="report-subtotal">
               <span>Měsíční výdaje celkem</span>
