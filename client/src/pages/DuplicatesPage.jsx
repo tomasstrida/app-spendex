@@ -5,20 +5,26 @@ import { formatCurrency } from '../i18n';
 
 function GroupCard({ group, selected, onToggle }) {
   const r0 = group.rows[0];
+  const colRef = { width: 120, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
+  const colExt = { width: 150, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
+  const colSrc = { width: 70, flexShrink: 0 };
+  const colTx = { width: 140, flexShrink: 0 };
+  const colCre = { width: 130, flexShrink: 0 };
+  const colAmt = { width: 90, flexShrink: 0, textAlign: 'right' };
   return (
     <div className="card" style={{ marginBottom: 12 }}>
       <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 8 }}>
         {r0.date} · {formatCurrency(r0.amount)} · {r0.description} · {r0.account_name || '—'} · {group.rows.length}×
       </div>
       <div className="text-muted" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 600, marginBottom: 4 }}>
-        <span style={{ width: 15 }} />
+        <span style={{ width: 15, flexShrink: 0 }} />
         <span style={{ flex: 1 }}>datum · popis</span>
-        <span style={{ minWidth: 90, textAlign: 'right' }}>částka</span>
-        <span style={{ minWidth: 120 }}>AirBank ref</span>
-        <span style={{ minWidth: 150 }}>external_id</span>
-        <span style={{ minWidth: 70 }}>zdroj</span>
-        <span style={{ minWidth: 140 }}>čas transakce</span>
-        <span style={{ minWidth: 130 }}>vloženo do DB (UTC)</span>
+        <span style={colAmt}>částka</span>
+        <span style={colRef}>AirBank ref</span>
+        <span style={colExt}>ext. ID</span>
+        <span style={colSrc}>zdroj</span>
+        <span style={colTx}>čas transakce</span>
+        <span style={colCre}>vloženo do DB (UTC)</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {group.rows.map(row => (
@@ -30,12 +36,12 @@ function GroupCard({ group, selected, onToggle }) {
               onChange={() => onToggle(row.id)}
             />
             <span style={{ flex: 1 }}>{row.date} · {row.description}</span>
-            <span style={{ minWidth: 90, textAlign: 'right' }}>{formatCurrency(row.amount)}</span>
-            <span className="text-muted" style={{ minWidth: 120, fontSize: 12 }}>{row.ref || '—'}</span>
-            <span className="text-muted" style={{ minWidth: 150, fontSize: 12 }}>{row.external_id || '—'}</span>
-            <span className="text-muted" style={{ minWidth: 70, fontSize: 12 }}>{row.source || '—'}</span>
-            <span className="text-muted" style={{ minWidth: 140, fontSize: 12 }}>{row.tx_time || '—'}</span>
-            <span className="text-muted" style={{ minWidth: 130, fontSize: 12 }}>{row.created_at || '—'}</span>
+            <span style={colAmt}>{formatCurrency(row.amount)}</span>
+            <span className="text-muted" style={{ ...colRef, fontSize: 12 }} title={row.ref || ''}>{row.ref || '—'}</span>
+            <span className="text-muted" style={{ ...colExt, fontSize: 12 }} title={row.external_id || ''}>{row.external_id || '—'}</span>
+            <span className="text-muted" style={{ ...colSrc, fontSize: 12 }}>{row.source || '—'}</span>
+            <span className="text-muted" style={{ ...colTx, fontSize: 12 }}>{row.tx_time || '—'}</span>
+            <span className="text-muted" style={{ ...colCre, fontSize: 12 }}>{row.created_at || '—'}</span>
           </label>
         ))}
       </div>
