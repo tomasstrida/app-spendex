@@ -10,6 +10,16 @@ function GroupCard({ group, selected, onToggle }) {
       <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 8 }}>
         {r0.date} · {formatCurrency(r0.amount)} · {r0.description} · {r0.account_name || '—'} · {group.rows.length}×
       </div>
+      <div className="text-muted" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 600, marginBottom: 4 }}>
+        <span style={{ width: 15 }} />
+        <span style={{ flex: 1 }}>datum · popis</span>
+        <span style={{ minWidth: 90, textAlign: 'right' }}>částka</span>
+        <span style={{ minWidth: 120 }}>AirBank ref</span>
+        <span style={{ minWidth: 150 }}>external_id</span>
+        <span style={{ minWidth: 70 }}>zdroj</span>
+        <span style={{ minWidth: 140 }}>čas transakce</span>
+        <span style={{ minWidth: 130 }}>vloženo do DB (UTC)</span>
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {group.rows.map(row => (
           <label key={row.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
@@ -21,9 +31,11 @@ function GroupCard({ group, selected, onToggle }) {
             />
             <span style={{ flex: 1 }}>{row.date} · {row.description}</span>
             <span style={{ minWidth: 90, textAlign: 'right' }}>{formatCurrency(row.amount)}</span>
+            <span className="text-muted" style={{ minWidth: 120, fontSize: 12 }}>{row.ref || '—'}</span>
             <span className="text-muted" style={{ minWidth: 150, fontSize: 12 }}>{row.external_id || '—'}</span>
             <span className="text-muted" style={{ minWidth: 70, fontSize: 12 }}>{row.source || '—'}</span>
-            <span className="text-muted" style={{ minWidth: 130, fontSize: 12 }}>{row.created_at || ''}</span>
+            <span className="text-muted" style={{ minWidth: 140, fontSize: 12 }}>{row.tx_time || '—'}</span>
+            <span className="text-muted" style={{ minWidth: 130, fontSize: 12 }}>{row.created_at || '—'}</span>
           </label>
         ))}
       </div>
