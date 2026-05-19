@@ -90,3 +90,42 @@ test('wouldEmptyDuplicateGroup: celá 2členná skupina v ids → true; 1 ze 2 �
   assert.equal(wouldEmptyDuplicateGroup(db, 1, [3]), false);
   cleanup(db, tmp);
 });
+
+test('rawRef: null/prázdné → null; bez pomlčky → celé; s pomlčkou → před poslední; vedoucí pomlčka → celé', () => {
+  const { rawRef } = require('./duplicates');
+  assert.equal(rawRef(null), null);
+  assert.equal(rawRef(undefined), null);
+  assert.equal(rawRef(''), null);
+  assert.equal(rawRef('999'), '999');
+  assert.equal(rawRef('156868134552-1679014138'), '156868134552');
+  assert.equal(rawRef('-abc'), '-abc'); // lastIndexOf('-')===0 → guard i>0 → celé
+});
+
+test('skupina 3 kopií (re-import disaster): probable i possible mají 3 řádky', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1,'a@b.cz')").run();
+  db.prepare("INSERT INTO accounts (id,user_id,name) VALUES (10,1,'H')").run();
+  ins(db,{user_id:1,amount:-600,date:'2026-02-22',description:'Nepravidelné',external_id:'r1-10',account_id:10});
+  ins(db,{user_id:1,amount:-600,date:'2026-02-22',description:'Nepravidelné',external_id:'r1',account_id:10});
+  ins(db,{user_id:1,amount:-600,date:'2026-02-22',description:'Nepravidelné',external_id:'r1-10-x',account_id:10});
+  const { findDuplicates } = require('./duplicates');
+  const r = findDuplicates(db, 1);
+  cleanup(db, tmp);
+  // rawRef: 'r1-10'→'r1-10'?, pozn.: lastIndexOf('-') na 'r1-10' = index 2 → 'r1'; 'r1'→'r1'; 'r1-10-x'→'r1-10'
+  // possible (date+desc+amount+account) musí mít 1 skupinu se 3 řádky
+  assert.equal(r.possible.length, 1);
+  assert.equal(r.possible[0].rows.length, 3);
+});
+
+test('wouldEmptyDuplicateGroup: skupina 3 — všechny 3 v ids → true; 2 ze 3 → false', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1,'a@b.cz')").run();
+  db.prepare("INSERT INTO accounts (id,user_id,name) VALUES (10,1,'H')").run();
+  ins(db,{user_id:1,amount:-7,date:'2026-03-01',description:'Trip',external_id:'a',account_id:10}); // id 1
+  ins(db,{user_id:1,amount:-7,date:'2026-03-01',description:'Trip',external_id:'b',account_id:10}); // id 2
+  ins(db,{user_id:1,amount:-7,date:'2026-03-01',description:'Trip',external_id:'c',account_id:10}); // id 3
+  const { wouldEmptyDuplicateGroup } = require('./duplicates');
+  assert.equal(wouldEmptyDuplicateGroup(db, 1, [1, 2, 3]), true);
+  assert.equal(wouldEmptyDuplicateGroup(db, 1, [1, 2]), false);
+  cleanup(db, tmp);
+});

@@ -18,6 +18,7 @@ function pushTo(map, key, row) {
  * probable: stejný rawRef + stejný account_id (interní převod = stejný rawRef
  *           na různých účtech → různé skupiny → nikdy spolu).
  * possible: stejné date + description + amount + account_id.
+ * Pozn.: probable a possible se mohou překrývat (stejný pár vidět v obou) — záměr, dvě úrovně jistoty.
  * @returns {{ probable: {key:string,rows:object[]}[], possible: {...}[] }}
  */
 function findDuplicates(db, userId) {
@@ -34,8 +35,8 @@ function findDuplicates(db, userId) {
   const poss = new Map();
   for (const r of rows) {
     const rr = rawRef(r.external_id);
-    if (rr) pushTo(prob, `${rr}|${r.account_id}`, r);
-    pushTo(poss, `${r.date}|${r.description}|${r.amount}|${r.account_id}`, r);
+    if (rr) pushTo(prob, `${rr}|${r.account_id ?? null}`, r);
+    pushTo(poss, `${r.date}|${r.description}|${r.amount}|${r.account_id ?? null}`, r);
   }
   const toGroups = m => [...m.entries()]
     .filter(([, rs]) => rs.length > 1)
@@ -48,6 +49,7 @@ function findDuplicates(db, userId) {
  * True, pokud by `ids` smazaly VŠECHNY řádky některé vícečlenné
  * possible-skupiny (date+description+amount+account_id). Skupina velikosti 1
  * (žádné duplo) vrací false → běžné mazání jednotlivin neblokuje.
+ * Pojistka hlídá possible-dimenzi (date+description+amount+account_id), ne probable.
  */
 function wouldEmptyDuplicateGroup(db, userId, ids) {
   if (!Array.isArray(ids) || ids.length === 0) return false;
