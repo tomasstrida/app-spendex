@@ -453,7 +453,7 @@ export default function ReportPage() {
                   );
                   if (b.category_id == null) {
                     return (
-                      <div key={b.category_id} className="report-budget-row">{inner}</div>
+                      <div key="report-budget-no-category" className="report-budget-row">{inner}</div>
                     );
                   }
                   const to = `/transactions?category_id=${b.category_id}` + (period ? `&period=${period}` : '');
