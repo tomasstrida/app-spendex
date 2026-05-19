@@ -11,15 +11,17 @@ router.post('/preview', requireAuth, express.text({ limit: '10mb', type: '*/*' }
     const transactions = parseAirBankCSV(req.body);
     if (!transactions.length) return res.status(400).json({ error: 'CSV neobsahuje žádné transakce.' });
 
-    const existingIds = new Set(
-      db.prepare('SELECT external_id FROM transactions WHERE user_id = ? AND external_id IS NOT NULL')
-        .all(req.user.id)
-        .map(r => r.external_id)
-    );
+    const existingRefs = new Set();
+    for (const r of db.prepare('SELECT external_id FROM transactions WHERE user_id = ? AND external_id IS NOT NULL').all(req.user.id)) {
+      const v = r.external_id;
+      existingRefs.add(v);
+      const dash = v.lastIndexOf('-');
+      if (dash > 0) existingRefs.add(v.slice(0, dash));
+    }
 
     const parsed = transactions.map(t => ({
       ...t,
-      duplicate: t.external_id ? existingIds.has(t.external_id) : false,
+      duplicate: t.external_id ? existingRefs.has(t.external_id) : false,
     }));
 
     const abCategories = [...new Set(parsed.map(t => t.ab_category).filter(Boolean))].sort();
@@ -57,6 +59,10 @@ router.post('/preview', requireAuth, express.text({ limit: '10mb', type: '*/*' }
 router.post('/confirm', requireAuth, (req, res) => {
   const { transactions, category_map = {}, skip_incoming = true, account_id = null } = req.body;
   if (!Array.isArray(transactions)) return res.status(400).json({ error: 'Neplatná data.' });
+
+  if (!account_id) {
+    return res.status(400).json({ error: 'Vyberte účet, na který se transakce importují.' });
+  }
 
   // Ověř že account_id patří tomuto uživateli
   let resolvedAccountId = null;
