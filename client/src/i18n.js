@@ -46,6 +46,9 @@ const cs = {
     error: 'Chyba načítání.',
     currency: 'Kč',
   },
+  period: {
+    resetToCurrent: 'Aktuální měsíc',
+  },
   months: ['Leden','Únor','Březen','Duben','Květen','Červen',
            'Červenec','Srpen','Září','Říjen','Listopad','Prosinec'],
   monthsShort: ['led','úno','bře','dub','kvě','čvn','čvc','srp','zář','říj','lis','pro'],
