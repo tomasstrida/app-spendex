@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
+import { usePeriod } from '../contexts/PeriodContext';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Check, X } from 'lucide-react';
 import Layout from '../components/Layout';
-import { formatCurrency, formatPeriod, addPeriods } from '../i18n';
+import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
 
 // ── Status budgetu ────────────────────────────────────────────────────────────
 
@@ -186,10 +187,9 @@ function IncomeSourceForm({ initial, onSave, onCancel }) {
 // ── Hlavní stránka ────────────────────────────────────────────────────────────
 
 export default function ReportPage() {
-  const [period, setPeriod] = useState(null);
+  const { period, setPeriod, currentPeriod, resetToCurrent } = usePeriod();
   const [periodStart, setPeriodStart] = useState(null);
   const [periodEnd, setPeriodEnd] = useState(null);
-  const [currentPeriod, setCurrentPeriod] = useState(null);
   const [incomeSources, setIncomeSources] = useState([]);
   const [fixedExpenses, setFixedExpenses] = useState([]);
   const [budgets, setBudgets] = useState([]);       // Typ 1
@@ -199,13 +199,6 @@ export default function ReportPage() {
   const [editIncome, setEditIncome] = useState(null);
   const [showFixedForm, setShowFixedForm] = useState(false);
   const [editFixed, setEditFixed] = useState(null);
-
-  useEffect(() => {
-    fetch('/api/settings').then(r => r.json()).then(s => {
-      setPeriod(s.current_period);
-      setCurrentPeriod(s.current_period);
-    });
-  }, []);
 
   useEffect(() => {
     if (!period) return;
@@ -287,6 +280,14 @@ export default function ReportPage() {
               onClick={() => setPeriod(p => addPeriods(p, 1))}
               disabled={period >= currentPeriod}>
               <ChevronRight size={18} />
+            </button>
+            <button
+              className="btn btn-ghost"
+              onClick={resetToCurrent}
+              disabled={period === currentPeriod}
+              title={t.period.resetToCurrent}
+            >
+              {t.period.resetToCurrent}
             </button>
           </div>
         )}
