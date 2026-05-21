@@ -12,6 +12,7 @@ import ImportPage from './pages/ImportPage';
 import SettingsPage from './pages/SettingsPage';
 import ReportPage from './pages/ReportPage';
 import DuplicatesPage from './pages/DuplicatesPage';
+import { PeriodProvider } from './contexts/PeriodContext';
 
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
@@ -53,20 +54,22 @@ export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <Routes>
-          <Route path="/login"    element={<GuestOnly><LoginPage /></GuestOnly>} />
-          <Route path="/register" element={<GuestOnly><RegisterPage /></GuestOnly>} />
-          <Route path="/forgot"   element={<GuestOnly><ForgotPage /></GuestOnly>} />
-          <Route path="/reset"    element={<ResetPage />} />
-          <Route path="/"             element={<R el={<DashboardPage />} />} />
-          <Route path="/transactions" element={<R el={<TransactionsPage />} />} />
-          <Route path="/categories"   element={<R el={<CategoriesPage />} />} />
-          <Route path="/budgets"      element={<R el={<BudgetsPage />} />} />
-          <Route path="/report"       element={<R el={<ReportPage />} />} />
-          <Route path="/import"       element={<R el={<ImportPage />} />} />
-          <Route path="/duplicates"  element={<R el={<DuplicatesPage />} />} />
-          <Route path="/settings"     element={<R el={<SettingsPage />} />} />
-        </Routes>
+        <PeriodProvider>
+          <Routes>
+            <Route path="/login"    element={<GuestOnly><LoginPage /></GuestOnly>} />
+            <Route path="/register" element={<GuestOnly><RegisterPage /></GuestOnly>} />
+            <Route path="/forgot"   element={<GuestOnly><ForgotPage /></GuestOnly>} />
+            <Route path="/reset"    element={<ResetPage />} />
+            <Route path="/"             element={<R el={<DashboardPage />} />} />
+            <Route path="/transactions" element={<R el={<TransactionsPage />} />} />
+            <Route path="/categories"   element={<R el={<CategoriesPage />} />} />
+            <Route path="/budgets"      element={<R el={<BudgetsPage />} />} />
+            <Route path="/report"       element={<R el={<ReportPage />} />} />
+            <Route path="/import"       element={<R el={<ImportPage />} />} />
+            <Route path="/duplicates"  element={<R el={<DuplicatesPage />} />} />
+            <Route path="/settings"     element={<R el={<SettingsPage />} />} />
+          </Routes>
+        </PeriodProvider>
       </BrowserRouter>
     </AuthProvider>
   );
