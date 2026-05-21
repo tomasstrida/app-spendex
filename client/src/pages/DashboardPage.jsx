@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { usePeriod } from '../contexts/PeriodContext';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, TrendingDown } from 'lucide-react';
 import Layout from '../components/Layout';
@@ -177,23 +178,15 @@ function FundCard({ fund }) {
 // ── Hlavní komponenta ─────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const [period, setPeriod] = useState(null);
+  const { period, setPeriod, currentPeriod, resetToCurrent } = usePeriod();
   const [periodStart, setPeriodStart] = useState(null);
   const [periodEnd, setPeriodEnd] = useState(null);
-  const [currentPeriod, setCurrentPeriod] = useState(null);
   const [data, setData] = useState(null);
   const [budgets, setBudgets] = useState(null);
   const [categories, setCategories] = useState([]);
   const [budgetItems, setBudgetItems] = useState([]);
   const [funds, setFunds] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch('/api/settings').then(r => r.json()).then(s => {
-      setPeriod(s.current_period);
-      setCurrentPeriod(s.current_period);
-    });
-  }, []);
 
   useEffect(() => {
     if (!period) return;
@@ -235,6 +228,14 @@ export default function DashboardPage() {
               onClick={() => setPeriod(p => addPeriods(p, 1))}
               disabled={period >= currentPeriod}>
               <ChevronRight size={18} />
+            </button>
+            <button
+              className="btn btn-ghost"
+              onClick={resetToCurrent}
+              disabled={period === currentPeriod}
+              title={t.period.resetToCurrent}
+            >
+              {t.period.resetToCurrent}
             </button>
           </div>
         )}
