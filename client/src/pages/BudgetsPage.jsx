@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { usePeriod } from '../contexts/PeriodContext';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, X, Check } from 'lucide-react';
 import Layout from '../components/Layout';
@@ -495,10 +496,9 @@ function Type3Section({ categories, year }) {
 
 export default function BudgetsPage() {
   const navigate = useNavigate();
-  const [period, setPeriod] = useState(null);
+  const { period, setPeriod, currentPeriod, resetToCurrent } = usePeriod();
   const [periodStart, setPeriodStart] = useState(null);
   const [periodEnd, setPeriodEnd] = useState(null);
-  const [currentPeriod, setCurrentPeriod] = useState(null);
   const [budgets, setBudgets] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -507,14 +507,7 @@ export default function BudgetsPage() {
   const [annualYear, setAnnualYear] = useState(new Date().getFullYear());
 
   useEffect(() => {
-    Promise.all([
-      fetch('/api/settings').then(r => r.json()),
-      fetch('/api/categories').then(r => r.json()),
-    ]).then(([s, cats]) => {
-      setPeriod(s.current_period);
-      setCurrentPeriod(s.current_period);
-      setCategories(cats);
-    });
+    fetch('/api/categories').then(r => r.json()).then(setCategories);
   }, []);
 
   function loadBudgets(p) {
@@ -560,6 +553,14 @@ export default function BudgetsPage() {
                 onClick={() => { setPeriod(p => addPeriods(p, 1)); setShowForm(false); setEditItem(null); }}
                 disabled={period >= currentPeriod}>
                 <ChevronRight size={18} />
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={() => { resetToCurrent(); setShowForm(false); setEditItem(null); }}
+                disabled={period === currentPeriod}
+                title={t.period.resetToCurrent}
+              >
+                {t.period.resetToCurrent}
               </button>
             </div>
           )}
