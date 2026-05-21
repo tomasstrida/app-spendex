@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Pencil, Trash2, Check, X, Columns3 } from 'lucide-react';
 import Layout from '../components/Layout';
-import { formatCurrency, formatPeriod, addPeriods } from '../i18n';
+import { formatCurrency, formatPeriod, addPeriods, t } from '../i18n';
+import { usePeriod } from '../contexts/PeriodContext';
 
 const ALL_COLS = [
   { key: 'date',                 label: 'Datum',           default: true,  always: true },
@@ -38,10 +39,10 @@ export default function TransactionsPage() {
   const [searchParams] = useSearchParams();
   const urlFrom = searchParams.get('from');
   const urlTo = searchParams.get('to');
-  const [period, setPeriod] = useState(searchParams.get('period') || null);
+  const urlPeriod = searchParams.get('period');
+  const { period, setPeriod, currentPeriod, resetToCurrent } = usePeriod();
   const [periodStart, setPeriodStart] = useState(null);
   const [periodEnd, setPeriodEnd] = useState(null);
-  const [currentPeriod, setCurrentPeriod] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
   const [filterCats, setFilterCats] = useState(() => {
@@ -66,12 +67,13 @@ export default function TransactionsPage() {
   const pickerRef = useRef();
 
   useEffect(() => {
+    // URL deep-link má přednost před contextem
+    if (urlPeriod) setPeriod(urlPeriod);
+
     Promise.all([
       fetch('/api/settings').then(r => r.json()),
       fetch('/api/categories').then(r => r.json()),
     ]).then(([s, cats]) => {
-      setCurrentPeriod(s.current_period);
-      setPeriod(p => p || s.current_period);
       setPeriodStart(s.period_start);
       setPeriodEnd(s.period_end);
       if (!urlFrom) setCustomFrom(s.period_start);
@@ -272,6 +274,14 @@ export default function TransactionsPage() {
                 disabled={period >= currentPeriod}
               >
                 <ChevronRight size={18} />
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={resetToCurrent}
+                disabled={period === currentPeriod}
+                title={t.period.resetToCurrent}
+              >
+                {t.period.resetToCurrent}
               </button>
             </div>
           )}
