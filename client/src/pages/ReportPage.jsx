@@ -584,14 +584,16 @@ export default function ReportPage() {
               <div className="report-budget-list">
                 {type2Cats.map(c => {
                   const monthly = Math.round((type2BudgetByCat[c.id] || 0) / 12);
+                  const to = `/transactions?category_id=${c.id}` + (period ? `&period=${period}` : '');
                   return (
-                    <div key={c.id} className="report-budget-row">
+                    <Link key={c.id} to={to} className="report-budget-row"
+                      style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}>
                       <span className="report-budget-dot" style={{ background: c.color || '#6366f1' }} />
                       <span className="report-budget-name">{c.name}</span>
                       <span className="report-budget-spent">{formatCurrency(c.spent)}</span>
                       <span className="text-muted report-budget-limit">{monthly > 0 ? `/ ${formatCurrency(monthly)}` : ''}</span>
                       <span className="report-budget-status" />
-                    </div>
+                    </Link>
                   );
                 })}
               </div>
@@ -615,13 +617,15 @@ export default function ReportPage() {
               </div>
               <div className="report-budget-list">
                 {type3Spent.map(c => (
-                  <div key={c.id} className="report-budget-row">
+                  <Link key={c.id} to={`/transactions?category_id=${c.id}` + (period ? `&period=${period}` : '')}
+                    className="report-budget-row"
+                    style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}>
                     <span className="report-budget-dot" style={{ background: c.color || '#6366f1' }} />
                     <span className="report-budget-name">{c.name}</span>
                     <span className="report-budget-spent">{formatCurrency(c.spent)}</span>
                     <span className="report-budget-limit" />
                     <span className="report-budget-status" />
-                  </div>
+                  </Link>
                 ))}
               </div>
               <div className="report-subtotal">
