@@ -259,6 +259,10 @@ export default function ReportPage() {
 
   // Výdaje dle typu kategorie (z by_category)
   const byCategory = stats?.by_category || [];
+  // Roční plán po kategoriích: součet podpoložek dané kategorie / 12 = měsíční budget
+  const type2BudgetByCat = {};
+  budgetItems.forEach(i => { type2BudgetByCat[i.category_id] = (type2BudgetByCat[i.category_id] || 0) + (i.amount || 0); });
+  const type2Cats  = byCategory.filter(c => c.type === 2 && (c.spent > 0 || (type2BudgetByCat[c.id] || 0) > 0));
   const type2Spent = byCategory.filter(c => c.type === 2 && c.spent > 0);
   const type3Spent = byCategory.filter(c => c.type === 3 && c.spent > 0);
   const chartData  = byCategory.filter(c => c.spent > 0);
@@ -513,25 +517,33 @@ export default function ReportPage() {
           </section>
 
           {/* ── ROČNÍ / SEZÓNNÍ (Typ 2) ── */}
-          {type2Spent.length > 0 && (
+          {type2Cats.length > 0 && (
             <section className="report-section">
               <div className="report-section-header">
                 <h2 className="report-section-title">Roční / sezónní výdaje</h2>
               </div>
               <div className="report-budget-list">
-                {type2Spent.map(c => (
-                  <div key={c.id} className="report-budget-row">
-                    <span className="report-budget-dot" style={{ background: c.color || '#6366f1' }} />
-                    <span className="report-budget-name">{c.name}</span>
-                    <span className="report-budget-spent">{formatCurrency(c.spent)}</span>
-                    <span className="report-budget-limit" />
-                    <span className="report-budget-status" />
-                  </div>
-                ))}
+                {type2Cats.map(c => {
+                  const monthly = Math.round((type2BudgetByCat[c.id] || 0) / 12);
+                  return (
+                    <div key={c.id} className="report-budget-row">
+                      <span className="report-budget-dot" style={{ background: c.color || '#6366f1' }} />
+                      <span className="report-budget-name">{c.name}</span>
+                      <span className="report-budget-spent">{formatCurrency(c.spent)}</span>
+                      <span className="text-muted report-budget-limit">{monthly > 0 ? `/ ${formatCurrency(monthly)}` : ''}</span>
+                      <span className="report-budget-status" />
+                    </div>
+                  );
+                })}
               </div>
               <div className="report-subtotal">
                 <span>Roční výdaje celkem</span>
-                <span>{formatCurrency(totalType2)}</span>
+                <span>
+                  {formatCurrency(totalType2)}
+                  {type2MonthlyBudget > 0 && (
+                    <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(type2MonthlyBudget)}</span>
+                  )}
+                </span>
               </div>
             </section>
           )}
@@ -555,7 +567,12 @@ export default function ReportPage() {
               </div>
               <div className="report-subtotal">
                 <span>Drahé věci celkem</span>
-                <span>{formatCurrency(totalType3)}</span>
+                <span>
+                  {formatCurrency(totalType3)}
+                  {type3MonthlyBudget > 0 && (
+                    <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(type3MonthlyBudget)}</span>
+                  )}
+                </span>
               </div>
             </section>
           )}
