@@ -264,7 +264,6 @@ export default function ReportPage() {
   const totalType3   = type3Spent.reduce((s, c) => s + c.spent, 0);
   const totalSpent   = stats?.total_spent || 0;
   const savings      = stats?.savings || { net: 0 };
-  const reserve      = stats?.reserve || { balance: 0 };
 
   return (
     <Layout>
@@ -551,38 +550,6 @@ export default function ReportPage() {
             </section>
           )}
 
-          {/* ── GRAF VÝDAJŮ ── */}
-          {chartData.length > 0 && (
-            <section className="report-section">
-              <div className="report-section-header">
-                <h2 className="report-section-title">Výdaje dle kategorií</h2>
-              </div>
-              <DonutChart data={chartData} total={totalSpent} />
-            </section>
-          )}
-
-          {/* ── SPOŘENÍ & REZERVA ── */}
-          <section className="report-section">
-            <div className="report-section-header">
-              <h2 className="report-section-title">Spoření &amp; rezerva</h2>
-            </div>
-            <div className="report-budget-list">
-              <div className="report-budget-row">
-                <span className="report-budget-name">Skutečně nasporeno (za období)</span>
-                <span className="report-budget-spent" style={{ color: savings.net >= 0 ? 'var(--ok, #16a34a)' : 'var(--danger)' }}>
-                  {savings.net >= 0 ? '+ ' : '− '}{formatCurrency(Math.abs(savings.net))}
-                </span>
-              </div>
-              <div className="report-budget-row">
-                <span className="report-budget-name">Harmonická rezerva (kumulativně)</span>
-                <span className="report-budget-spent">{formatCurrency(reserve.balance)}</span>
-              </div>
-            </div>
-            <div className="report-pill text-muted" style={{ fontSize: 12, marginTop: 6 }}>
-              netto převodů na spořicí účet · zůstatek obálky po nájmu a PRE
-            </div>
-          </section>
-
           {/* ── BILANCE ── */}
           <section className="report-section report-section--bilance">
             <div className="report-bilance-row">
@@ -596,9 +563,26 @@ export default function ReportPage() {
               </div>
             )}
             <div className="report-bilance-row">
-              <span>Variabilní výdaje</span>
-              <span>− {formatCurrency(totalSpent)}</span>
+              <span>Měsíční výdaje</span>
+              <span>
+                − {formatCurrency(totalType1)}
+                {totalType1Budget > 0 && (
+                  <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(totalType1Budget)}</span>
+                )}
+              </span>
             </div>
+            {totalType2 > 0 && (
+              <div className="report-bilance-row">
+                <span>Roční výdaje</span>
+                <span>− {formatCurrency(totalType2)}</span>
+              </div>
+            )}
+            {totalType3 > 0 && (
+              <div className="report-bilance-row">
+                <span>Drahé věci</span>
+                <span>− {formatCurrency(totalType3)}</span>
+              </div>
+            )}
             <div className={`report-bilance-row report-bilance-result ${savings.net >= 0 ? '' : 'text-danger'}`}>
               <span>Skutečně nasporeno</span>
               <span>{savings.net >= 0 ? '+' : '−'} {formatCurrency(Math.abs(savings.net))}</span>
@@ -607,6 +591,16 @@ export default function ReportPage() {
               Výsledek je měřené netto převodů, ne aritmetický rozdíl rozpadu výše.
             </div>
           </section>
+
+          {/* ── GRAF VÝDAJŮ ── */}
+          {chartData.length > 0 && (
+            <section className="report-section">
+              <div className="report-section-header">
+                <h2 className="report-section-title">Výdaje dle kategorií</h2>
+              </div>
+              <DonutChart data={chartData} total={totalSpent} />
+            </section>
+          )}
 
         </div>
       )}
