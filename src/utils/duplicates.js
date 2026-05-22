@@ -40,9 +40,20 @@ function findDuplicates(db, userId) {
     const timeKey = r.tx_time ? r.tx_time : `NIL:${r.id}`;
     pushTo(poss, `${r.date}|${r.description}|${r.amount}|${r.account_id ?? null}|${timeKey}`, r);
   }
+  // Skupiny ručně označené jako „nejsou duplicity" (klíč = seřazené ID řádků)
+  let dismissed = new Set();
+  try {
+    dismissed = new Set(
+      db.prepare('SELECT tx_ids FROM duplicate_dismissals WHERE user_id = ?')
+        .all(userId).map(d => d.tx_ids)
+    );
+  } catch { /* tabulka nemusí existovat (starší DB / testy) */ }
+  const idSig = rs => rs.map(r => r.id).sort((a, b) => a - b).join(',');
+
   const toGroups = m => [...m.entries()]
     .filter(([, rs]) => rs.length > 1)
     .map(([key, rs]) => ({ key, rows: rs }))
+    .filter(g => !dismissed.has(idSig(g.rows)))
     .sort((a, b) => (a.rows[0].date < b.rows[0].date ? 1 : a.rows[0].date > b.rows[0].date ? -1 : 0));
   return { probable: toGroups(prob), possible: toGroups(poss) };
 }

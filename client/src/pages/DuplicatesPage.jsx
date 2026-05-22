@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Trash2, RefreshCw } from 'lucide-react';
+import { Trash2, RefreshCw, Check } from 'lucide-react';
 import Layout from '../components/Layout';
 import { formatCurrency } from '../i18n';
 
-function GroupCard({ group, selected, onToggle }) {
+function GroupCard({ group, selected, onToggle, onDismiss }) {
   const r0 = group.rows[0];
   const colRef = { width: 120, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
   const colExt = { width: 150, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
@@ -14,8 +14,15 @@ function GroupCard({ group, selected, onToggle }) {
   const colAmt = { width: 90, flexShrink: 0, textAlign: 'right' };
   return (
     <div className="card" style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 8 }}>
-        {r0.date} · {formatCurrency(r0.amount)} · {r0.description} · {r0.account_name || '—'} · {group.rows.length}×
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+        <div style={{ fontSize: 13, color: 'var(--text2)' }}>
+          {r0.date} · {formatCurrency(r0.amount)} · {r0.description} · {r0.account_name || '—'} · {group.rows.length}×
+        </div>
+        <button className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }}
+          onClick={() => onDismiss(group)}
+          title="Tyto transakce nejsou duplicity – skrýt natrvalo">
+          <Check size={14} /> Nejsou duplicity
+        </button>
       </div>
       <div className="text-muted" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 600, marginBottom: 4 }}>
         <span style={{ width: 15, flexShrink: 0 }} />
@@ -43,7 +50,7 @@ function GroupCard({ group, selected, onToggle }) {
             <span className="text-muted" style={{ ...colExt, fontSize: 12 }} title={row.external_id || ''}>{row.external_id || '—'}</span>
             <span className="text-muted" style={{ ...colSrc, fontSize: 12 }}>{row.source || '—'}</span>
             <span className="text-muted" style={{ ...colNote, fontSize: 12 }} title={row.note || ''}>{row.note || '—'}</span>
-            <span className="text-muted" style={{ ...colTx, fontSize: 12 }}>{row.tx_time || '—'}</span>
+            <span className="text-muted" style={{ ...colTx, fontSize: 12 }}>{row.tx_time && row.tx_time !== '00:00' ? row.tx_time : '—'}</span>
             <span className="text-muted" style={{ ...colCre, fontSize: 12 }}>{row.created_at || '—'}</span>
           </label>
         ))}
@@ -92,6 +99,21 @@ export default function DuplicatesPage() {
   const visibleIds = new Set(groups.flatMap(g => g.rows.map(r => r.id)));
   const toDelete = [...selected].filter(id => visibleIds.has(id));
 
+  async function handleDismiss(group) {
+    const ids = group.rows.map(r => r.id);
+    if (!confirm('Označit jako „nejsou duplicity"? Tato skupina se už nebude zobrazovat.')) return;
+    setError('');
+    try {
+      const r = await fetch('/api/transactions/duplicates/dismiss', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); setError(d.error || 'Chyba při ukládání.'); return; }
+      load();
+    } catch { setError('Chyba připojení.'); }
+  }
+
   async function handleDelete() {
     if (toDelete.length === 0) return;
     if (!confirm(`Smazat ${toDelete.length} transakcí? Akce je nevratná.`)) return;
@@ -138,7 +160,7 @@ export default function DuplicatesPage() {
       ) : (
         <>
           {groups.map(g => (
-            <GroupCard key={g.key} group={g} selected={selected} onToggle={toggle} />
+            <GroupCard key={g.key} group={g} selected={selected} onToggle={toggle} onDismiss={handleDismiss} />
           ))}
           <div className="tx-bulk-bar" style={{ position: 'sticky', bottom: 0, zIndex: 1 }}>
             <span className="text-muted" style={{ fontSize: 13 }}>
