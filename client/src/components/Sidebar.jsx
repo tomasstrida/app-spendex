@@ -51,7 +51,7 @@ export default function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
-        <span className="sidebar-logo-mark">S</span>
+        <span className="sidebar-logo-mark">$</span>
         <div>
           <div className="sidebar-logo-text">Spendex</div>
           {version && <div className="sidebar-version">v{version}</div>}
