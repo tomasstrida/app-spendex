@@ -522,6 +522,13 @@ export default function ReportPage() {
               <div className="report-section-header">
                 <h2 className="report-section-title">Roční / sezónní výdaje</h2>
               </div>
+              <div className="report-budget-row" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', marginBottom: 4 }}>
+                <span className="report-budget-dot" style={{ background: 'transparent' }} />
+                <span className="report-budget-name">Kategorie</span>
+                <span className="report-budget-spent">Utraceno</span>
+                <span className="report-budget-limit" style={{ whiteSpace: 'nowrap' }}>Indikativní rozpočet</span>
+                <span className="report-budget-status" />
+              </div>
               <div className="report-budget-list">
                 {type2Cats.map(c => {
                   const monthly = Math.round((type2BudgetByCat[c.id] || 0) / 12);
