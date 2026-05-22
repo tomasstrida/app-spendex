@@ -309,6 +309,58 @@ export default function ReportPage() {
       {loading ? <div className="page-loading">Načítání…</div> : (
         <div className="report-layout">
 
+          {/* ── BILANCE (Skutečně naspořeno) – první na stránce ── */}
+          <section className="report-section report-section--bilance">
+            <div className="report-bilance-row">
+              <span>Příjmy celkem</span>
+              <span>{formatCurrency(totalIncome)}</span>
+            </div>
+            {totalFixed > 0 && (
+              <div className="report-bilance-row">
+                <span>Fixní platby</span>
+                <span>− {formatCurrency(totalFixed)}</span>
+              </div>
+            )}
+            <div className="report-bilance-row">
+              <span>Měsíční výdaje</span>
+              <span>
+                − {formatCurrency(totalType1)}
+                {totalType1Budget > 0 && (
+                  <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(totalType1Budget)}</span>
+                )}
+              </span>
+            </div>
+            {(totalType2 > 0 || type2MonthlyBudget > 0) && (
+              <div className="report-bilance-row">
+                <span>Roční výdaje</span>
+                <span>
+                  − {formatCurrency(totalType2)}
+                  {type2MonthlyBudget > 0 && (
+                    <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(type2MonthlyBudget)}</span>
+                  )}
+                </span>
+              </div>
+            )}
+            {(totalType3 > 0 || type3MonthlyBudget > 0) && (
+              <div className="report-bilance-row">
+                <span>Drahé věci</span>
+                <span>
+                  − {formatCurrency(totalType3)}
+                  {type3MonthlyBudget > 0 && (
+                    <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(type3MonthlyBudget)}</span>
+                  )}
+                </span>
+              </div>
+            )}
+            <div className={`report-bilance-row report-bilance-result ${savings.net >= 0 ? '' : 'text-danger'}`}>
+              <span>Skutečně naspořeno</span>
+              <span>{savings.net >= 0 ? '+' : '−'} {formatCurrency(Math.abs(savings.net))}</span>
+            </div>
+            <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
+              Výsledek je měřené netto převodů, ne aritmetický rozdíl rozpadu výše.
+            </div>
+          </section>
+
           {/* ── PŘÍJMY ── */}
           <section className="report-section">
             <div className="report-section-header">
@@ -583,58 +635,6 @@ export default function ReportPage() {
               </div>
             </section>
           )}
-
-          {/* ── BILANCE ── */}
-          <section className="report-section report-section--bilance">
-            <div className="report-bilance-row">
-              <span>Příjmy celkem</span>
-              <span>{formatCurrency(totalIncome)}</span>
-            </div>
-            {totalFixed > 0 && (
-              <div className="report-bilance-row">
-                <span>Fixní platby</span>
-                <span>− {formatCurrency(totalFixed)}</span>
-              </div>
-            )}
-            <div className="report-bilance-row">
-              <span>Měsíční výdaje</span>
-              <span>
-                − {formatCurrency(totalType1)}
-                {totalType1Budget > 0 && (
-                  <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(totalType1Budget)}</span>
-                )}
-              </span>
-            </div>
-            {(totalType2 > 0 || type2MonthlyBudget > 0) && (
-              <div className="report-bilance-row">
-                <span>Roční výdaje</span>
-                <span>
-                  − {formatCurrency(totalType2)}
-                  {type2MonthlyBudget > 0 && (
-                    <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(type2MonthlyBudget)}</span>
-                  )}
-                </span>
-              </div>
-            )}
-            {(totalType3 > 0 || type3MonthlyBudget > 0) && (
-              <div className="report-bilance-row">
-                <span>Drahé věci</span>
-                <span>
-                  − {formatCurrency(totalType3)}
-                  {type3MonthlyBudget > 0 && (
-                    <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(type3MonthlyBudget)}</span>
-                  )}
-                </span>
-              </div>
-            )}
-            <div className={`report-bilance-row report-bilance-result ${savings.net >= 0 ? '' : 'text-danger'}`}>
-              <span>Skutečně nasporeno</span>
-              <span>{savings.net >= 0 ? '+' : '−'} {formatCurrency(Math.abs(savings.net))}</span>
-            </div>
-            <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
-              Výsledek je měřené netto převodů, ne aritmetický rozdíl rozpadu výše.
-            </div>
-          </section>
 
           {/* ── GRAF VÝDAJŮ ── */}
           {chartData.length > 0 && (
