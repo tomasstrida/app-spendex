@@ -19,6 +19,23 @@ const ROLE_HINTS = {
   income:   'Příchozí platby se sčítají jako příjmy (Tom, Martin, Sudo nájem).',
 };
 
+// Odhad účtu z názvu souboru: nejdřív podle čísla účtu (číslice), pak podle názvu účtu
+function guessAccountByFilename(filename, accounts) {
+  if (!filename) return null;
+  const lower = filename.toLowerCase();
+  const fileDigits = filename.replace(/\D/g, '');
+  // 1) shoda čísla účtu (jako souvislá sekvence číslic v názvu)
+  for (const a of accounts) {
+    const num = a.account_number ? String(a.account_number).replace(/\D/g, '') : '';
+    if (num && num.length >= 4 && fileDigits.includes(num)) return a.id;
+  }
+  // 2) shoda názvu účtu (podřetězec, bez ohledu na velikost písmen)
+  for (const a of accounts) {
+    if (a.name && a.name.length >= 3 && lower.includes(a.name.toLowerCase())) return a.id;
+  }
+  return null;
+}
+
 function AccountSelector({ accounts, selectedId, detectedIds, onSelect, onCreated, onUpdated }) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -212,19 +229,26 @@ export default function ImportPage() {
         previews.push(d);
       }
 
-      // Každý soubor = vlastní výpis = vlastní účet (auto-detekce, jinak ručně)
+      const mergedAccounts = previews[previews.length - 1]?.accounts || accounts;
+
+      // Každý soubor = vlastní výpis = vlastní účet.
+      // Priorita: shoda podle názvu souboru → jinak detekce z obsahu (právě 1 kandidát).
       const imports = previews.map((p, i) => {
         const detected = p.detected_account_ids || [];
+        const byFilename = guessAccountByFilename(files[i].name, mergedAccounts);
+        const accountId = byFilename ?? (detected.length === 1 ? detected[0] : null);
+        const detectedIds = byFilename
+          ? [...new Set([byFilename, ...detected])]
+          : detected;
         return {
           name: files[i].name,
           transactions: p.transactions || [],
-          detectedIds: detected,
-          accountId: detected.length === 1 ? detected[0] : null,
+          detectedIds,
+          accountId,
         };
       });
       const mergedAbCats = [...new Set(previews.flatMap(p => p.ab_categories || []))].sort();
       const savedMappings = Object.assign({}, ...previews.map(p => p.saved_mappings || {}));
-      const mergedAccounts = previews[previews.length - 1]?.accounts || accounts;
 
       setFileImports(imports);
       setAbCategories(mergedAbCats);
