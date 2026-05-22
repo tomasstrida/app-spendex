@@ -193,6 +193,8 @@ export default function ReportPage() {
   const [incomeSources, setIncomeSources] = useState([]);
   const [fixedExpenses, setFixedExpenses] = useState([]);
   const [budgets, setBudgets] = useState([]);       // Typ 1
+  const [budgetItems, setBudgetItems] = useState([]); // Typ 2 podpoložky
+  const [funds, setFunds] = useState([]);             // Typ 3 fond-status
   const [stats, setStats] = useState(null);          // total_spent + by_category
   const [loading, setLoading] = useState(true);
   const [showIncomeForm, setShowIncomeForm] = useState(false);
@@ -203,18 +205,23 @@ export default function ReportPage() {
   useEffect(() => {
     if (!period) return;
     setLoading(true);
+    const year = Number(period.split('-')[0]);
     Promise.all([
       fetch(`/api/income?period=${period}`).then(r => r.json()),
       fetch(`/api/fixed-expenses?period=${period}`).then(r => r.json()),
       fetch(`/api/budgets?period=${period}`).then(r => r.json()),
       fetch(`/api/stats/overview?period=${period}`).then(r => r.json()),
-    ]).then(([inc, fixed, bud, st]) => {
+      fetch(`/api/budget-items?year=${year}`).then(r => r.json()),
+      fetch(`/api/categories/fund-status?year=${year}`).then(r => r.json()),
+    ]).then(([inc, fixed, bud, st, items, fundStatus]) => {
       setIncomeSources(inc.sources || []);
       setFixedExpenses(Array.isArray(fixed) ? fixed : []);
       setBudgets((bud.budgets || []).filter(b => !b.category_type || b.category_type === 1));
       setPeriodStart(bud.period_start);
       setPeriodEnd(bud.period_end);
       setStats(st);
+      setBudgetItems(items.items || []);
+      setFunds(Array.isArray(fundStatus) ? fundStatus : []);
     }).finally(() => setLoading(false));
   }, [period]);
 
@@ -262,6 +269,9 @@ export default function ReportPage() {
   const totalType1Budget = budgets.reduce((s, b) => s + b.amount, 0);
   const totalType2   = type2Spent.reduce((s, c) => s + c.spent, 0);
   const totalType3   = type3Spent.reduce((s, c) => s + c.spent, 0);
+  // Očekávaný měsíční budget: roční plán /12, fond = součet měsíčních příspěvků
+  const type2MonthlyBudget = Math.round(budgetItems.reduce((s, i) => s + (i.amount || 0), 0) / 12);
+  const type3MonthlyBudget = funds.reduce((s, f) => s + (f.monthly_contribution || 0), 0);
   const totalSpent   = stats?.total_spent || 0;
   const savings      = stats?.savings || { net: 0 };
 
@@ -571,16 +581,26 @@ export default function ReportPage() {
                 )}
               </span>
             </div>
-            {totalType2 > 0 && (
+            {(totalType2 > 0 || type2MonthlyBudget > 0) && (
               <div className="report-bilance-row">
                 <span>Roční výdaje</span>
-                <span>− {formatCurrency(totalType2)}</span>
+                <span>
+                  − {formatCurrency(totalType2)}
+                  {type2MonthlyBudget > 0 && (
+                    <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(type2MonthlyBudget)}</span>
+                  )}
+                </span>
               </div>
             )}
-            {totalType3 > 0 && (
+            {(totalType3 > 0 || type3MonthlyBudget > 0) && (
               <div className="report-bilance-row">
                 <span>Drahé věci</span>
-                <span>− {formatCurrency(totalType3)}</span>
+                <span>
+                  − {formatCurrency(totalType3)}
+                  {type3MonthlyBudget > 0 && (
+                    <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(type3MonthlyBudget)}</span>
+                  )}
+                </span>
               </div>
             )}
             <div className={`report-bilance-row report-bilance-result ${savings.net >= 0 ? '' : 'text-danger'}`}>
