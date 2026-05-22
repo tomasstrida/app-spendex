@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Pencil, Trash2, Check, X, Columns3 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Pencil, Trash2, Check, X, Columns3, Search } from 'lucide-react';
 import Layout from '../components/Layout';
 import { formatCurrency, formatPeriod, addPeriods, t } from '../i18n';
 import { usePeriod } from '../contexts/PeriodContext';
@@ -53,6 +53,8 @@ export default function TransactionsPage() {
   const [amountMax, setAmountMax] = useState(searchParams.get('amount_max') || '');
   const [appliedAmountMin, setAppliedAmountMin] = useState(amountMin);
   const [appliedAmountMax, setAppliedAmountMax] = useState(amountMax);
+  const [search, setSearch] = useState(searchParams.get('q') || '');
+  const [appliedSearch, setAppliedSearch] = useState(search);
   const [loading, setLoading] = useState(true);
   const [customMode, setCustomMode] = useState(!!(urlFrom && urlTo));
   const [customFrom, setCustomFrom] = useState(urlFrom || '');
@@ -87,18 +89,30 @@ export default function TransactionsPage() {
     const id = setTimeout(() => {
       setAppliedAmountMin(amountMin);
       setAppliedAmountMax(amountMax);
+      setAppliedSearch(search);
     }, 300);
     return () => clearTimeout(id);
-  }, [amountMin, amountMax]);
+  }, [amountMin, amountMax, search]);
 
   const buildFilterParams = useCallback((params) => {
     if (filterCats.size > 0) params.set('category_ids', [...filterCats].join(','));
     if (appliedAmountMin !== '') params.set('amount_min', appliedAmountMin);
     if (appliedAmountMax !== '') params.set('amount_max', appliedAmountMax);
+    if (appliedSearch.trim() !== '') params.set('q', appliedSearch.trim());
     return params;
-  }, [filterCats, appliedAmountMin, appliedAmountMax]);
+  }, [filterCats, appliedAmountMin, appliedAmountMax, appliedSearch]);
 
   const loadTransactions = useCallback(() => {
+    // Při vyhledávání hledej napříč všemi obdobími (ignoruj datumový rozsah)
+    if (appliedSearch.trim() !== '') {
+      setLoading(true);
+      const params = buildFilterParams(new URLSearchParams());
+      fetch(`/api/transactions?${params}`)
+        .then(r => r.json())
+        .then(data => { setTransactions(data); setSelected(new Set()); })
+        .finally(() => setLoading(false));
+      return;
+    }
     if (customMode) {
       if (!customFrom || !customTo) return;
       setLoading(true);
@@ -121,7 +135,7 @@ export default function TransactionsPage() {
       })
       .then(data => { setTransactions(data); setSelected(new Set()); })
       .finally(() => setLoading(false));
-  }, [period, customMode, customFrom, customTo, buildFilterParams]);
+  }, [period, customMode, customFrom, customTo, buildFilterParams, appliedSearch]);
 
   useEffect(() => { loadTransactions(); }, [loadTransactions]);
 
@@ -188,6 +202,7 @@ export default function TransactionsPage() {
     setFilterCats(new Set());
     setAmountMin('');
     setAmountMax('');
+    setSearch('');
   }
 
   function toggleSelectAll() {
@@ -344,6 +359,22 @@ export default function TransactionsPage() {
       </div>
 
       <div className="tx-filters">
+        <div style={{ position: 'relative', marginBottom: 4 }}>
+          <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text2)', pointerEvents: 'none' }} />
+          <input
+            className="input"
+            type="search"
+            placeholder="Hledat (popis, poznámka, místo, protiúčet, kategorie…)"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ width: '100%', maxWidth: 420, paddingLeft: 32 }}
+          />
+          {appliedSearch.trim() !== '' && (
+            <span className="text-muted" style={{ fontSize: 12, marginLeft: 10 }}>
+              hledám napříč všemi obdobími
+            </span>
+          )}
+        </div>
         <div className="tx-chip-row">
           <button
             type="button"
@@ -396,7 +427,7 @@ export default function TransactionsPage() {
             onChange={e => setAmountMax(e.target.value)}
           />
           <span className="text-muted" style={{ fontSize: 12 }}>Kč</span>
-          {(filterCats.size > 0 || amountMin !== '' || amountMax !== '') && (
+          {(filterCats.size > 0 || amountMin !== '' || amountMax !== '' || search !== '') && (
             <button
               type="button"
               className="btn btn-ghost tx-filter-clear"
@@ -413,7 +444,7 @@ export default function TransactionsPage() {
         <div className="page-loading">Načítání…</div>
       ) : transactions.length === 0 ? (
         <div className="empty-state">
-          <p>Žádné transakce pro toto období.</p>
+          <p>{appliedSearch.trim() !== '' ? 'Nic nenalezeno.' : 'Žádné transakce pro toto období.'}</p>
         </div>
       ) : (
         <>

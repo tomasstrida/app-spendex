@@ -9,12 +9,24 @@ const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
 // GET /api/transactions?from=...&to=...&category_id=&category_ids=1,2,none&amount_min=&amount_max=&limit=&offset=
 router.get('/', requireAuth, (req, res) => {
-  const { from, to, category_id, category_ids, amount_min, amount_max, limit = 200, offset = 0 } = req.query;
+  const { from, to, category_id, category_ids, amount_min, amount_max, q, limit = 200, offset = 0 } = req.query;
   let query = 'SELECT t.*, c.name as category_name, c.color as category_color FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.user_id = ?';
   const params = [req.user.id];
 
   if (from) { query += ' AND t.date >= ?'; params.push(from); }
   if (to)   { query += ' AND t.date <= ?'; params.push(to); }
+
+  // Full-text vyhledávání napříč textovými poli (vč. názvu kategorie)
+  if (q !== undefined && String(q).trim() !== '') {
+    const like = `%${String(q).trim()}%`;
+    query += ` AND (
+      t.description LIKE ? OR t.note LIKE ? OR t.place LIKE ?
+      OR t.counterparty_account LIKE ? OR t.ab_category LIKE ?
+      OR t.tx_type LIKE ? OR t.entered_by LIKE ? OR t.external_id LIKE ?
+      OR c.name LIKE ?
+    )`;
+    for (let i = 0; i < 9; i++) params.push(like);
+  }
 
   if (category_ids) {
     const ids = String(category_ids).split(',').map(s => s.trim()).filter(Boolean);
@@ -59,6 +71,25 @@ router.get('/', requireAuth, (req, res) => {
 // GET /api/transactions/duplicates
 router.get('/duplicates', requireAuth, (req, res) => {
   res.json(findDuplicates(db, req.user.id));
+});
+
+// POST /api/transactions/duplicates/dismiss  body: { ids: [...] }
+// Označí skupinu jako „nejsou duplicity" — už se nebude zobrazovat.
+router.post('/duplicates/dismiss', requireAuth, writeLimiter, (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length < 2) {
+    return res.status(400).json({ error: 'Očekávám alespoň 2 ID transakcí.' });
+  }
+  const ph = ids.map(() => '?').join(',');
+  const owned = db.prepare(`SELECT id FROM transactions WHERE user_id = ? AND id IN (${ph})`)
+    .all(req.user.id, ...ids);
+  if (owned.length !== ids.length) {
+    return res.status(400).json({ error: 'Některá transakce nepatří uživateli.' });
+  }
+  const sig = ids.map(Number).sort((a, b) => a - b).join(',');
+  db.prepare('INSERT OR IGNORE INTO duplicate_dismissals (user_id, tx_ids) VALUES (?, ?)')
+    .run(req.user.id, sig);
+  res.json({ ok: true });
 });
 
 // POST /api/transactions
