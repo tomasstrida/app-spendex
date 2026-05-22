@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { usePeriod } from '../contexts/PeriodContext';
-import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, X, Check } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
@@ -8,37 +7,6 @@ import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
 const MONTHS = ['Leden','Únor','Březen','Duben','Květen','Červen',
                  'Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
 const MONTHS_SHORT = ['led','úno','bře','dub','kvě','čvn','čvc','srp','zář','říj','lis','pro'];
-
-// ── Teploměr pro Typ 1 ───────────────────────────────────────────────────────
-
-function BudgetThermometer({ spent, amount, periodStart, periodEnd, color }) {
-  const spentPct = amount > 0 ? Math.min((spent / amount) * 100, 100) : 0;
-  const over = spent > amount;
-  const today = new Date();
-  const start = new Date(periodStart + 'T00:00:00');
-  const end = new Date(periodEnd + 'T00:00:00');
-  const periodOver = today > end;
-  const totalDays = Math.round((end - start) / 86400000) + 1;
-  const daysPassed = Math.max(0, Math.min(Math.round((today - start) / 86400000), totalDays));
-  const dayPct = Math.min((daysPassed / totalDays) * 100, 100);
-  const projection = daysPassed > 0 ? Math.round((spent / daysPassed) * totalDays) : 0;
-  const fillColor = over ? undefined : (spentPct > dayPct ? '#f97316' : (color || '#6366f1'));
-
-  return (
-    <div>
-      <div className="budget-bar-track" style={{ position: 'relative' }}>
-        <div className={`budget-bar-fill${over ? ' over' : ''}`} style={{ width: `${spentPct}%`, background: fillColor }} />
-        {dayPct > 0 && dayPct < 100 && <div className="budget-bar-day-marker" style={{ left: `${dayPct}%` }} />}
-      </div>
-      {!periodOver && projection > 0 && projection > amount && (
-        <div className="budget-projection">
-          projekce: <strong>{formatCurrency(projection)}</strong>
-          <span className="text-danger"> (+{formatCurrency(projection - amount)})</span>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ── Formulář pro Typ 1 ───────────────────────────────────────────────────────
 
@@ -164,32 +132,6 @@ function ItemForm({ initial, categoryId, onSave, onCancel }) {
   );
 }
 
-// ── Stav podpoložky ───────────────────────────────────────────────────────────
-
-function getItemStatus(item, year) {
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const cm = now.getMonth() + 1;
-  if (item.spent >= item.amount) return 'paid';
-  if (year !== currentYear) return item.spent > 0 ? 'partial' : 'missed';
-  const sameYear = item.window_start <= item.window_end;
-  const inWindow = sameYear
-    ? cm >= item.window_start && cm <= item.window_end
-    : cm >= item.window_start || cm <= item.window_end;
-  const windowPast = sameYear ? cm > item.window_end : false;
-  if (inWindow) return 'active';
-  if (windowPast) return item.spent > 0 ? 'partial' : 'missed';
-  return 'waiting';
-}
-
-const STATUS_LABEL = {
-  paid:    { icon: '✅', label: 'zaplaceno',  cls: '' },
-  active:  { icon: '🟡', label: 'v okně',     cls: 'text-warn' },
-  waiting: { icon: '⏳', label: 'čeká',       cls: 'text-muted' },
-  partial: { icon: '⚠️', label: 'částečně',   cls: 'text-warn' },
-  missed:  { icon: '⚠️', label: 'nezaplaceno', cls: 'text-danger' },
-};
-
 function windowLabel(ws, we) {
   if (ws === 1 && we === 12) return 'celý rok';
   if (ws === we) return MONTHS_SHORT[ws - 1];
@@ -199,7 +141,6 @@ function windowLabel(ws, we) {
 // ── Sekce Typ 2 ───────────────────────────────────────────────────────────────
 
 function Type2Section({ categories, year, onYearChange }) {
-  const navigate = useNavigate();
   const type2Cats = categories.filter(c => c.type === 2);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -243,47 +184,29 @@ function Type2Section({ categories, year, onYearChange }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {type2Cats.map(cat => {
         const catItems = items.filter(i => i.category_id === cat.id);
-        const totalSpent = catItems.reduce((s, i) => s + i.spent, 0);
-        const totalAmount = catItems.reduce((s, i) => s + i.amount, 0);
 
         return (
           <div key={cat.id} className="budget-item" style={{ cursor: 'default' }}>
             <div className="budget-item-header">
               <div className="budget-item-name">
                 <span className="budget-dot" style={{ background: cat.color || '#6366f1' }} />
-                <span
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => navigate(`/transactions?category_id=${cat.id}&from=${year}-01-01&to=${year}-12-31`)}
-                >
-                  {cat.name}
-                </span>
+                {cat.name}
               </div>
-              {totalAmount > 0 && (
-                <div className="budget-item-amounts text-muted" style={{ fontSize: 12 }}>
-                  {formatCurrency(totalSpent)} / {formatCurrency(totalAmount)}
-                </div>
-              )}
             </div>
 
             {loading ? (
               <div className="text-muted" style={{ fontSize: 13, padding: '8px 0' }}>Načítání…</div>
             ) : (
               <div className="type2-items-list">
-                {catItems.map(item => {
-                  const st = getItemStatus(item, year);
-                  const { icon, label, cls } = STATUS_LABEL[st];
-                  return editItem?.id === item.id ? (
+                {catItems.map(item => (
+                  editItem?.id === item.id ? (
                     <ItemForm key={item.id} initial={item} categoryId={cat.id}
                       onSave={handleSaved} onCancel={() => setEditItem(null)} />
                   ) : (
                     <div key={item.id} className="type2-item-row">
                       <span className="type2-item-name">{item.name}</span>
                       <span className="type2-item-window text-muted">{windowLabel(item.window_start, item.window_end)}</span>
-                      <span className={`type2-item-spent${item.spent > item.amount ? ' text-danger' : ''}`}>
-                        {formatCurrency(item.spent)}
-                      </span>
-                      <span className="type2-item-amount text-muted">/ {formatCurrency(item.amount)}</span>
-                      <span className={`type2-item-status ${cls}`}>{icon} {label}</span>
+                      <span className="type2-item-amount">{formatCurrency(item.amount)}</span>
                       <span className="type2-item-actions">
                         <button className="btn btn-ghost btn-icon"
                           onClick={() => { setAddingFor(null); setEditItem(item); }}>
@@ -294,8 +217,8 @@ function Type2Section({ categories, year, onYearChange }) {
                         </button>
                       </span>
                     </div>
-                  );
-                })}
+                  )
+                ))}
 
                 {addingFor === cat.id && (
                   <ItemForm categoryId={cat.id}
@@ -379,7 +302,6 @@ function FundConfigForm({ cat, onSave, onCancel }) {
 }
 
 function Type3Section({ categories, year }) {
-  const navigate = useNavigate();
   const [funds, setFunds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState(null);
@@ -428,10 +350,7 @@ function Type3Section({ categories, year }) {
             <div className="budget-item-header">
               <div className="budget-item-name">
                 <span className="budget-dot" style={{ background: cat.color || '#6366f1' }} />
-                <span style={{ cursor: 'pointer' }}
-                  onClick={() => navigate(`/transactions?category_id=${cat.id}&from=${year}-01-01&to=${year}-12-31`)}>
-                  {cat.name}
-                </span>
+                {cat.name}
               </div>
               <button className="btn btn-ghost btn-icon" title="Upravit konfiguraci"
                 onClick={() => setEditingId(editingId === cat.id ? null : cat.id)}>
@@ -467,20 +386,6 @@ function Type3Section({ categories, year }) {
                     <strong>~{formatCurrency(fund.monthly_contribution)}</strong>
                   </span>
                 )}
-                <span className="fund-info-item">
-                  <span className="text-muted">naposledy</span>
-                  <strong>
-                    {fund.last_payment_date
-                      ? fund.months_since_last === 0
-                        ? 'tento měsíc'
-                        : `před ${fund.months_since_last} měs.`
-                      : 'nikdy'}
-                  </strong>
-                </span>
-                <span className="fund-info-item">
-                  <span className="text-muted">letos utraceno</span>
-                  <strong>{formatCurrency(fund.total_year)}</strong>
-                </span>
               </div>
             ) : (
               <div className="text-muted" style={{ fontSize: 13 }}>Nastavte konfiguraci fondu.</div>
@@ -495,7 +400,6 @@ function Type3Section({ categories, year }) {
 // ── Hlavní stránka ────────────────────────────────────────────────────────────
 
 export default function BudgetsPage() {
-  const navigate = useNavigate();
   const { period, setPeriod, currentPeriod, resetToCurrent } = usePeriod();
   const [periodStart, setPeriodStart] = useState(null);
   const [periodEnd, setPeriodEnd] = useState(null);
@@ -533,7 +437,6 @@ export default function BudgetsPage() {
   }
 
   const existingCategoryIds = budgets.map(b => b.category_id);
-  const pct = (spent, amount) => amount > 0 ? (spent / amount) * 100 : 0;
   const periodLabel = formatPeriod(periodStart, periodEnd);
 
   return (
@@ -590,11 +493,8 @@ export default function BudgetsPage() {
         </div>
       ) : (
         <div className="budget-list">
-          {budgets.map(b => {
-            const over = b.spent > b.amount;
-            const remaining = b.amount - b.spent;
-            const p = pct(b.spent, b.amount);
-            return editItem?.category_id === b.category_id ? (
+          {budgets.map(b => (
+            editItem?.category_id === b.category_id ? (
               <div key={b.category_id} className="card" style={{ maxWidth: 640 }}>
                 <BudgetForm initial={b} categories={categories} period={period} periodLabel={periodLabel}
                   existingCategoryIds={existingCategoryIds}
@@ -602,39 +502,27 @@ export default function BudgetsPage() {
                   onCancel={() => setEditItem(null)} />
               </div>
             ) : (
-              <div key={b.category_id} className="budget-item budget-item-clickable"
-                onClick={() => navigate(`/transactions?category_id=${b.category_id}&period=${period}`)}>
+              <div key={b.category_id} className="budget-item">
                 <div className="budget-item-header">
                   <div className="budget-item-name">
                     <span className="budget-dot" style={{ background: b.category_color || '#6366f1' }} />
                     {b.category_name}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div className="budget-item-amounts">
-                      <span className={over ? 'text-danger' : ''}>{formatCurrency(b.spent)}</span>
-                      <span className="text-muted"> / {formatCurrency(b.amount)}</span>
-                    </div>
+                    <div className="budget-item-amounts">{formatCurrency(b.amount)}</div>
                     <button className="btn btn-ghost btn-icon" title="Upravit"
-                      onClick={e => { e.stopPropagation(); setShowForm(false); setEditItem(b); }}>
+                      onClick={() => { setShowForm(false); setEditItem(b); }}>
                       <Pencil size={14} />
                     </button>
                     <button className="btn btn-ghost btn-icon" title="Smazat"
-                      onClick={e => { e.stopPropagation(); handleDelete(b); }}>
+                      onClick={() => handleDelete(b)}>
                       <Trash2 size={14} />
                     </button>
                   </div>
                 </div>
-                <BudgetThermometer spent={b.spent} amount={b.amount}
-                  periodStart={periodStart} periodEnd={periodEnd} color={b.category_color} />
-                <div className="budget-item-footer">
-                  {over
-                    ? <span className="text-danger">{formatCurrency(Math.abs(remaining))} přečerpáno</span>
-                    : <span className="text-muted">{formatCurrency(remaining)} zbývá</span>}
-                  <span className="text-muted">{Math.round(p)} %</span>
-                </div>
               </div>
-            );
-          })}
+            )
+          ))}
         </div>
       )}
 

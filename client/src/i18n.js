@@ -8,6 +8,8 @@ const cs = {
     import: 'Import',
     duplicates: 'Duplicity',
     settings: 'Nastavení',
+    sectionReports: 'Přehledy',
+    sectionConfig: 'Konfigurace',
   },
   dashboard: {
     title: 'Přehled',

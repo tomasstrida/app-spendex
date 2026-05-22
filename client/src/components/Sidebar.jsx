@@ -14,15 +14,25 @@ import {
   CopyX,
 } from 'lucide-react';
 
-const navItems = [
-  { to: '/',             icon: LayoutDashboard, label: t.nav.dashboard,     end: true },
-  { to: '/transactions', icon: ArrowLeftRight,  label: t.nav.transactions },
-  { to: '/categories',   icon: Tag,             label: t.nav.categories },
-  { to: '/budgets',      icon: PiggyBank,       label: t.nav.budgets },
-  { to: '/report',       icon: ClipboardList,   label: t.nav.report },
-  { to: '/import',       icon: Upload,          label: t.nav.import },
-  { to: '/duplicates',   icon: CopyX,           label: t.nav.duplicates },
-  { to: '/settings',     icon: Settings,        label: t.nav.settings },
+const navGroups = [
+  {
+    label: t.nav.sectionReports,
+    items: [
+      { to: '/',             icon: LayoutDashboard, label: t.nav.dashboard, end: true },
+      { to: '/report',       icon: ClipboardList,   label: t.nav.report },
+      { to: '/transactions', icon: ArrowLeftRight,  label: t.nav.transactions },
+    ],
+  },
+  {
+    label: t.nav.sectionConfig,
+    items: [
+      { to: '/categories', icon: Tag,       label: t.nav.categories },
+      { to: '/budgets',    icon: PiggyBank, label: t.nav.budgets },
+      { to: '/import',     icon: Upload,    label: t.nav.import },
+      { to: '/duplicates', icon: CopyX,     label: t.nav.duplicates },
+      { to: '/settings',   icon: Settings,  label: t.nav.settings },
+    ],
+  },
 ];
 
 export default function Sidebar() {
@@ -49,16 +59,21 @@ export default function Sidebar() {
       </div>
 
       <nav className="sidebar-nav">
-        {navItems.map(({ to, icon: Icon, label, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
-          >
-            <Icon size={18} />
-            {label}
-          </NavLink>
+        {navGroups.map(group => (
+          <div key={group.label} className="sidebar-group">
+            <div className="sidebar-section-label">{group.label}</div>
+            {group.items.map(({ to, icon: Icon, label, end }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={end}
+                className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
+              >
+                <Icon size={18} />
+                {label}
+              </NavLink>
+            ))}
+          </div>
         ))}
       </nav>
 
