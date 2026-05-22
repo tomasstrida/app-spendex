@@ -173,11 +173,9 @@ export default function ImportPage() {
   const [step, setStep] = useState(STEP.UPLOAD);
   const [categories, setCategories] = useState([]);
   const [accounts, setAccounts] = useState([]);
-  const [transactions, setTransactions] = useState([]);
+  const [fileImports, setFileImports] = useState([]); // [{ name, transactions, detectedIds, accountId }]
   const [abCategories, setAbCategories] = useState([]);
   const [categoryMap, setCategoryMap] = useState({});
-  const [selectedAccountId, setSelectedAccountId] = useState(null);
-  const [detectedAccountIds, setDetectedAccountIds] = useState([]);
   const [skipIncoming, setSkipIncoming] = useState(true);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -189,30 +187,54 @@ export default function ImportPage() {
     fetch('/api/accounts').then(r => r.json()).then(setAccounts);
   }, []);
 
-  async function handleFile(e) {
-    const file = e.target.files[0];
-    if (!file) return;
+  async function handleFiles(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    if (files.length > 20) {
+      setError('Najednou lze nahrát maximálně 20 souborů.');
+      if (fileRef.current) fileRef.current.value = '';
+      return;
+    }
     setError('');
     setLoading(true);
     try {
-      const text = await file.text();
-      const r = await fetch('/api/import/preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: text,
-      });
-      const d = await r.json();
-      if (!r.ok) { setError(d.error); return; }
-      setTransactions(d.transactions);
-      setAbCategories(d.ab_categories);
-      setAccounts(d.accounts || accounts);
+      // Parsuj každý soubor zvlášť přes stávající preview endpoint
+      const previews = [];
+      for (const file of files) {
+        const text = await file.text();
+        const r = await fetch('/api/import/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: text,
+        });
+        const d = await r.json();
+        if (!r.ok) { setError(`${file.name}: ${d.error}`); return; }
+        previews.push(d);
+      }
 
-      // Předvyplň kategorii
-      const saved = d.saved_mappings || {};
+      // Každý soubor = vlastní výpis = vlastní účet (auto-detekce, jinak ručně)
+      const imports = previews.map((p, i) => {
+        const detected = p.detected_account_ids || [];
+        return {
+          name: files[i].name,
+          transactions: p.transactions || [],
+          detectedIds: detected,
+          accountId: detected.length === 1 ? detected[0] : null,
+        };
+      });
+      const mergedAbCats = [...new Set(previews.flatMap(p => p.ab_categories || []))].sort();
+      const savedMappings = Object.assign({}, ...previews.map(p => p.saved_mappings || {}));
+      const mergedAccounts = previews[previews.length - 1]?.accounts || accounts;
+
+      setFileImports(imports);
+      setAbCategories(mergedAbCats);
+      setAccounts(mergedAccounts);
+
+      // Předvyplň kategorii (mapování je per uživatel, sdílené napříč soubory)
       const map = {};
-      d.ab_categories.forEach(abCat => {
-        if (saved[abCat]) {
-          map[abCat] = String(saved[abCat]);
+      mergedAbCats.forEach(abCat => {
+        if (savedMappings[abCat]) {
+          map[abCat] = String(savedMappings[abCat]);
         } else {
           const match = categories.find(c => c.name.toLowerCase() === abCat.toLowerCase());
           map[abCat] = match ? String(match.id) : '';
@@ -220,14 +242,9 @@ export default function ImportPage() {
       });
       setCategoryMap(map);
 
-      // Auto-select detekovaného kandidáta pokud je právě jeden
-      const detected = d.detected_account_ids || [];
-      setDetectedAccountIds(detected);
-      setSelectedAccountId(detected.length === 1 ? detected[0] : null);
-
       setStep(STEP.MAPPING);
     } catch {
-      setError('Chyba při čtení souboru.');
+      setError('Chyba při čtení souborů.');
     } finally {
       setLoading(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -235,6 +252,11 @@ export default function ImportPage() {
   }
 
   async function handleConfirm() {
+    // Každý soubor s transakcemi k importu musí mít vybraný účet
+    if (fileImports.some(f => fileNewTx(f).length > 0 && !f.accountId)) {
+      setError('Vyberte účet pro každý soubor, který má transakce k importu.');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -243,19 +265,27 @@ export default function ImportPage() {
         if (v) map[k] = parseInt(v);
       });
 
-      const r = await fetch('/api/import/confirm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          transactions,
-          category_map: map,
-          skip_incoming: skipIncoming,
-          account_id: selectedAccountId || null,
-        }),
-      });
-      const d = await r.json();
-      if (!r.ok) { setError(d.error); return; }
-      setResult(d);
+      let imported = 0;
+      let skipped = 0;
+      // Sekvenčně, aby dedup proti DB platil i mezi soubory stejného účtu
+      for (const f of fileImports) {
+        if (!f.accountId) continue;
+        const r = await fetch('/api/import/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            transactions: f.transactions,
+            category_map: map,
+            skip_incoming: skipIncoming,
+            account_id: f.accountId,
+          }),
+        });
+        const d = await r.json();
+        if (!r.ok) { setError(`${f.name}: ${d.error}`); return; }
+        imported += d.imported;
+        skipped += d.skipped;
+      }
+      setResult({ imported, skipped });
       setStep(STEP.DONE);
     } catch {
       setError('Chyba při importu.');
@@ -270,17 +300,19 @@ export default function ImportPage() {
 
   function reset() {
     setStep(STEP.UPLOAD);
-    setTransactions([]);
+    setFileImports([]);
     setAbCategories([]);
     setCategoryMap({});
-    setSelectedAccountId(null);
-    setDetectedAccountIds([]);
     setResult(null);
     setError('');
   }
 
-  const newTx = transactions.filter(t => !t.duplicate && !(skipIncoming && t.direction === 'Příchozí'));
-  const dupCount = transactions.filter(t => t.duplicate).length;
+  // Nové (neduplicitní, neignorované) transakce pro daný soubor
+  const fileNewTx = f => f.transactions.filter(t => !t.duplicate && !(skipIncoming && t.direction === 'Příchozí'));
+  const allTx = fileImports.flatMap(f => f.transactions);
+  const totalNew = fileImports.reduce((s, f) => s + fileNewTx(f).length, 0);
+  const totalDup = allTx.filter(t => t.duplicate).length;
+  const incomingCount = allTx.filter(t => t.direction === 'Příchozí').length;
 
   return (
     <Layout>
@@ -294,14 +326,15 @@ export default function ImportPage() {
       {step === STEP.UPLOAD && (
         <div className="import-upload-area" onClick={() => fileRef.current?.click()}>
           <Upload size={32} style={{ color: 'var(--accent)' }} />
-          <div className="import-upload-title">Nahrajte CSV soubor z Air Bank</div>
+          <div className="import-upload-title">Nahrajte CSV soubory z Air Bank</div>
           <div className="import-upload-hint">
-            V Air Bank internetovém bankovnictví: Přehled pohybů → Export → CSV
+            V Air Bank internetovém bankovnictví: Přehled pohybů → Export → CSV.<br />
+            Můžete vybrat víc souborů najednou (max 20) — každý výpis se přiřadí na svůj účet.
           </div>
           <button className="btn btn-primary" disabled={loading} onClick={e => { e.stopPropagation(); fileRef.current?.click(); }}>
-            {loading ? 'Načítání…' : 'Vybrat soubor'}
+            {loading ? 'Načítání…' : 'Vybrat soubory'}
           </button>
-          <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleFile} />
+          <input ref={fileRef} type="file" accept=".csv" multiple style={{ display: 'none' }} onChange={handleFiles} />
         </div>
       )}
 
@@ -309,43 +342,57 @@ export default function ImportPage() {
       {step === STEP.MAPPING && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 560 }}>
 
-          {/* Souhrn */}
+          {/* Souhrn (napříč všemi soubory) */}
           <div className="import-summary">
             <div className="import-summary-item">
-              <span className="import-summary-num">{transactions.length}</span>
-              <span className="text-muted">nalezeno</span>
+              <span className="import-summary-num">{allTx.length}</span>
+              <span className="text-muted">nalezeno · {fileImports.length} soubor{fileImports.length === 1 ? '' : (fileImports.length < 5 ? 'y' : 'ů')}</span>
             </div>
             <div className="import-summary-item">
-              <span className="import-summary-num" style={{ color: 'var(--success)' }}>{newTx.length}</span>
+              <span className="import-summary-num" style={{ color: 'var(--success)' }}>{totalNew}</span>
               <span className="text-muted">k importu</span>
             </div>
-            {dupCount > 0 && (
+            {totalDup > 0 && (
               <div className="import-summary-item">
-                <span className="import-summary-num" style={{ color: 'var(--text2)' }}>{dupCount}</span>
+                <span className="import-summary-num" style={{ color: 'var(--text2)' }}>{totalDup}</span>
                 <span className="text-muted">duplicit</span>
               </div>
             )}
           </div>
 
-          {/* Výběr účtu */}
-          <AccountSelector
-            accounts={accounts}
-            selectedId={selectedAccountId}
-            detectedIds={detectedAccountIds}
-            onSelect={setSelectedAccountId}
-            onCreated={acc => setAccounts(prev => [...prev, acc].sort((a, b) => a.name.localeCompare(b.name)))}
-            onUpdated={handleAccountUpdated}
-          />
+          {/* Výběr účtu pro každý soubor */}
+          {fileImports.map((f, i) => {
+            const nw = fileNewTx(f);
+            const dup = f.transactions.filter(t => t.duplicate).length;
+            return (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                  {f.name}
+                  <span className="text-muted" style={{ fontWeight: 400, marginLeft: 8 }}>
+                    {f.transactions.length} nalezeno · {nw.length} k importu{dup > 0 ? ` · ${dup} duplicit` : ''}
+                  </span>
+                </div>
+                <AccountSelector
+                  accounts={accounts}
+                  selectedId={f.accountId}
+                  detectedIds={f.detectedIds}
+                  onSelect={id => setFileImports(prev => prev.map((x, j) => j === i ? { ...x, accountId: id } : x))}
+                  onCreated={acc => setAccounts(prev => [...prev, acc].sort((a, b) => a.name.localeCompare(b.name)))}
+                  onUpdated={handleAccountUpdated}
+                />
+              </div>
+            );
+          })}
 
           {/* Příchozí transakce */}
-          {transactions.some(t => t.direction === 'Příchozí') && (
+          {incomingCount > 0 && (
             <label className="import-toggle">
               <input
                 type="checkbox"
                 checked={skipIncoming}
                 onChange={e => setSkipIncoming(e.target.checked)}
               />
-              <span>Přeskočit příchozí platby ({transactions.filter(t => t.direction === 'Příchozí').length})</span>
+              <span>Přeskočit příchozí platby ({incomingCount})</span>
             </label>
           )}
 
@@ -357,8 +404,8 @@ export default function ImportPage() {
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {abCategories.map(abCat => {
-                  const count = transactions.filter(t => t.ab_category === abCat && !t.duplicate).length;
-                  const total = transactions.filter(t => t.ab_category === abCat && !t.duplicate)
+                  const count = allTx.filter(t => t.ab_category === abCat && !t.duplicate).length;
+                  const total = allTx.filter(t => t.ab_category === abCat && !t.duplicate)
                     .reduce((s, t) => s + Math.abs(t.amount), 0);
                   return (
                     <div key={abCat} className="import-mapping-row">
@@ -388,9 +435,9 @@ export default function ImportPage() {
 
           <div style={{ display: 'flex', gap: 12 }}>
             <button className="btn btn-ghost" onClick={reset}>Zrušit</button>
-            <button className="btn btn-primary" onClick={handleConfirm} disabled={loading || newTx.length === 0}>
+            <button className="btn btn-primary" onClick={handleConfirm} disabled={loading || totalNew === 0}>
               <Check size={16} />
-              {loading ? 'Importuji…' : `Importovat ${newTx.length} transakcí`}
+              {loading ? 'Importuji…' : `Importovat ${totalNew} transakcí`}
             </button>
           </div>
         </div>
