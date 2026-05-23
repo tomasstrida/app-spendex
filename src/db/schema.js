@@ -176,7 +176,24 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_annual_budgets_user ON annual_budgets(user_id);
     CREATE INDEX IF NOT EXISTS idx_budget_items_category ON budget_items(user_id, category_id);
     CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
+    CREATE TABLE IF NOT EXISTS csv_archive (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      filename TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'airbank',
+      account_id INTEGER,
+      uploaded_at TEXT DEFAULT (datetime('now')),
+      content TEXT NOT NULL,
+      file_hash TEXT NOT NULL,
+      parsed_tx_count INTEGER DEFAULT 0,
+      note TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE SET NULL,
+      UNIQUE(user_id, file_hash)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_dup_dismiss_user ON duplicate_dismissals(user_id);
+    CREATE INDEX IF NOT EXISTS idx_csv_archive_user ON csv_archive(user_id);
   `);
 
   // Migrace: budgety bez 'default' záznamu — vezmi nejnovější per user+category a nastav jako default
