@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const express = require('express');
 const router = express.Router();
 const db = require('../db/connection');
@@ -56,8 +57,8 @@ router.post('/preview', requireAuth, express.text({ limit: '10mb', type: '*/*' }
 });
 
 // POST /api/import/confirm
-router.post('/confirm', requireAuth, (req, res) => {
-  const { transactions, category_map = {}, skip_incoming = true, account_id = null } = req.body;
+router.post('/confirm', requireAuth, express.json({ limit: '10mb' }), (req, res) => {
+  const { transactions, category_map = {}, skip_incoming = true, account_id = null, raw_csv = null, filename = null } = req.body;
   if (!Array.isArray(transactions)) return res.status(400).json({ error: 'Neplatná data.' });
 
   if (!account_id) {
@@ -89,6 +90,7 @@ router.post('/confirm', requireAuth, (req, res) => {
 
   let imported = 0;
   let skipped = 0;
+  let archiveStatus = null; // 'new' | 'duplicate' | null (když chybí raw_csv)
 
   // Autoritativní sada již uložených external_id pro tohoto uživatele
   const existingIds = new Set(
@@ -126,9 +128,20 @@ router.post('/confirm', requireAuth, (req, res) => {
     for (const [abCat, catId] of Object.entries(category_map)) {
       if (catId) upsertMapping.run(req.user.id, abCat, parseInt(catId));
     }
+
+    // Archivace originálu CSV (per soubor, dedup přes UNIQUE(user_id, file_hash))
+    if (raw_csv && filename) {
+      const hash = crypto.createHash('sha256').update(raw_csv).digest('hex');
+      const result = db.prepare(`
+        INSERT OR IGNORE INTO csv_archive
+          (user_id, filename, source, account_id, content, file_hash, parsed_tx_count)
+        VALUES (?, ?, 'airbank', ?, ?, ?, ?)
+      `).run(req.user.id, filename, resolvedAccountId, raw_csv, hash, imported);
+      archiveStatus = result.changes > 0 ? 'new' : 'duplicate';
+    }
   })();
 
-  res.json({ imported, skipped });
+  res.json({ imported, skipped, archive: archiveStatus });
 });
 
 // GET /api/import/mappings
