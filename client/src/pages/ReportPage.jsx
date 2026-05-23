@@ -357,6 +357,16 @@ export default function ReportPage() {
   const savings      = stats?.savings || { net: 0 };
   const variablePoolFunded = stats?.variable_pool_funded || 0;
 
+  // Account numbers used in bilance row links (musí sedět s recurring.js v backendu)
+  const SAVINGS_ACCOUNT_NUM = '1679014082';
+  const VARIABLE_ACCOUNT_NUM = '1679014074';
+  const typ1CatIds = byCategory.filter(c => c.type === 1).map(c => c.id).join(',');
+  const typ3CatIds = byCategory.filter(c => c.type === 3).map(c => c.id).join(',');
+  function txLink(extra) {
+    const base = periodStart && periodEnd ? `from=${periodStart}&to=${periodEnd}` : '';
+    return `/transactions?${base}${extra ? '&' + extra : ''}`;
+  }
+
   return (
     <Layout>
       <div className="page-header">
@@ -389,17 +399,24 @@ export default function ReportPage() {
 
           {/* ── BILANCE (Skutečně naspořeno) – první na stránce ── */}
           <section className="report-section report-section--bilance">
-            <div className="report-bilance-row">
+            <Link to={txLink('direction=in')} className="report-bilance-row"
+              style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+              title="Klik: všechny příchozí transakce v období">
               <span>Příjmy celkem</span>
               <span>{formatCurrency(totalIncome)}</span>
-            </div>
+            </Link>
             {totalFixed > 0 && (
-              <div className="report-bilance-row">
+              <Link to={txLink('direction=out')} className="report-bilance-row"
+                style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                title="Klik: všechny odchozí transakce v období (fixní platby najdeš zde)">
                 <span>Fixní platby</span>
                 <span>− {formatCurrency(totalFixed)}</span>
-              </div>
+              </Link>
             )}
-            <div className="report-bilance-row">
+            <Link to={txLink(typ1CatIds ? `category_ids=${typ1CatIds}` : '')}
+              className="report-bilance-row"
+              style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+              title="Klik: transakce Typ 1 (měsíční) kategorií v období">
               <span>Měsíční výdaje</span>
               <span>
                 − {formatCurrency(totalType1)}
@@ -407,20 +424,12 @@ export default function ReportPage() {
                   <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(totalType1Budget)}</span>
                 )}
               </span>
-            </div>
-            {(totalType3 > 0 || type3MonthlyBudget > 0) && (
-              <div className="report-bilance-row">
-                <span>Drahé věci</span>
-                <span>
-                  − {formatCurrency(totalType3)}
-                  {type3MonthlyBudget > 0 && (
-                    <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(type3MonthlyBudget)}</span>
-                  )}
-                </span>
-              </div>
-            )}
+            </Link>
             {(variablePoolFunded > 0 || type2MonthlyBudget > 0) && (
-              <div className="report-bilance-row" title="Součet plateb z Hlavního účtu na Nepravidelné — pool, ze kterého se platí roční výdaje. Plánovaná částka = roční plán ÷ 12.">
+              <Link to={txLink(`q=${VARIABLE_ACCOUNT_NUM}`)}
+                className="report-bilance-row"
+                style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                title="Součet plateb z Hlavního účtu na Nepravidelné — pool, ze kterého se platí roční výdaje. Plánovaná částka = roční plán ÷ 12.">
                 <span>Dotace Nepravidelné</span>
                 <span>
                   − {formatCurrency(variablePoolFunded)}
@@ -428,12 +437,29 @@ export default function ReportPage() {
                     <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(type2MonthlyBudget)}</span>
                   )}
                 </span>
-              </div>
+              </Link>
             )}
-            <div className={`report-bilance-row report-bilance-result ${savings.net >= 0 ? '' : 'text-danger'}`}>
+            {(totalType3 > 0 || type3MonthlyBudget > 0) && (
+              <Link to={txLink(typ3CatIds ? `category_ids=${typ3CatIds}` : '')}
+                className="report-bilance-row"
+                style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                title="Klik: transakce Typ 3 (drahé věci / fondy) v období">
+                <span>Drahé věci</span>
+                <span>
+                  − {formatCurrency(totalType3)}
+                  {type3MonthlyBudget > 0 && (
+                    <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(type3MonthlyBudget)}</span>
+                  )}
+                </span>
+              </Link>
+            )}
+            <Link to={txLink(`q=${SAVINGS_ACCOUNT_NUM}`)}
+              className={`report-bilance-row report-bilance-result ${savings.net >= 0 ? '' : 'text-danger'}`}
+              style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+              title="Klik: transakce na spořicím účtu v období (převody, ze kterých vychází výsledek)">
               <span>Skutečně naspořeno</span>
               <span>{savings.net >= 0 ? '+' : '−'} {formatCurrency(Math.abs(savings.net))}</span>
-            </div>
+            </Link>
             <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
               Výsledek je měřené netto převodů, ne aritmetický rozdíl rozpadu výše.
             </div>
@@ -703,6 +729,37 @@ export default function ReportPage() {
             })()}
           </section>
 
+          {/* ── DRAHÉ VĚCI (Typ 3) ── */}
+          {type3Spent.length > 0 && (
+            <section className="report-section">
+              <div className="report-section-header">
+                <h2 className="report-section-title">Drahé věci</h2>
+              </div>
+              <div className="report-budget-list">
+                {type3Spent.map(c => (
+                  <Link key={c.id} to={`/transactions?category_id=${c.id}` + (period ? `&period=${period}` : '')}
+                    className="report-budget-row"
+                    style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}>
+                    <span className="report-budget-dot" style={{ background: c.color || '#6366f1' }} />
+                    <span className="report-budget-name">{c.name}</span>
+                    <span className="report-budget-spent">{formatCurrency(c.spent)}</span>
+                    <span className="report-budget-limit" />
+                    <span className="report-budget-status" />
+                  </Link>
+                ))}
+              </div>
+              <div className="report-subtotal">
+                <span>Drahé věci celkem</span>
+                <span>
+                  {formatCurrency(totalType3)}
+                  {type3MonthlyBudget > 0 && (
+                    <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(type3MonthlyBudget)}</span>
+                  )}
+                </span>
+              </div>
+            </section>
+          )}
+
           {/* ── ROČNÍ / SEZÓNNÍ (Typ 2) ── */}
           {type2Cats.length > 0 && (
             <section className="report-section">
@@ -738,37 +795,6 @@ export default function ReportPage() {
                   {formatCurrency(totalType2)}
                   {type2MonthlyBudget > 0 && (
                     <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(type2MonthlyBudget)}</span>
-                  )}
-                </span>
-              </div>
-            </section>
-          )}
-
-          {/* ── DRAHÉ VĚCI (Typ 3) ── */}
-          {type3Spent.length > 0 && (
-            <section className="report-section">
-              <div className="report-section-header">
-                <h2 className="report-section-title">Drahé věci</h2>
-              </div>
-              <div className="report-budget-list">
-                {type3Spent.map(c => (
-                  <Link key={c.id} to={`/transactions?category_id=${c.id}` + (period ? `&period=${period}` : '')}
-                    className="report-budget-row"
-                    style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}>
-                    <span className="report-budget-dot" style={{ background: c.color || '#6366f1' }} />
-                    <span className="report-budget-name">{c.name}</span>
-                    <span className="report-budget-spent">{formatCurrency(c.spent)}</span>
-                    <span className="report-budget-limit" />
-                    <span className="report-budget-status" />
-                  </Link>
-                ))}
-              </div>
-              <div className="report-subtotal">
-                <span>Drahé věci celkem</span>
-                <span>
-                  {formatCurrency(totalType3)}
-                  {type3MonthlyBudget > 0 && (
-                    <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(type3MonthlyBudget)}</span>
                   )}
                 </span>
               </div>

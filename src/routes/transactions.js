@@ -9,12 +9,14 @@ const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
 // GET /api/transactions?from=...&to=...&category_id=&category_ids=1,2,none&amount_min=&amount_max=&limit=&offset=
 router.get('/', requireAuth, (req, res) => {
-  const { from, to, category_id, category_ids, amount_min, amount_max, q, limit = 200, offset = 0 } = req.query;
+  const { from, to, category_id, category_ids, amount_min, amount_max, q, direction, limit = 200, offset = 0 } = req.query;
   let query = 'SELECT t.*, c.name as category_name, c.color as category_color FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.user_id = ?';
   const params = [req.user.id];
 
   if (from) { query += ' AND t.date >= ?'; params.push(from); }
   if (to)   { query += ' AND t.date <= ?'; params.push(to); }
+  if (direction === 'in')  query += ' AND t.amount > 0';
+  if (direction === 'out') query += ' AND t.amount < 0';
 
   // Full-text vyhledávání napříč textovými poli (vč. názvu kategorie)
   if (q !== undefined && String(q).trim() !== '') {
