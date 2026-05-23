@@ -176,30 +176,80 @@ function IncomeSourceForm({ initial, onSave, onCancel }) {
     finally { setSaving(false); }
   }
 
+  const labelStyle = { fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 4, display: 'block' };
+  const hintStyle = { fontSize: 11, color: 'var(--text2)', marginTop: 4, display: 'block', lineHeight: 1.4 };
+
   return (
-    <form className="income-form" onSubmit={handleSubmit}>
-      {error && <div className="alert alert-error" style={{ marginBottom: 8 }}>{error}</div>}
-      <div className="income-form-row">
-        <input className="input" placeholder="Kdo / zdroj (Tom, Martin, Sudo nájem…)"
-          value={person} onChange={e => setPerson(e.target.value)} autoFocus style={{ flex: 1 }} />
-        <input className="input" type="number" min="0" step="1" placeholder="Plán"
-          value={planned} onChange={e => setPlanned(e.target.value)} style={{ maxWidth: 130 }} />
-        <input className="input" placeholder="Pattern transakce (volitelně)"
-          value={matchPattern} onChange={e => setMatchPattern(e.target.value)} style={{ maxWidth: 200 }} />
-        <input className="input" placeholder="Číslo protiúčtu (volitelné)"
-          value={matchCounterparty} onChange={e => setMatchCounterparty(e.target.value)}
-          title="Přesná shoda – má přednost před textem popisu"
-          style={{ maxWidth: 180 }} />
-        <select className="input" value={accountId} onChange={e => setAccountId(e.target.value)}
-          title="Omezit alias jen na převody do tohoto cílového účtu"
-          style={{ maxWidth: 180 }}>
-          <option value="">— libovolný účet —</option>
-          {accounts.map(a => (
-            <option key={a.id} value={a.id}>{a.name}</option>
-          ))}
-        </select>
-        <button type="submit" className="btn btn-primary btn-icon" disabled={saving}><Check size={15} /></button>
-        <button type="button" className="btn btn-ghost btn-icon" onClick={onCancel}><X size={15} /></button>
+    <form className="card income-form" onSubmit={handleSubmit} style={{ maxWidth: 560 }}>
+      {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>{error}</div>}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div>
+          <label style={labelStyle}>Kdo / zdroj</label>
+          <input className="input" value={person} onChange={e => setPerson(e.target.value)} autoFocus
+            placeholder="Tom, Martin, Sudo nájem…" />
+          <span style={hintStyle}>
+            Jméno osoby nebo název zdroje. Zobrazí se jako řádek v sekci Příjmy na Schůzce.
+          </span>
+        </div>
+
+        <div>
+          <label style={labelStyle}>Plánovaná částka (Kč / měsíc)</label>
+          <input className="input" type="number" min="0" step="1"
+            value={planned} onChange={e => setPlanned(e.target.value)}
+            placeholder="162000" style={{ maxWidth: 180 }} />
+          <span style={hintStyle}>
+            Očekávaný měsíční příjem. Když skutečnost neodpovídá, řádek dostane status
+            ✅ (dorazilo), ⚠️ (nižší než plán) nebo ❌ (nepřišlo). Nech 0, pokud nechceš porovnání plánu.
+          </span>
+        </div>
+
+        <div>
+          <label style={labelStyle}>Pattern v popisu transakce (volitelné)</label>
+          <input className="input" value={matchPattern} onChange={e => setMatchPattern(e.target.value)}
+            placeholder="např. Bísek" />
+          <span style={hintStyle}>
+            Hledá tento podřetězec v <strong>popisu</strong> příchozí transakce. Použij, když nemáš
+            číslo protiúčtu (např. Martinova výplata má v popisu „Bísek Libor"). Velikost písmen
+            i diakritika musí přesně sedět.
+          </span>
+        </div>
+
+        <div>
+          <label style={labelStyle}>Číslo protiúčtu (volitelné)</label>
+          <input className="input" value={matchCounterparty} onChange={e => setMatchCounterparty(e.target.value)}
+            placeholder="např. 1679014031" style={{ maxWidth: 220 }} />
+          <span style={hintStyle}>
+            Přesná shoda na číslo účtu odesílatele. <strong>Má přednost před patternem v popisu.</strong>
+            Spolehlivější, protože popis banka může měnit, číslo účtu ne.
+          </span>
+        </div>
+
+        <div>
+          <label style={labelStyle}>Cílový účet (volitelné)</label>
+          <select className="input" value={accountId} onChange={e => setAccountId(e.target.value)}
+            style={{ maxWidth: 280 }}>
+            <option value="">— libovolný účet —</option>
+            {accounts.map(a => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+          <span style={hintStyle}>
+            Omezí alias jen na převody, které <strong>dorazily na tento konkrétní účet</strong>.
+            Užitečné, když ti odesílatel posílá na víc tvých účtů a chceš započítat jen jeden
+            (např. OSVČ → Hlavní jako příjem, OSVČ → Spořicí ignorovat).
+            „— libovolný účet —" znamená matchnout libovolnou destinaci.
+          </span>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+        <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
+          <Check size={14} /> {saving ? 'Ukládám…' : 'Uložit'}
+        </button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>
+          <X size={14} /> Zrušit
+        </button>
       </div>
     </form>
   );
