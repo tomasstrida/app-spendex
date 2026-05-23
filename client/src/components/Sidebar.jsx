@@ -12,6 +12,7 @@ import {
   Settings,
   LogOut,
   CopyX,
+  Wallet,
 } from 'lucide-react';
 
 const navGroups = [
@@ -28,6 +29,7 @@ const navGroups = [
     items: [
       { to: '/categories', icon: Tag,       label: t.nav.categories },
       { to: '/budgets',    icon: PiggyBank, label: t.nav.budgets },
+      { to: '/accounts',   icon: Wallet,    label: t.nav.accounts },
       { to: '/import',     icon: Upload,    label: t.nav.import },
       { to: '/duplicates', icon: CopyX,     label: t.nav.duplicates },
       { to: '/settings',   icon: Settings,  label: t.nav.settings },
