@@ -217,8 +217,10 @@ export default function ImportPage() {
     try {
       // Parsuj každý soubor zvlášť přes stávající preview endpoint
       const previews = [];
+      const rawTexts = [];
       for (const file of files) {
         const text = await file.text();
+        rawTexts.push(text);
         const r = await fetch('/api/import/preview', {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain' },
@@ -242,6 +244,7 @@ export default function ImportPage() {
           : detected;
         return {
           name: files[i].name,
+          rawCsv: rawTexts[i],
           transactions: p.transactions || [],
           detectedIds,
           accountId,
@@ -302,6 +305,8 @@ export default function ImportPage() {
             category_map: map,
             skip_incoming: skipIncoming,
             account_id: f.accountId,
+            raw_csv: f.rawCsv,
+            filename: f.name,
           }),
         });
         const d = await r.json();
