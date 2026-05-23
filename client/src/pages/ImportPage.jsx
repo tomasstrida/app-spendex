@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Upload, Check, AlertCircle, Plus, Pencil, Trash2, X } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Upload, Check, AlertCircle, Plus, Pencil, Trash2, X, Download } from 'lucide-react';
 import Layout from '../components/Layout';
 import { formatCurrency } from '../i18n';
 
@@ -199,10 +199,20 @@ export default function ImportPage() {
   const [error, setError] = useState('');
   const fileRef = useRef();
 
+  const [archive, setArchive] = useState([]);
+
+  const loadArchive = useCallback(() => {
+    fetch('/api/import/archive')
+      .then(r => r.ok ? r.json() : [])
+      .then(setArchive)
+      .catch(() => setArchive([]));
+  }, []);
+
   useEffect(() => {
     fetch('/api/categories').then(r => r.json()).then(setCategories);
     fetch('/api/accounts').then(r => r.json()).then(setAccounts);
-  }, []);
+    loadArchive();
+  }, [loadArchive]);
 
   async function handleFiles(e) {
     const files = Array.from(e.target.files || []);
@@ -315,6 +325,7 @@ export default function ImportPage() {
         skipped += d.skipped;
       }
       setResult({ imported, skipped });
+      loadArchive();
       setStep(STEP.DONE);
     } catch {
       setError('Chyba při importu.');
@@ -325,6 +336,14 @@ export default function ImportPage() {
 
   function handleAccountUpdated(acc) {
     setAccounts(prev => prev.map(a => a.id === acc.id ? acc : a));
+  }
+
+  async function handleDeleteArchive(item) {
+    if (!confirm(`Smazat archiv „${item.filename}"? Transakce zůstanou.`)) return;
+    try {
+      const r = await fetch(`/api/import/archive/${item.id}`, { method: 'DELETE' });
+      if (r.ok) loadArchive();
+    } catch { /* tichá */ }
   }
 
   function reset() {
@@ -485,6 +504,56 @@ export default function ImportPage() {
           </button>
         </div>
       )}
+
+      {/* Archiv výpisů — vždy viditelný */}
+      <section style={{ marginTop: 40 }}>
+        <h2 className="page-title" style={{ fontSize: 18, marginBottom: 12 }}>Archiv výpisů</h2>
+        {archive.length === 0 ? (
+          <p className="text-muted" style={{ fontSize: 13 }}>
+            Archiv je prázdný. Po prvním importu se sem ukládají originální CSV.
+          </p>
+        ) : (
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ color: 'var(--text2)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>
+                  <th style={{ textAlign: 'left', padding: '10px 12px' }}>Soubor</th>
+                  <th style={{ textAlign: 'left', padding: '10px 12px' }}>Zdroj</th>
+                  <th style={{ textAlign: 'left', padding: '10px 12px' }}>Účet</th>
+                  <th style={{ textAlign: 'left', padding: '10px 12px' }}>Nahráno</th>
+                  <th style={{ textAlign: 'right', padding: '10px 12px' }}>#Tx</th>
+                  <th style={{ textAlign: 'right', padding: '10px 12px' }}>Velikost</th>
+                  <th style={{ padding: '10px 12px' }} />
+                </tr>
+              </thead>
+              <tbody>
+                {archive.map(item => (
+                  <tr key={item.id} style={{ borderTop: '1px solid var(--border)' }}>
+                    <td style={{ padding: '8px 12px', wordBreak: 'break-all' }}>{item.filename}</td>
+                    <td style={{ padding: '8px 12px' }} className="text-muted">{item.source}</td>
+                    <td style={{ padding: '8px 12px' }} className="text-muted">{item.account_name || '—'}</td>
+                    <td style={{ padding: '8px 12px' }} className="text-muted">{item.uploaded_at}</td>
+                    <td style={{ padding: '8px 12px', textAlign: 'right' }}>{item.parsed_tx_count}</td>
+                    <td style={{ padding: '8px 12px', textAlign: 'right' }} className="text-muted">
+                      {(item.size_bytes / 1024).toFixed(1)} KB
+                    </td>
+                    <td style={{ padding: '8px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <a className="btn btn-ghost btn-icon" href={`/api/import/archive/${item.id}/download`}
+                         title="Stáhnout originál CSV">
+                        <Download size={14} />
+                      </a>
+                      <button className="btn btn-ghost btn-icon" onClick={() => handleDeleteArchive(item)}
+                        title="Smazat z archivu (transakce zůstanou)">
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </Layout>
   );
 }
