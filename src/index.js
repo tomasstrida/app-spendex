@@ -20,7 +20,7 @@ const PORT = process.env.PORT || 3000;
 app.set('trust proxy', 1);
 
 // --- Middleware ---
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 const SESSION_DB_PATH = process.env.SESSION_DB_PATH || path.join(__dirname, '../sessions.db');

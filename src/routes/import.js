@@ -60,7 +60,7 @@ router.post('/preview', requireAuth, express.text({ limit: '10mb', type: '*/*' }
 });
 
 // POST /api/import/confirm
-router.post('/confirm', requireAuth, express.json({ limit: '10mb' }), (req, res) => {
+router.post('/confirm', requireAuth, (req, res) => {
   const { transactions, category_map = {}, skip_incoming = true, account_id = null, raw_csv = null, filename = null } = req.body;
   if (!Array.isArray(transactions)) return res.status(400).json({ error: 'Neplatná data.' });
 
