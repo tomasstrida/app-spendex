@@ -1,10 +1,13 @@
 const crypto = require('crypto');
 const express = require('express');
 const router = express.Router();
+const rateLimit = require('express-rate-limit');
 const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
 const { parseAirBankCSV } = require('../utils/csvParser');
 const { buildExternalId } = require('../utils/externalId');
+
+const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
 // POST /api/import/preview
 router.post('/preview', requireAuth, express.text({ limit: '10mb', type: '*/*' }), (req, res) => {
