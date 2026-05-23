@@ -136,3 +136,46 @@ test('izolace mezi uživateli', () => {
   cleanup(db, tmp);
   assert.equal(rows.length, 0);
 });
+
+test('alias s account_id matchne JEN tx na daný účet (OSVČ→Hlavní, ne OSVČ→Spořicí)', () => {
+  const { db, tmp } = freshDb();
+  seedUser(db);
+  db.prepare("INSERT INTO accounts (id, user_id, name, account_number, role) VALUES (10, 1, 'Hlavní', '1679014138', 'ignored')").run();
+  db.prepare("INSERT INTO accounts (id, user_id, name, account_number, role) VALUES (11, 1, 'Spořicí', '1679014082', 'ignored')").run();
+  db.prepare("INSERT INTO accounts (id, user_id, name, account_number, role) VALUES (12, 1, 'OSVC', '1679014031', 'income')").run();
+  // 2 incoming from OSVC: one to Hlavní (162k), one to Spořicí (50k).
+  db.prepare("INSERT INTO transactions (user_id, account_id, amount, date, description, counterparty_account) VALUES (1, 10, 162000, '2026-04-05', 'Tom - OSVC', '1679014031')").run();
+  db.prepare("INSERT INTO transactions (user_id, account_id, amount, date, description, counterparty_account) VALUES (1, 11, 50000, '2026-04-06', 'Tom - OSVC', '1679014031')").run();
+  // Alias s constraintem na cílový účet Hlavní (id=10).
+  db.prepare("INSERT INTO income_sources (user_id, person, planned_amount, match_pattern, match_counterparty_account, account_id, sort_order) VALUES (1, 'Tom', 162000, NULL, '1679014031', 10, 1)").run();
+
+  const { incomeSourcesForPeriod } = require('./income');
+  const rows = incomeSourcesForPeriod(db, 1, '2026-04', 1);
+  cleanup(db, tmp);
+  // 2 řádky: aliased Tom (jen 162k z Hlavního) + auto-only pro Spořicí (50k).
+  const aliasRow = rows.find(r => r.person === 'Tom');
+  const autoSpor = rows.find(r => r.id == null && r.account_id === 11);
+  assert.ok(aliasRow, 'alias Tom musí existovat');
+  assert.equal(aliasRow.actual, 162000);
+  assert.equal(aliasRow.tx_count, 1);
+  assert.equal(aliasRow.status, 'ok');
+  assert.ok(autoSpor, 'OSVČ→Spořicí musí být auto-only (neaplikovaný alias)');
+  assert.equal(autoSpor.actual, 50000);
+});
+
+test('alias bez account_id (null) matchne libovolnou destinaci — backward compat', () => {
+  const { db, tmp } = freshDb();
+  seedUser(db);
+  db.prepare("INSERT INTO accounts (id, user_id, name, account_number, role) VALUES (10, 1, 'Hlavní', '1679014138', 'ignored')").run();
+  db.prepare("INSERT INTO accounts (id, user_id, name, account_number, role) VALUES (11, 1, 'OSVC', '1679014031', 'income')").run();
+  db.prepare("INSERT INTO transactions (user_id, account_id, amount, date, description, counterparty_account) VALUES (1, 10, 100000, '2026-04-05', 'Tom', '1679014031')").run();
+  db.prepare("INSERT INTO income_sources (user_id, person, planned_amount, match_counterparty_account, sort_order) VALUES (1, 'Tom', 100000, '1679014031', 1)").run();
+
+  const { incomeSourcesForPeriod } = require('./income');
+  const rows = incomeSourcesForPeriod(db, 1, '2026-04', 1);
+  cleanup(db, tmp);
+  // 1 řádek: aliased Tom, account_id alias je null, takže matchne.
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].person, 'Tom');
+  assert.equal(rows[0].actual, 100000);
+});

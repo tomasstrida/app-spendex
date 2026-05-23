@@ -145,8 +145,14 @@ function IncomeSourceForm({ initial, onSave, onCancel }) {
   const [planned, setPlanned] = useState(initial?.planned_amount != null ? String(initial.planned_amount) : '');
   const [matchPattern, setMatchPattern] = useState(initial?.match_pattern || '');
   const [matchCounterparty, setMatchCounterparty] = useState(initial?.match_counterparty_account || '');
+  const [accountId, setAccountId] = useState(initial?.account_id != null ? String(initial.account_id) : '');
+  const [accounts, setAccounts] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    fetch('/api/accounts').then(r => r.ok ? r.json() : []).then(setAccounts).catch(() => setAccounts([]));
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -160,6 +166,7 @@ function IncomeSourceForm({ initial, onSave, onCancel }) {
         planned_amount: parseFloat(planned) || 0,
         match_pattern: matchPattern.trim() || null,
         match_counterparty_account: matchCounterparty.trim() || null,
+        account_id: accountId === '' ? null : parseInt(accountId),
       };
       const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const d = await r.json();
@@ -183,6 +190,14 @@ function IncomeSourceForm({ initial, onSave, onCancel }) {
           value={matchCounterparty} onChange={e => setMatchCounterparty(e.target.value)}
           title="Přesná shoda – má přednost před textem popisu"
           style={{ maxWidth: 180 }} />
+        <select className="input" value={accountId} onChange={e => setAccountId(e.target.value)}
+          title="Omezit alias jen na převody do tohoto cílového účtu"
+          style={{ maxWidth: 180 }}>
+          <option value="">— libovolný účet —</option>
+          {accounts.map(a => (
+            <option key={a.id} value={a.id}>{a.name}</option>
+          ))}
+        </select>
         <button type="submit" className="btn btn-primary btn-icon" disabled={saving}><Check size={15} /></button>
         <button type="button" className="btn btn-ghost btn-icon" onClick={onCancel}><X size={15} /></button>
       </div>

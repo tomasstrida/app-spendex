@@ -234,6 +234,7 @@ function initSchema() {
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_user_name ON categories(user_id, name)',
     'ALTER TABLE fixed_expenses ADD COLUMN match_pattern TEXT',
     'ALTER TABLE income_sources ADD COLUMN match_counterparty_account TEXT',
+    'ALTER TABLE income_sources ADD COLUMN account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL',
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* sloupec/index již existuje nebo nelze aplikovat */ }

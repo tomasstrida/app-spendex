@@ -13,63 +13,60 @@ function normCounterparty(s) {
 }
 
 /**
- * Vrátí příjmy uživatele za období: kombinace auto-detekce z transakcí
- * + případné ruční aliasy z income_sources (na základě match_counterparty_account
- * nebo match_pattern).
+ * Vrátí příjmy uživatele za období: auto-detekce z transakcí + ruční aliasy
+ * z income_sources (match_counterparty_account / match_pattern / account_id).
  *
  * Pravidla:
- *  - Incoming transakce = amount > 0 na libovolném účtu uživatele.
- *  - Interní převod (vyloučeno): counterparty se shoduje s vlastním účtem
- *    s rolí spending/fixed/ignored.
- *  - Counterparty NEní v účtech, NEBO je v účtech s rolí 'income' → příjem.
- *  - Group key = normalizovaný counterparty, fallback = description.
- *  - Pro každou skupinu vyhledej ruční alias (income_source):
- *      1) match_counterparty_account == group_key (přednost),
- *      2) jinak match_pattern matchuje description některé tx ve skupině.
- *  - Pokud alias: použij person, planned_amount, status; jinak auto-only.
- *  - Ruční zdroje bez auto-shody (planned ale neviděn): vrátit actual=0, status='missing' nebo null.
+ *  - Incoming = amount > 0 na libovolném účtu uživatele.
+ *  - Interní převod (vyloučeno): counterparty == vlastní účet s rolí
+ *    spending/fixed/ignored. Účet s rolí 'income' = whitelisted source.
+ *  - Skupina = (counterparty | description fallback) × cílový account_id.
+ *  - Alias matchne, pokud counterparty/pattern sedí AND (alias.account_id == null
+ *    NEBO alias.account_id == group.account_id).
  */
 function incomeSourcesForPeriod(db, userId, period, billingDay) {
   const { start, end } = getPeriodDates(billingDay, period);
 
-  // Načti účty uživatele a roli — k vyloučení interních převodů a k uznání income účtů.
   const accounts = db.prepare(
-    'SELECT id, account_number, role FROM accounts WHERE user_id = ? AND account_number IS NOT NULL'
+    'SELECT id, account_number, name, role FROM accounts WHERE user_id = ?'
   ).all(userId);
   const internalRoles = new Set(['spending', 'fixed', 'ignored']);
   const internalNumbers = new Set();
   const incomeAccountNumbers = new Set();
+  const accountNameById = new Map();
   for (const a of accounts) {
+    accountNameById.set(a.id, a.name);
     const num = normCounterparty(a.account_number);
     if (!num) continue;
     if (a.role === 'income') incomeAccountNumbers.add(num);
     else if (internalRoles.has(a.role)) internalNumbers.add(num);
   }
 
-  // Načti incoming transakce v období pro uživatele.
   const txs = db.prepare(`
-    SELECT id, amount, date, description, counterparty_account
+    SELECT id, amount, date, description, counterparty_account, account_id
     FROM transactions
     WHERE user_id = ? AND amount > 0 AND date >= ? AND date <= ?
   `).all(userId, start, end);
 
-  // Filtruj na "skutečné příjmy" (vyloučí interní převody mezi spending/fixed/ignored).
   const incomeTxs = txs.filter(t => {
     const cp = normCounterparty(t.counterparty_account);
     if (cp && internalNumbers.has(cp) && !incomeAccountNumbers.has(cp)) return false;
     return true;
   });
 
-  // Seskup podle counterparty (fallback description). Klíč skupiny je string.
-  const groups = new Map(); // key -> { key, kind: 'counterparty'|'description', display, total, tx_count, descriptions:Set }
+  // Group key = (counterparty|description fallback) × account_id (destination).
+  const groups = new Map();
   for (const t of incomeTxs) {
     const cp = normCounterparty(t.counterparty_account);
-    const key = cp ? `cp:${cp}` : `desc:${(t.description || '').trim() || '(bez popisu)'}`;
+    const keyPart = cp ? `cp:${cp}` : `desc:${(t.description || '').trim() || '(bez popisu)'}`;
+    const accPart = `acc:${t.account_id == null ? 'null' : t.account_id}`;
+    const key = `${keyPart}|${accPart}`;
     let g = groups.get(key);
     if (!g) {
       g = {
         key,
         counterparty: cp,
+        account_id: t.account_id == null ? null : t.account_id,
         display: cp ? cp : ((t.description || '').trim() || '(bez popisu)'),
         total: 0,
         tx_count: 0,
@@ -82,25 +79,31 @@ function incomeSourcesForPeriod(db, userId, period, billingDay) {
     if (t.description) g.descriptions.add(t.description);
   }
 
-  // Načti ruční income_sources a aplikuj alias.
   const sources = db.prepare(
-    'SELECT id, person, planned_amount, match_pattern, match_counterparty_account, sort_order FROM income_sources WHERE user_id = ? ORDER BY sort_order ASC, id ASC'
+    'SELECT id, person, planned_amount, match_pattern, match_counterparty_account, account_id, sort_order FROM income_sources WHERE user_id = ? ORDER BY sort_order ASC, id ASC'
   ).all(userId);
   const usedSourceIds = new Set();
+  const groupSource = new Map();
 
-  // Pro každou auto-skupinu najdi první matching alias (counterparty má přednost).
-  const groupSource = new Map(); // group.key -> source row
+  function matchAccountConstraint(alias, g) {
+    if (alias.account_id == null) return true;
+    return alias.account_id === g.account_id;
+  }
+
   for (const g of groups.values()) {
     let matched = null;
     if (g.counterparty) {
       matched = sources.find(s => {
+        if (usedSourceIds.has(s.id)) return false;
         const sn = normCounterparty(s.match_counterparty_account);
-        return sn && sn === g.counterparty && !usedSourceIds.has(s.id);
+        if (!sn || sn !== g.counterparty) return false;
+        return matchAccountConstraint(s, g);
       });
     }
     if (!matched) {
       matched = sources.find(s => {
         if (!s.match_pattern || usedSourceIds.has(s.id)) return false;
+        if (!matchAccountConstraint(s, g)) return false;
         const p = s.match_pattern;
         for (const d of g.descriptions) {
           if (d && d.indexOf(p) >= 0) return true;
@@ -114,24 +117,24 @@ function incomeSourcesForPeriod(db, userId, period, billingDay) {
     }
   }
 
-  // Sestav výstupní řádky: nejprve ruční zdroje (po sort_order), pak auto-only skupiny.
   const out = [];
   for (const s of sources) {
+    const accountName = s.account_id != null ? (accountNameById.get(s.account_id) || null) : null;
     if (!usedSourceIds.has(s.id)) {
-      // Ruční zdroj bez auto-shody.
       out.push({
         id: s.id,
         person: s.person,
         planned_amount: s.planned_amount,
         match_pattern: s.match_pattern,
         match_counterparty_account: s.match_counterparty_account,
+        account_id: s.account_id,
+        account_name: accountName,
         actual: 0,
         tx_count: 0,
         status: s.planned_amount > 0 ? incomeStatus(s.planned_amount, 0, 0) : null,
         sort_order: s.sort_order,
       });
     } else {
-      // Najdi auto-skupinu, ke které byl tento zdroj přiřazen.
       let g = null;
       for (const [key, src] of groupSource.entries()) {
         if (src.id === s.id) { g = groups.get(key); break; }
@@ -142,6 +145,8 @@ function incomeSourcesForPeriod(db, userId, period, billingDay) {
         planned_amount: s.planned_amount,
         match_pattern: s.match_pattern,
         match_counterparty_account: s.match_counterparty_account,
+        account_id: s.account_id,
+        account_name: accountName,
         actual: g.total,
         tx_count: g.tx_count,
         status: s.planned_amount > 0 ? incomeStatus(s.planned_amount, g.total, g.tx_count) : null,
@@ -150,16 +155,18 @@ function incomeSourcesForPeriod(db, userId, period, billingDay) {
     }
   }
 
-  // Auto-only skupiny (bez ruční shody) seřazené sestupně dle total.
   const autoOnly = [];
   for (const [key, g] of groups.entries()) {
     if (groupSource.has(key)) continue;
+    const accountName = g.account_id ? (accountNameById.get(g.account_id) || null) : null;
     autoOnly.push({
       id: null,
       person: g.display,
       planned_amount: null,
       match_pattern: null,
       match_counterparty_account: g.counterparty,
+      account_id: g.account_id,
+      account_name: accountName,
       actual: g.total,
       tx_count: g.tx_count,
       status: null,
