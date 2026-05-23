@@ -179,4 +179,37 @@ router.delete('/mappings/:id', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// GET /api/import/archive – seznam archivovaných CSV pro uživatele
+router.get('/archive', requireAuth, (req, res) => {
+  const rows = db.prepare(`
+    SELECT a.id, a.filename, a.source, a.account_id, a.uploaded_at,
+           a.file_hash, a.parsed_tx_count, LENGTH(a.content) AS size_bytes,
+           acc.name AS account_name
+    FROM csv_archive a
+    LEFT JOIN accounts acc ON acc.id = a.account_id
+    WHERE a.user_id = ?
+    ORDER BY a.uploaded_at DESC, a.id DESC
+  `).all(req.user.id);
+  res.json(rows);
+});
+
+// GET /api/import/archive/:id/download – stáhne originál CSV
+router.get('/archive/:id/download', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT filename, content FROM csv_archive WHERE id = ? AND user_id = ?')
+    .get(req.params.id, req.user.id);
+  if (!row) return res.status(404).json({ error: 'Záznam nenalezen.' });
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${row.filename.replace(/"/g, '')}"`);
+  res.send(row.content);
+});
+
+// DELETE /api/import/archive/:id – smaže záznam archivu (transakce zůstávají)
+router.delete('/archive/:id', requireAuth, writeLimiter, (req, res) => {
+  const row = db.prepare('SELECT id FROM csv_archive WHERE id = ? AND user_id = ?')
+    .get(req.params.id, req.user.id);
+  if (!row) return res.status(404).json({ error: 'Záznam nenalezen.' });
+  db.prepare('DELETE FROM csv_archive WHERE id = ?').run(row.id);
+  res.json({ ok: true });
+});
+
 module.exports = router;
