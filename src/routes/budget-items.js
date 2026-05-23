@@ -40,7 +40,21 @@ router.get('/', requireAuth, (req, res) => {
     return { ...item, spent, window_from: from, window_to: to };
   });
 
-  res.json({ year, items: result });
+  // Roční čerpání per kategorie (Typ 2): součet odchozích za celý kalendářní rok.
+  // Klíč = category_id (number), hodnota = celkové utraceno v daném roce.
+  const annualSpent = db.prepare(`
+    SELECT t.category_id, COALESCE(SUM(ABS(t.amount)), 0) AS spent
+    FROM transactions t
+    JOIN categories c ON c.id = t.category_id
+    WHERE t.user_id = ? AND c.user_id = ? AND c.type = 2
+      AND t.amount < 0 AND t.date >= ? AND t.date <= ?
+      AND t.category_id IS NOT NULL
+    GROUP BY t.category_id
+  `).all(req.user.id, req.user.id, `${year}-01-01`, `${year}-12-31`);
+  const category_year_spent = {};
+  for (const r of annualSpent) category_year_spent[r.category_id] = r.spent;
+
+  res.json({ year, items: result, category_year_spent });
 });
 
 // POST /api/budget-items
