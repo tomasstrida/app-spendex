@@ -144,6 +144,7 @@ function IncomeSourceForm({ initial, onSave, onCancel }) {
   const [person, setPerson] = useState(initial?.person || '');
   const [planned, setPlanned] = useState(initial?.planned_amount != null ? String(initial.planned_amount) : '');
   const [matchPattern, setMatchPattern] = useState(initial?.match_pattern || '');
+  const [matchCounterparty, setMatchCounterparty] = useState(initial?.match_counterparty_account || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -158,6 +159,7 @@ function IncomeSourceForm({ initial, onSave, onCancel }) {
         person: person.trim(),
         planned_amount: parseFloat(planned) || 0,
         match_pattern: matchPattern.trim() || null,
+        match_counterparty_account: matchCounterparty.trim() || null,
       };
       const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const d = await r.json();
@@ -177,6 +179,10 @@ function IncomeSourceForm({ initial, onSave, onCancel }) {
           value={planned} onChange={e => setPlanned(e.target.value)} style={{ maxWidth: 130 }} />
         <input className="input" placeholder="Pattern transakce (volitelně)"
           value={matchPattern} onChange={e => setMatchPattern(e.target.value)} style={{ maxWidth: 200 }} />
+        <input className="input" placeholder="Číslo protiúčtu (volitelné)"
+          value={matchCounterparty} onChange={e => setMatchCounterparty(e.target.value)}
+          title="Přesná shoda – má přednost před textem popisu"
+          style={{ maxWidth: 180 }} />
         <button type="submit" className="btn btn-primary btn-icon" disabled={saving}><Check size={15} /></button>
         <button type="button" className="btn btn-ghost btn-icon" onClick={onCancel}><X size={15} /></button>
       </div>
@@ -380,12 +386,13 @@ export default function ReportPage() {
               </p>
             ) : (
               <div className="report-income-list">
-                {incomeSources.map(row => (
-                  editIncome?.id === row.id ? (
-                    <IncomeSourceForm key={row.id} initial={row}
+                {incomeSources.map(row => {
+                  const rowKey = row.id != null ? `id-${row.id}` : `auto-${row.person || 'unknown'}`;
+                  return editIncome?.id === row.id && row.id != null ? (
+                    <IncomeSourceForm key={rowKey} initial={row}
                       onSave={handleIncomeSaved} onCancel={() => setEditIncome(null)} />
                   ) : (
-                    <div key={row.id} className="report-income-row">
+                    <div key={rowKey} className="report-income-row">
                       {row.status && <span title={row.status}>{FIXED_STATUS[row.status].icon}</span>}
                       <span className="report-income-person">{row.person}</span>
                       {row.status === 'mismatch' && (
@@ -398,16 +405,20 @@ export default function ReportPage() {
                         <span className="text-muted" style={{ fontSize: 12 }}>nepřišlo</span>
                       )}
                       <span className="report-income-amount">{formatCurrency(row.actual || 0)}</span>
-                      <button className="btn btn-ghost btn-icon"
-                        onClick={() => { setShowIncomeForm(false); setEditIncome(row); }}>
-                        <Pencil size={13} />
-                      </button>
-                      <button className="btn btn-ghost btn-icon" onClick={() => handleDeleteIncome(row.id)}>
-                        <Trash2 size={13} />
-                      </button>
+                      {row.id != null && (
+                        <>
+                          <button className="btn btn-ghost btn-icon"
+                            onClick={() => { setShowIncomeForm(false); setEditIncome(row); }}>
+                            <Pencil size={13} />
+                          </button>
+                          <button className="btn btn-ghost btn-icon" onClick={() => handleDeleteIncome(row.id)}>
+                            <Trash2 size={13} />
+                          </button>
+                        </>
+                      )}
                     </div>
-                  )
-                ))}
+                  );
+                })}
               </div>
             )}
             {incomeSources.some(i => i.status) && (() => {
