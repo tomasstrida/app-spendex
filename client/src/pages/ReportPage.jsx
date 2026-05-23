@@ -140,7 +140,7 @@ function FixedExpenseForm({ initial, onSave, onCancel }) {
 // ── Formulář příjmových zdrojů ────────────────────────────────────────────────
 
 function IncomeSourceForm({ initial, onSave, onCancel }) {
-  const isNew = !initial;
+  const isNew = !initial || !initial.id;
   const [person, setPerson] = useState(initial?.person || '');
   const [planned, setPlanned] = useState(initial?.planned_amount != null ? String(initial.planned_amount) : '');
   const [matchPattern, setMatchPattern] = useState(initial?.match_pattern || '');
@@ -205,6 +205,8 @@ export default function ReportPage() {
   const [loading, setLoading] = useState(true);
   const [showIncomeForm, setShowIncomeForm] = useState(false);
   const [editIncome, setEditIncome] = useState(null);
+  const [prefillIncome, setPrefillIncome] = useState(null); // pre-fill „Přidat" z auto-only řádku
+  const [unaliasedExpanded, setUnaliasedExpanded] = useState(false);
   const [showFixedForm, setShowFixedForm] = useState(false);
   const [editFixed, setEditFixed] = useState(null);
 
@@ -274,7 +276,11 @@ export default function ReportPage() {
   const chartData  = byCategory.filter(c => c.spent > 0);
 
   const totalFixed   = fixedExpenses.reduce((s, f) => s + f.amount, 0);
-  const totalIncome  = incomeSources.reduce((s, i) => s + (i.actual || 0), 0);
+  // Striktní whitelist: do bilance i sekce Příjmy vstupují jen ručně aliasované zdroje
+  const aliasedSources   = incomeSources.filter(s => s.id != null);
+  const unaliasedSources = incomeSources.filter(s => s.id == null);
+  const totalIncome      = aliasedSources.reduce((s, i) => s + (i.actual || 0), 0);
+  const unaliasedTotal   = unaliasedSources.reduce((s, i) => s + (i.actual || 0), 0);
   const totalType1       = budgets.reduce((s, b) => s + b.spent, 0);
   const totalType1Budget = budgets.reduce((s, b) => s + b.amount, 0);
   const totalType2   = type2Spent.reduce((s, c) => s + c.spent, 0);
@@ -372,23 +378,25 @@ export default function ReportPage() {
             <div className="report-section-header">
               <h2 className="report-section-title">Příjmy</h2>
               {!showIncomeForm && !editIncome && (
-                <button className="btn btn-ghost btn-sm" onClick={() => setShowIncomeForm(true)}>
+                <button className="btn btn-ghost btn-sm" onClick={() => { setPrefillIncome(null); setShowIncomeForm(true); }}>
                   <Plus size={14} /> Přidat
                 </button>
               )}
             </div>
             {showIncomeForm && !editIncome && (
-              <IncomeSourceForm onSave={handleIncomeSaved} onCancel={() => setShowIncomeForm(false)} />
+              <IncomeSourceForm initial={prefillIncome}
+                onSave={handleIncomeSaved}
+                onCancel={() => { setShowIncomeForm(false); setPrefillIncome(null); }} />
             )}
-            {incomeSources.length === 0 && !showIncomeForm ? (
+            {aliasedSources.length === 0 && !showIncomeForm ? (
               <p className="text-muted" style={{ fontSize: 13 }}>
                 Žádné příjmové zdroje. Přidejte Tom / Martin / Sudo nájem.
               </p>
             ) : (
               <div className="report-income-list">
-                {incomeSources.map(row => {
-                  const rowKey = row.id != null ? `id-${row.id}` : `auto-${row.person || 'unknown'}`;
-                  return editIncome?.id === row.id && row.id != null ? (
+                {aliasedSources.map(row => {
+                  const rowKey = `id-${row.id}`;
+                  return editIncome?.id === row.id ? (
                     <IncomeSourceForm key={rowKey} initial={row}
                       onSave={handleIncomeSaved} onCancel={() => setEditIncome(null)} />
                   ) : (
@@ -405,24 +413,20 @@ export default function ReportPage() {
                         <span className="text-muted" style={{ fontSize: 12 }}>nepřišlo</span>
                       )}
                       <span className="report-income-amount">{formatCurrency(row.actual || 0)}</span>
-                      {row.id != null && (
-                        <>
-                          <button className="btn btn-ghost btn-icon"
-                            onClick={() => { setShowIncomeForm(false); setEditIncome(row); }}>
-                            <Pencil size={13} />
-                          </button>
-                          <button className="btn btn-ghost btn-icon" onClick={() => handleDeleteIncome(row.id)}>
-                            <Trash2 size={13} />
-                          </button>
-                        </>
-                      )}
+                      <button className="btn btn-ghost btn-icon"
+                        onClick={() => { setShowIncomeForm(false); setEditIncome(row); }}>
+                        <Pencil size={13} />
+                      </button>
+                      <button className="btn btn-ghost btn-icon" onClick={() => handleDeleteIncome(row.id)}>
+                        <Trash2 size={13} />
+                      </button>
                     </div>
                   );
                 })}
               </div>
             )}
-            {incomeSources.some(i => i.status) && (() => {
-              const c = k => incomeSources.filter(i => i.status === k).length;
+            {aliasedSources.some(i => i.status) && (() => {
+              const c = k => aliasedSources.filter(i => i.status === k).length;
               return (
                 <div style={{ display: 'flex', gap: 16, fontSize: 13, marginTop: 4 }}>
                   {c('ok') > 0 && <span>✅ {c('ok')} přišlo</span>}
@@ -431,6 +435,45 @@ export default function ReportPage() {
                 </div>
               );
             })()}
+
+            {unaliasedSources.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <button className="btn btn-ghost btn-sm"
+                  onClick={() => setUnaliasedExpanded(e => !e)}
+                  style={{ fontSize: 12, padding: '4px 8px' }}
+                  title="Auto-detekované příchozí platby, které nejsou přiřazené k žádnému ručnímu zdroji. Nepočítají se do Příjmy celkem.">
+                  Detekováno {unaliasedSources.length} dalších plateb v součtu {formatCurrency(unaliasedTotal)} {unaliasedExpanded ? '▲' : '▼'}
+                </button>
+                {unaliasedExpanded && (
+                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4, paddingLeft: 8 }}>
+                    {unaliasedSources.map((row, i) => (
+                      <div key={`auto-${row.match_counterparty_account || row.person || i}`}
+                        className="report-income-row text-muted" style={{ fontSize: 12 }}>
+                        <span className="report-income-person">{row.person}</span>
+                        {row.tx_count > 1 && (
+                          <span style={{ fontSize: 11 }}>· {row.tx_count} plateb</span>
+                        )}
+                        <span className="report-income-amount">{formatCurrency(row.actual)}</span>
+                        <button className="btn btn-ghost btn-sm"
+                          title="Přidat jako trvalý příjem (pojmenovat a započítat)"
+                          onClick={() => {
+                            setPrefillIncome({
+                              person: '',
+                              planned_amount: 0,
+                              match_pattern: null,
+                              match_counterparty_account: row.match_counterparty_account || '',
+                            });
+                            setEditIncome(null);
+                            setShowIncomeForm(true);
+                          }}>
+                          <Plus size={12} /> Přidat
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div className="report-subtotal">
               <span>Příjmy celkem</span>
               <span>{formatCurrency(totalIncome)}</span>
