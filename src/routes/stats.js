@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
 const { getPeriodDates, getUserBillingDay, currentPeriodKey } = require('../utils/period');
-const { savingsNet, reserveBalance, savingsAccount, reserveAccount, reservePaidPatterns } = require('../utils/recurring');
+const { savingsNet, reserveBalance, savingsAccount, reserveAccount, reservePaidPatterns, mainAccount, variableAccount } = require('../utils/recurring');
 
 // GET /api/stats/overview?period=2026-04
 router.get('/overview', requireAuth, (req, res) => {
@@ -86,6 +86,17 @@ router.get('/overview', requireAuth, (req, res) => {
     }),
   };
 
+  // Dotace Nepravidelné: součet odchozích plateb z Hlavního účtu na účet Nepravidelné v období
+  const variablePoolDotace = db.prepare(`
+    SELECT COALESCE(SUM(ABS(t.amount)), 0) AS amount
+    FROM transactions t
+    JOIN accounts a ON a.id = t.account_id
+    WHERE t.user_id = ? AND t.amount < 0
+      AND t.date >= ? AND t.date <= ?
+      AND a.account_number = ?
+      AND t.counterparty_account LIKE ? || '%'
+  `).get(req.user.id, start, end, mainAccount, variableAccount);
+
   res.json({
     period: periodKey,
     period_start: start,
@@ -96,6 +107,7 @@ router.get('/overview', requireAuth, (req, res) => {
     monthly_trend: trend,
     savings,
     reserve,
+    variable_pool_funded: variablePoolDotace.amount,
   });
 });
 

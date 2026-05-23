@@ -355,6 +355,7 @@ export default function ReportPage() {
   const type3MonthlyBudget = funds.reduce((s, f) => s + (f.monthly_contribution || 0), 0);
   const totalSpent   = stats?.total_spent || 0;
   const savings      = stats?.savings || { net: 0 };
+  const variablePoolFunded = stats?.variable_pool_funded || 0;
 
   return (
     <Layout>
@@ -407,17 +408,6 @@ export default function ReportPage() {
                 )}
               </span>
             </div>
-            {(totalType2 > 0 || type2MonthlyBudget > 0) && (
-              <div className="report-bilance-row">
-                <span>Roční výdaje</span>
-                <span>
-                  − {formatCurrency(totalType2)}
-                  {type2MonthlyBudget > 0 && (
-                    <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(type2MonthlyBudget)}</span>
-                  )}
-                </span>
-              </div>
-            )}
             {(totalType3 > 0 || type3MonthlyBudget > 0) && (
               <div className="report-bilance-row">
                 <span>Drahé věci</span>
@@ -425,6 +415,17 @@ export default function ReportPage() {
                   − {formatCurrency(totalType3)}
                   {type3MonthlyBudget > 0 && (
                     <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(type3MonthlyBudget)}</span>
+                  )}
+                </span>
+              </div>
+            )}
+            {(variablePoolFunded > 0 || type2MonthlyBudget > 0) && (
+              <div className="report-bilance-row" title="Součet plateb z Hlavního účtu na Nepravidelné — pool, ze kterého se platí roční výdaje. Plánovaná částka = roční plán ÷ 12.">
+                <span>Dotace Nepravidelné</span>
+                <span>
+                  − {formatCurrency(variablePoolFunded)}
+                  {type2MonthlyBudget > 0 && (
+                    <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(type2MonthlyBudget)}</span>
                   )}
                 </span>
               </div>

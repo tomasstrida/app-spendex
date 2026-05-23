@@ -6,6 +6,8 @@ const MATCH_TOLERANCE_PCT = 5;
 const savingsAccount = '1679014082';
 const reserveAccount = '1679014066';
 const reservePaidPatterns = ['JANA HRDLIČKOVÁ', 'Pražská energetika'];
+const mainAccount = '1679014138';      // Hlavní (transit, zdroj „dotace" pro Nepravidelné)
+const variableAccount = '1679014074';  // Nepravidelné (pool, ze kterého se platí roční výdaje)
 
 /**
  * Stav fixní platby za období.
@@ -43,6 +45,8 @@ module.exports = {
   savingsAccount,
   reserveAccount,
   reservePaidPatterns,
+  mainAccount,
+  variableAccount,
   paymentStatus,
   incomeStatus,
   savingsNet,
