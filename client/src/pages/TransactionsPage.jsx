@@ -103,20 +103,20 @@ export default function TransactionsPage() {
   }, [filterCats, appliedAmountMin, appliedAmountMax, appliedSearch]);
 
   const loadTransactions = useCallback(() => {
-    // Při vyhledávání hledej napříč všemi obdobími (ignoruj datumový rozsah)
-    if (appliedSearch.trim() !== '') {
+    // Custom range (z URL nebo z UI přepínače) má přednost — q + from/to se kombinují
+    if (customMode && customFrom && customTo) {
       setLoading(true);
-      const params = buildFilterParams(new URLSearchParams());
+      const params = buildFilterParams(new URLSearchParams({ from: customFrom, to: customTo }));
       fetch(`/api/transactions?${params}`)
         .then(r => r.json())
         .then(data => { setTransactions(data); setSelected(new Set()); })
         .finally(() => setLoading(false));
       return;
     }
-    if (customMode) {
-      if (!customFrom || !customTo) return;
+    // Bez datumového rozsahu a s dotazem — globální hledání napříč obdobími
+    if (appliedSearch.trim() !== '') {
       setLoading(true);
-      const params = buildFilterParams(new URLSearchParams({ from: customFrom, to: customTo }));
+      const params = buildFilterParams(new URLSearchParams());
       fetch(`/api/transactions?${params}`)
         .then(r => r.json())
         .then(data => { setTransactions(data); setSelected(new Set()); })
@@ -369,7 +369,7 @@ export default function TransactionsPage() {
             onChange={e => setSearch(e.target.value)}
             style={{ width: '100%', maxWidth: 420, paddingLeft: 32 }}
           />
-          {appliedSearch.trim() !== '' && (
+          {appliedSearch.trim() !== '' && !customMode && (
             <span className="text-muted" style={{ fontSize: 12, marginLeft: 10 }}>
               hledám napříč všemi obdobími
             </span>

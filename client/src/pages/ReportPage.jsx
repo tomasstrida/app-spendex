@@ -396,11 +396,18 @@ export default function ReportPage() {
               <div className="report-income-list">
                 {aliasedSources.map(row => {
                   const rowKey = `id-${row.id}`;
-                  return editIncome?.id === row.id ? (
-                    <IncomeSourceForm key={rowKey} initial={row}
-                      onSave={handleIncomeSaved} onCancel={() => setEditIncome(null)} />
-                  ) : (
-                    <div key={rowKey} className="report-income-row">
+                  if (editIncome?.id === row.id) {
+                    return (
+                      <IncomeSourceForm key={rowKey} initial={row}
+                        onSave={handleIncomeSaved} onCancel={() => setEditIncome(null)} />
+                    );
+                  }
+                  const searchKey = row.match_counterparty_account || row.match_pattern || row.person;
+                  const to = `/transactions?q=${encodeURIComponent(searchKey)}`
+                    + (periodStart && periodEnd ? `&from=${periodStart}&to=${periodEnd}` : '');
+                  return (
+                    <Link key={rowKey} to={to} className="report-income-row"
+                      style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}>
                       {row.status && <span title={row.status}>{FIXED_STATUS[row.status].icon}</span>}
                       <span className="report-income-person">{row.person}</span>
                       {row.status === 'mismatch' && (
@@ -414,13 +421,14 @@ export default function ReportPage() {
                       )}
                       <span className="report-income-amount">{formatCurrency(row.actual || 0)}</span>
                       <button className="btn btn-ghost btn-icon"
-                        onClick={() => { setShowIncomeForm(false); setEditIncome(row); }}>
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowIncomeForm(false); setEditIncome(row); }}>
                         <Pencil size={13} />
                       </button>
-                      <button className="btn btn-ghost btn-icon" onClick={() => handleDeleteIncome(row.id)}>
+                      <button className="btn btn-ghost btn-icon"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteIncome(row.id); }}>
                         <Trash2 size={13} />
                       </button>
-                    </div>
+                    </Link>
                   );
                 })}
               </div>
@@ -446,30 +454,37 @@ export default function ReportPage() {
                 </button>
                 {unaliasedExpanded && (
                   <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4, paddingLeft: 8 }}>
-                    {unaliasedSources.map((row, i) => (
-                      <div key={`auto-${row.match_counterparty_account || row.person || i}`}
-                        className="report-income-row text-muted" style={{ fontSize: 12 }}>
-                        <span className="report-income-person">{row.person}</span>
-                        {row.tx_count > 1 && (
-                          <span style={{ fontSize: 11 }}>· {row.tx_count} plateb</span>
-                        )}
-                        <span className="report-income-amount">{formatCurrency(row.actual)}</span>
-                        <button className="btn btn-ghost btn-sm"
-                          title="Přidat jako trvalý příjem (pojmenovat a započítat)"
-                          onClick={() => {
-                            setPrefillIncome({
-                              person: '',
-                              planned_amount: 0,
-                              match_pattern: null,
-                              match_counterparty_account: row.match_counterparty_account || '',
-                            });
-                            setEditIncome(null);
-                            setShowIncomeForm(true);
-                          }}>
-                          <Plus size={12} /> Přidat
-                        </button>
-                      </div>
-                    ))}
+                    {unaliasedSources.map((row, i) => {
+                      const autoKey = row.match_counterparty_account || row.person || `idx-${i}`;
+                      const to = `/transactions?q=${encodeURIComponent(autoKey)}`
+                        + (periodStart && periodEnd ? `&from=${periodStart}&to=${periodEnd}` : '');
+                      return (
+                        <Link key={`auto-${autoKey}`} to={to}
+                          className="report-income-row text-muted"
+                          style={{ fontSize: 12, textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}>
+                          <span className="report-income-person">{row.person}</span>
+                          {row.tx_count > 1 && (
+                            <span style={{ fontSize: 11 }}>· {row.tx_count} plateb</span>
+                          )}
+                          <span className="report-income-amount">{formatCurrency(row.actual)}</span>
+                          <button className="btn btn-ghost btn-sm"
+                            title="Přidat jako trvalý příjem (pojmenovat a započítat)"
+                            onClick={(e) => {
+                              e.preventDefault(); e.stopPropagation();
+                              setPrefillIncome({
+                                person: '',
+                                planned_amount: 0,
+                                match_pattern: null,
+                                match_counterparty_account: row.match_counterparty_account || '',
+                              });
+                              setEditIncome(null);
+                              setShowIncomeForm(true);
+                            }}>
+                            <Plus size={12} /> Přidat
+                          </button>
+                        </Link>
+                      );
+                    })}
                   </div>
                 )}
               </div>
