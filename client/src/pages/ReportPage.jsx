@@ -413,6 +413,15 @@ export default function ReportPage() {
                 <span>− {formatCurrency(totalFixed)}</span>
               </Link>
             )}
+            {variablePoolFunded > 0 && (
+              <Link to={txLink(`q=${VARIABLE_ACCOUNT_NUM}`)}
+                className="report-bilance-row"
+                style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                title="Součet plateb z Hlavního účtu na Nepravidelné v období. Pool, ze kterého se platí roční výdaje.">
+                <span>Dotace na nepravidelné</span>
+                <span>− {formatCurrency(variablePoolFunded)}</span>
+              </Link>
+            )}
             <Link to={txLink(typ1CatIds ? `category_ids=${typ1CatIds}` : '')}
               className="report-bilance-row"
               style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
@@ -425,20 +434,6 @@ export default function ReportPage() {
                 )}
               </span>
             </Link>
-            {(variablePoolFunded > 0 || type2MonthlyBudget > 0) && (
-              <Link to={txLink(`q=${VARIABLE_ACCOUNT_NUM}`)}
-                className="report-bilance-row"
-                style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
-                title="Součet plateb z Hlavního účtu na Nepravidelné — pool, ze kterého se platí roční výdaje. Plánovaná částka = roční plán ÷ 12.">
-                <span>Dotace Nepravidelné</span>
-                <span>
-                  − {formatCurrency(variablePoolFunded)}
-                  {type2MonthlyBudget > 0 && (
-                    <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(type2MonthlyBudget)}</span>
-                  )}
-                </span>
-              </Link>
-            )}
             {(totalType3 > 0 || type3MonthlyBudget > 0) && (
               <Link to={txLink(typ3CatIds ? `category_ids=${typ3CatIds}` : '')}
                 className="report-bilance-row"
