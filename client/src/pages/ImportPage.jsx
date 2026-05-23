@@ -15,8 +15,8 @@ const ROLE_LABELS = {
 const ROLE_HINTS = {
   spending: 'Transakce vstupují do kategorií a budgetů.',
   fixed:    'Transakce jsou fixní výdaje (nájem, energie…), nezapočítávají se do budgetů.',
-  ignored:  'Transakce jsou ignorovány (OSVČ, splátky, daně…).',
-  income:   'Příchozí platby se sčítají jako příjmy (Tom, Martin, Sudo nájem).',
+  income:   'Vlastní účet, jehož převody do spending/fixed účtů jsou příjem domácnosti (OSVČ).',
+  ignored:  'Účet je mimo evidenci (transit, savings, daně…). Transakce ignorovány v reportech.',
 };
 
 // Odhad účtu z názvu souboru: nejdřív podle čísla účtu (číslice), pak podle názvu účtu
@@ -193,7 +193,6 @@ export default function ImportPage() {
   const [fileImports, setFileImports] = useState([]); // [{ name, transactions, detectedIds, accountId }]
   const [abCategories, setAbCategories] = useState([]);
   const [categoryMap, setCategoryMap] = useState({});
-  const [skipIncoming, setSkipIncoming] = useState(true);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -313,7 +312,6 @@ export default function ImportPage() {
           body: JSON.stringify({
             transactions: f.transactions,
             category_map: map,
-            skip_incoming: skipIncoming,
             account_id: f.accountId,
             raw_csv: f.rawCsv,
             filename: f.name,
@@ -356,11 +354,10 @@ export default function ImportPage() {
   }
 
   // Nové (neduplicitní, neignorované) transakce pro daný soubor
-  const fileNewTx = f => f.transactions.filter(t => !t.duplicate && !(skipIncoming && t.direction === 'Příchozí'));
+  const fileNewTx = f => f.transactions.filter(t => !t.duplicate);
   const allTx = fileImports.flatMap(f => f.transactions);
   const totalNew = fileImports.reduce((s, f) => s + fileNewTx(f).length, 0);
   const totalDup = allTx.filter(t => t.duplicate).length;
-  const incomingCount = allTx.filter(t => t.direction === 'Příchozí').length;
 
   return (
     <Layout>
@@ -431,18 +428,6 @@ export default function ImportPage() {
               </div>
             );
           })}
-
-          {/* Příchozí transakce */}
-          {incomingCount > 0 && (
-            <label className="import-toggle">
-              <input
-                type="checkbox"
-                checked={skipIncoming}
-                onChange={e => setSkipIncoming(e.target.checked)}
-              />
-              <span>Přeskočit příchozí platby ({incomingCount})</span>
-            </label>
-          )}
 
           {/* Mapování Air Bank kategorií */}
           {abCategories.length > 0 && (
