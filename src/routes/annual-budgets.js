@@ -21,12 +21,11 @@ router.get('/', requireAuth, (req, res) => {
       c.type  as category_type,
       ab.amount,
       COALESCE((
-        SELECT SUM(ABS(t.amount))
+        SELECT SUM(-t.amount)
         FROM transactions t
         WHERE t.user_id = ab.user_id
           AND t.category_id = ab.category_id
           AND t.date >= ? AND t.date <= ?
-          AND t.amount < 0
       ), 0) as spent
     FROM annual_budgets ab
     JOIN categories c ON c.id = ab.category_id AND c.user_id = ab.user_id

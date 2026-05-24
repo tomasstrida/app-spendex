@@ -25,12 +25,11 @@ router.get('/', requireAuth, (req, res) => {
       COALESCE(pb.amount, db.amount) as amount,
       CASE WHEN pb.id IS NOT NULL THEN 1 ELSE 0 END as is_override,
       COALESCE((
-        SELECT SUM(ABS(t.amount))
+        SELECT SUM(-t.amount)
         FROM transactions t
         WHERE t.user_id = db.user_id
           AND t.category_id = db.category_id
           AND t.date >= ? AND t.date <= ?
-          AND t.amount < 0
           AND (t.account_id IS NULL OR EXISTS (
             SELECT 1 FROM accounts a WHERE a.id = t.account_id AND a.role = 'spending'
           ))

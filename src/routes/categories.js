@@ -19,9 +19,9 @@ router.get('/fund-status', requireAuth, (req, res) => {
     WHERE user_id = ? AND category_id = ? AND amount < 0
   `);
   const yearSpent = db.prepare(`
-    SELECT COALESCE(SUM(ABS(amount)), 0) as total
+    SELECT COALESCE(SUM(-amount), 0) as total
     FROM transactions
-    WHERE user_id = ? AND category_id = ? AND amount < 0
+    WHERE user_id = ? AND category_id = ?
       AND date >= ? AND date <= ?
   `);
 

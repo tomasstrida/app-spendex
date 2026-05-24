@@ -18,19 +18,19 @@ router.get('/overview', requireAuth, (req, res) => {
   `;
 
   const total = db.prepare(`
-    SELECT COALESCE(SUM(ABS(t.amount)), 0) as total_spent
+    SELECT COALESCE(SUM(-t.amount), 0) as total_spent
     FROM transactions t
-    WHERE t.user_id = ? AND t.amount < 0 AND t.date >= ? AND t.date <= ?
+    WHERE t.user_id = ? AND t.date >= ? AND t.date <= ?
     ${SPENDING_FILTER}
   `).get(req.user.id, start, end);
 
   const byCategory = db.prepare(`
     SELECT c.id, c.name, c.color, c.icon, c.type,
-      COALESCE(SUM(ABS(t.amount)), 0) as spent,
+      COALESCE(SUM(-t.amount), 0) as spent,
       COUNT(t.id) as tx_count
     FROM categories c
     LEFT JOIN transactions t ON t.category_id = c.id
-      AND t.user_id = ? AND t.amount < 0
+      AND t.user_id = ?
       AND t.date >= ? AND t.date <= ?
       AND (t.account_id IS NULL OR EXISTS (
         SELECT 1 FROM accounts a WHERE a.id = t.account_id AND a.role = 'spending'
@@ -43,9 +43,9 @@ router.get('/overview', requireAuth, (req, res) => {
   // Posledních 12 období
   const trend = db.prepare(`
     SELECT strftime('%Y-%m', t.date) as month_key,
-      COALESCE(SUM(ABS(t.amount)), 0) as spent
+      COALESCE(SUM(-t.amount), 0) as spent
     FROM transactions t
-    WHERE t.user_id = ? AND t.amount < 0
+    WHERE t.user_id = ?
     AND (t.account_id IS NULL OR EXISTS (
       SELECT 1 FROM accounts a WHERE a.id = t.account_id AND a.role = 'spending'
     ))

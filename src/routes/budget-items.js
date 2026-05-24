@@ -24,9 +24,9 @@ router.get('/', requireAuth, (req, res) => {
   `).all(...params);
 
   const getSpent = db.prepare(`
-    SELECT COALESCE(SUM(ABS(amount)), 0) as spent
+    SELECT COALESCE(SUM(-amount), 0) as spent
     FROM transactions
-    WHERE user_id = ? AND category_id = ? AND amount < 0
+    WHERE user_id = ? AND category_id = ?
       AND date >= ? AND date <= ?
   `);
 
@@ -43,11 +43,11 @@ router.get('/', requireAuth, (req, res) => {
   // Roční čerpání per kategorie (Typ 2): součet odchozích za celý kalendářní rok.
   // Klíč = category_id (number), hodnota = celkové utraceno v daném roce.
   const annualSpent = db.prepare(`
-    SELECT t.category_id, COALESCE(SUM(ABS(t.amount)), 0) AS spent
+    SELECT t.category_id, COALESCE(SUM(-t.amount), 0) AS spent
     FROM transactions t
     JOIN categories c ON c.id = t.category_id
     WHERE t.user_id = ? AND c.user_id = ? AND c.type = 2
-      AND t.amount < 0 AND t.date >= ? AND t.date <= ?
+      AND t.date >= ? AND t.date <= ?
       AND t.category_id IS NOT NULL
     GROUP BY t.category_id
   `).all(req.user.id, req.user.id, `${year}-01-01`, `${year}-12-31`);
