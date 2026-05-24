@@ -37,7 +37,7 @@ const navGroups = [
   },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ open = false, onClose }) {
   const { user, setUser } = useAuth();
   const [version, setVersion] = useState('');
 
@@ -51,7 +51,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${open ? ' open' : ''}`}>
       <div className="sidebar-logo">
         <span className="sidebar-logo-mark">$</span>
         <div>
@@ -69,6 +69,7 @@ export default function Sidebar() {
                 key={to}
                 to={to}
                 end={end}
+                onClick={onClose}
                 className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
               >
                 <Icon size={18} />
