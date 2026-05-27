@@ -103,20 +103,10 @@ export default function TransactionsPage() {
   }, [filterCats, appliedAmountMin, appliedAmountMax, appliedSearch]);
 
   const loadTransactions = useCallback(() => {
-    // Custom range (z URL nebo z UI přepínače) má přednost — q + from/to se kombinují
+    // Custom range (z URL nebo z UI přepínače) má přednost — fulltext + from/to se vždy kombinují
     if (customMode && customFrom && customTo) {
       setLoading(true);
       const params = buildFilterParams(new URLSearchParams({ from: customFrom, to: customTo }));
-      fetch(`/api/transactions?${params}`)
-        .then(r => r.json())
-        .then(data => { setTransactions(data); setSelected(new Set()); })
-        .finally(() => setLoading(false));
-      return;
-    }
-    // Bez datumového rozsahu a s dotazem — globální hledání napříč obdobími
-    if (appliedSearch.trim() !== '') {
-      setLoading(true);
-      const params = buildFilterParams(new URLSearchParams());
       fetch(`/api/transactions?${params}`)
         .then(r => r.json())
         .then(data => { setTransactions(data); setSelected(new Set()); })
@@ -135,7 +125,7 @@ export default function TransactionsPage() {
       })
       .then(data => { setTransactions(data); setSelected(new Set()); })
       .finally(() => setLoading(false));
-  }, [period, customMode, customFrom, customTo, buildFilterParams, appliedSearch]);
+  }, [period, customMode, customFrom, customTo, buildFilterParams]);
 
   useEffect(() => { loadTransactions(); }, [loadTransactions]);
 
@@ -267,7 +257,7 @@ export default function TransactionsPage() {
     }
   }
 
-  const totalSpent = transactions.reduce((s, t) => t.amount < 0 ? s + Math.abs(t.amount) : s, 0);
+  const total = transactions.reduce((s, t) => s + t.amount, 0);
   const cols = ALL_COLS.filter(c => visibleCols.includes(c.key));
   const allSelected = transactions.length > 0 && selected.size === transactions.length;
   const someSelected = selected.size > 0 && !allSelected;
@@ -369,11 +359,6 @@ export default function TransactionsPage() {
             onChange={e => setSearch(e.target.value)}
             style={{ width: '100%', maxWidth: 420, paddingLeft: 32 }}
           />
-          {appliedSearch.trim() !== '' && !customMode && (
-            <span className="text-muted" style={{ fontSize: 12, marginLeft: 10 }}>
-              hledám napříč všemi obdobími
-            </span>
-          )}
         </div>
         <div className="tx-chip-row">
           <button
@@ -450,7 +435,12 @@ export default function TransactionsPage() {
         <>
           <div className="tx-summary">
             <span className="text-muted" style={{ fontSize: 13 }}>{transactions.length} transakcí</span>
-            <span style={{ fontSize: 14, fontWeight: 600 }}>Výdaje: {formatCurrency(totalSpent)}</span>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>
+              Celkem:{' '}
+              <span className={total > 0 ? 'tx-amount-in' : total < 0 ? 'tx-amount-out' : ''}>
+                {total > 0 ? '+' : total < 0 ? '−' : ''}{formatCurrency(Math.abs(total))}
+              </span>
+            </span>
           </div>
 
           {selected.size > 0 && (
