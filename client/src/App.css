@@ -545,6 +545,48 @@ a.report-budget-card .report-budget-row { margin-bottom: 6px; }
   margin-top: 6px;
   border-top: 2px solid var(--border);
 }
+
+/* Rozpad převodů na spořicí pod „Skutečně naspořeno" */
+.savings-transfers {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+.savings-transfer-row {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.savings-transfer-regular { color: var(--text2); }
+.savings-transfer-special {
+  background: color-mix(in srgb, #f97316 8%, transparent);
+  color: var(--text);
+  font-weight: 500;
+}
+.savings-transfer-date { font-size: 12px; color: var(--text2); }
+.savings-transfer-desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.savings-transfer-amount { font-variant-numeric: tabular-nums; }
+.savings-transfer-badge {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: var(--bg);
+  color: var(--text2);
+  font-weight: 500;
+  vertical-align: middle;
+}
+
 .text-warn { color: #f97316; }
 
 /* Typ kategorie badge */

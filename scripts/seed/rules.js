@@ -42,7 +42,8 @@ module.exports = {
     'Příchozí úhrada': 'Příjmy',
   },
 
-  // pořadí = priorita (první shoda vyhrává)
+  // pořadí = priorita (první shoda vyhrává).
+  // Volitelné amount_max_abs / amount_min_abs zužují match podle absolutní částky.
   textOverrides: [
     { pattern: 'MAX FITNESS', category: 'Sport' },
     { pattern: 'MAXFITNESS', category: 'Sport' },
@@ -52,6 +53,15 @@ module.exports = {
     { pattern: 'PrEP', category: 'Y - Léky, PrEP, Optika' },
     { pattern: 'ROHLIK', category: 'Jídlo a běžné nákupy' },
     { pattern: 'ROHLÍK', category: 'Jídlo a běžné nákupy' },
+    // Benzinky pod 200 Kč = občerstvení/káva, ne PHM. Musí stát PŘED případnými
+    // generickými PHM patterny, aby se uplatnily jako specifičtější výjimka.
+    { pattern: 'SHELL',     category: 'Restaurace a kávičky', amount_max_abs: 200 },
+    { pattern: 'OMV',       category: 'Restaurace a kávičky', amount_max_abs: 200 },
+    { pattern: 'MOL ',      category: 'Restaurace a kávičky', amount_max_abs: 200 },
+    { pattern: 'BENZINA',   category: 'Restaurace a kávičky', amount_max_abs: 200 },
+    { pattern: 'EUROOIL',   category: 'Restaurace a kávičky', amount_max_abs: 200 },
+    { pattern: 'ORLEN',     category: 'Restaurace a kávičky', amount_max_abs: 200 },
+    { pattern: 'CIRCLE K',  category: 'Restaurace a kávičky', amount_max_abs: 200 },
     // Tracker fixních plateb → Pravidelné platby (mimo měsíční budgety)
     { pattern: 'JANA HRDLIČKOVÁ', category: 'Pravidelné platby' },
     { pattern: 'Pražská energetika', category: 'Pravidelné platby' },

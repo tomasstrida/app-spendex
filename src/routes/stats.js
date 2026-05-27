@@ -62,7 +62,27 @@ router.get('/overview', requireAuth, (req, res) => {
     WHERE user_id = ? AND counterparty_account LIKE ? || '%'
       AND date >= ? AND date <= ?
   `).get(req.user.id, savingsAccount, start, end);
-  const savings = { deposits: sav.deposits, withdrawals: sav.withdrawals, net: savingsNet(sav) };
+
+  // Detailní rozpis převodů přes spořicí účet za období. `amount` je z pohledu
+  // zdrojového účtu: záporné = vklad na spořicí (peníze odešly), kladné = výběr
+  // ze spořicího zpět na provoz. is_regular = standardní měsíční vklad 25 000.
+  const savingsTransfers = db.prepare(`
+    SELECT id, date, description, amount, counterparty_account, note
+    FROM transactions
+    WHERE user_id = ? AND counterparty_account LIKE ? || '%'
+      AND date >= ? AND date <= ?
+    ORDER BY date DESC, id DESC
+  `).all(req.user.id, savingsAccount, start, end).map(t => ({
+    ...t,
+    is_regular: t.amount === -25000,
+  }));
+
+  const savings = {
+    deposits: sav.deposits,
+    withdrawals: sav.withdrawals,
+    net: savingsNet(sav),
+    transfers: savingsTransfers,
+  };
 
   const envCol = db.prepare(`
     SELECT

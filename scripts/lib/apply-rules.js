@@ -14,10 +14,16 @@ function applyRules(tx, account, rules) {
     return rules.internalTransferCategory;
   }
 
-  // L3 – text override (popis + note, case-insensitive substring)
+  // L3 – text override (popis + note, case-insensitive substring).
+  // Volitelné amount_max_abs / amount_min_abs zužují match podle absolutní částky
+  // (užitečné pro „benzinky < 200 Kč = občerstvení, ne PHM" apod.).
   const hay = `${tx.description || ''} ${tx.note || ''}`.toLowerCase();
+  const absAmount = Math.abs(tx.amount);
   for (const o of rules.textOverrides) {
-    if (hay.includes(o.pattern.toLowerCase())) return o.category;
+    if (!hay.includes(o.pattern.toLowerCase())) continue;
+    if (o.amount_max_abs != null && absAmount > o.amount_max_abs) continue;
+    if (o.amount_min_abs != null && absAmount < o.amount_min_abs) continue;
+    return o.category;
   }
 
   // L1 – účetní pravidlo

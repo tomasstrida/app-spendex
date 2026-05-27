@@ -20,6 +20,7 @@ const ALL_COLS = [
 ];
 
 const LS_KEY = 'spendex_tx_cols_v2';
+const PAGE_SIZE = 400;
 
 function loadCols() {
   try {
@@ -66,6 +67,8 @@ export default function TransactionsPage() {
   const [colPickerOpen, setColPickerOpen] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const pickerRef = useRef();
 
   useEffect(() => {
@@ -99,6 +102,7 @@ export default function TransactionsPage() {
     if (appliedAmountMin !== '') params.set('amount_min', appliedAmountMin);
     if (appliedAmountMax !== '') params.set('amount_max', appliedAmountMax);
     if (appliedSearch.trim() !== '') params.set('q', appliedSearch.trim());
+    params.set('limit', String(PAGE_SIZE));
     return params;
   }, [filterCats, appliedAmountMin, appliedAmountMax, appliedSearch]);
 
@@ -109,7 +113,11 @@ export default function TransactionsPage() {
       const params = buildFilterParams(new URLSearchParams({ from: customFrom, to: customTo }));
       fetch(`/api/transactions?${params}`)
         .then(r => r.json())
-        .then(data => { setTransactions(data); setSelected(new Set()); })
+        .then(data => {
+          setTransactions(data);
+          setSelected(new Set());
+          setHasMore(data.length === PAGE_SIZE);
+        })
         .finally(() => setLoading(false));
       return;
     }
@@ -123,9 +131,31 @@ export default function TransactionsPage() {
         const params = buildFilterParams(new URLSearchParams({ from: s.period_start, to: s.period_end }));
         return fetch(`/api/transactions?${params}`).then(r => r.json());
       })
-      .then(data => { setTransactions(data); setSelected(new Set()); })
+      .then(data => {
+        setTransactions(data);
+        setSelected(new Set());
+        setHasMore(data.length === PAGE_SIZE);
+      })
       .finally(() => setLoading(false));
   }, [period, customMode, customFrom, customTo, buildFilterParams]);
+
+  const loadMore = useCallback(() => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const offset = transactions.length;
+    const baseParams = customMode && customFrom && customTo
+      ? { from: customFrom, to: customTo }
+      : (periodStart && periodEnd ? { from: periodStart, to: periodEnd } : {});
+    const params = buildFilterParams(new URLSearchParams(baseParams));
+    params.set('offset', String(offset));
+    fetch(`/api/transactions?${params}`)
+      .then(r => r.json())
+      .then(data => {
+        setTransactions(prev => [...prev, ...data]);
+        setHasMore(data.length === PAGE_SIZE);
+      })
+      .finally(() => setLoadingMore(false));
+  }, [loadingMore, hasMore, transactions.length, customMode, customFrom, customTo, periodStart, periodEnd, buildFilterParams]);
 
   useEffect(() => { loadTransactions(); }, [loadTransactions]);
 
@@ -593,6 +623,18 @@ export default function TransactionsPage() {
               </div>
             ))}
           </div>
+
+          {hasMore && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
+              <button
+                className="btn btn-ghost"
+                onClick={loadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore ? 'Načítám…' : `Načíst dalších ${PAGE_SIZE}`}
+              </button>
+            </div>
+          )}
         </>
       )}
     </Layout>

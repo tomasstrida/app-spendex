@@ -495,6 +495,28 @@ export default function ReportPage() {
               <span>Skutečně naspořeno</span>
               <span>{savings.net >= 0 ? '+' : '−'} {formatCurrency(Math.abs(savings.net))}</span>
             </Link>
+            {savings.transfers && savings.transfers.length > 0 && (
+              <div className="savings-transfers">
+                {savings.transfers.map(tr => (
+                  <div
+                    key={tr.id}
+                    className={`savings-transfer-row ${tr.is_regular ? 'savings-transfer-regular' : 'savings-transfer-special'}`}
+                  >
+                    <span className="savings-transfer-date">
+                      {new Date(tr.date + 'T00:00:00').toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' })}
+                    </span>
+                    <span className="savings-transfer-desc">
+                      {tr.amount < 0 ? '→ ' : '← '}
+                      {tr.description || <span className="text-muted">—</span>}
+                      {tr.is_regular && <span className="savings-transfer-badge">pravidelný</span>}
+                    </span>
+                    <span className={`savings-transfer-amount ${tr.amount < 0 ? 'tx-amount-out' : 'tx-amount-in'}`}>
+                      {tr.amount < 0 ? '−' : '+'}{formatCurrency(Math.abs(tr.amount))}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
               Výsledek je měřené netto převodů, ne aritmetický rozdíl rozpadu výše.
             </div>
