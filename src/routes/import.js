@@ -6,6 +6,8 @@ const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
 const { parseAirBankCSV } = require('../utils/csvParser');
 const { buildExternalId } = require('../utils/externalId');
+const applyRules = require('../utils/apply-rules');
+const seedRules = require('../../scripts/seed/rules');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
@@ -102,6 +104,33 @@ router.post('/confirm', requireAuth, (req, res) => {
       .map(r => r.external_id)
   );
 
+  // Pravidla pro autokategorizaci (L0/L1/L2/L3). category_map z UI = user-override
+  // AB mapování pro tento import, mergne se přes seedovou abCategoryMap (user vyhrává
+  // pro stejnou AB kategorii, ale L3 textOverrides – vč. benzinky <200 – mají přednost
+  // před L2). Lookup name→id per user, ať se nemusí dělat v každé iteraci.
+  const userMapName = {};
+  if (category_map && typeof category_map === 'object') {
+    const ids = Object.values(category_map).filter(Boolean).map(Number);
+    if (ids.length > 0) {
+      const ph = ids.map(() => '?').join(',');
+      const rows = db.prepare(`SELECT id, name FROM categories WHERE user_id = ? AND id IN (${ph})`)
+        .all(req.user.id, ...ids);
+      const nameById = Object.fromEntries(rows.map(r => [r.id, r.name]));
+      for (const [ab, cid] of Object.entries(category_map)) {
+        if (cid && nameById[cid]) userMapName[ab] = nameById[cid];
+      }
+    }
+  }
+  const effectiveRules = {
+    ...seedRules,
+    abCategoryMap: { ...seedRules.abCategoryMap, ...userMapName },
+  };
+  const catIdByName = Object.fromEntries(
+    db.prepare('SELECT id, name FROM categories WHERE user_id = ?').all(req.user.id)
+      .map(r => [r.name, r.id])
+  );
+  const account = resolvedAccountNumber ? { account_number: resolvedAccountNumber } : null;
+
   db.transaction(() => {
     for (const t of transactions) {
       if (skip_incoming && t.direction === 'Příchozí') { skipped++; continue; }
@@ -111,7 +140,10 @@ router.post('/confirm', requireAuth, (req, res) => {
       // Autoritativní dedup přes kanonické external_id
       if (extId && existingIds.has(extId)) { skipped++; continue; }
 
-      const categoryId = category_map[t.ab_category] || null;
+      // Kategorizace: applyRules vrací jméno kategorie (precedence L0>L3>L1>L2>fallback).
+      // Pokud kategorie u tohoto usera neexistuje (např. nový user bez seedu), padne na null.
+      const catName = applyRules(t, account, effectiveRules);
+      const categoryId = catIdByName[catName] || null;
       const result = insert.run(
         req.user.id, categoryId, t.amount, t.currency, t.date,
         t.description, t.note || '', extId || null,

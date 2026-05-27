@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const applyRules = require('./apply-rules');
-const rules = require('../seed/rules');
+const rules = require('../../scripts/seed/rules');
 
 const acc = (n) => ({ account_number: n, name: 'x', role: 'spending' });
 
@@ -64,4 +64,19 @@ test('L3 Toyota Financial → Pravidelné platby', () => {
 test('L3 OPENAI → Licence', () => {
   const tx = { counterparty_account: 'EXTERNAL999', ab_category: 'Nezařazeno', description: 'OPENAI *CHATGPT SUBSCR', note: '' };
   assert.equal(applyRules(tx, acc('1679014023'), rules), 'Licence');
+});
+
+test('amount_max_abs: SHELL −90 Kč (pod 200) → Restaurace a kávičky', () => {
+  const tx = { counterparty_account: 'EXT', ab_category: 'Doprava', description: 'SHELL 8100', note: '', amount: -90 };
+  assert.equal(applyRules(tx, acc('1679014023'), rules), 'Restaurace a kávičky');
+});
+
+test('amount_max_abs: SHELL −1500 Kč (nad 200) → AB mapping Doprava → Auto Moto - PHM', () => {
+  const tx = { counterparty_account: 'EXT', ab_category: 'Doprava', description: 'SHELL 8100', note: '', amount: -1500 };
+  assert.equal(applyRules(tx, acc('1679014023'), rules), 'Auto Moto - PHM');
+});
+
+test('amount_max_abs: hraniční MOL −200 Kč přesně → spadne pod prah (≤)', () => {
+  const tx = { counterparty_account: 'EXT', ab_category: 'Doprava', description: 'MOL 658', note: '', amount: -200 };
+  assert.equal(applyRules(tx, acc('1679014023'), rules), 'Restaurace a kávičky');
 });

@@ -9,7 +9,7 @@ const path = require('path');
 const Database = require('better-sqlite3');
 const { parseAirBankCSV } = require('../src/utils/csvParser');
 const { buildExternalId } = require('../src/utils/externalId');
-const applyRules = require('./lib/apply-rules');
+const applyRules = require('../src/utils/apply-rules');
 
 const categories = require('./seed/categories');
 const accounts = require('./seed/accounts');
