@@ -454,7 +454,7 @@ export default function ReportPage() {
               </Link>
             )}
             {variablePoolFunded > 0 && (
-              <Link to={txLink(`q=${VARIABLE_ACCOUNT_NUM}`)}
+              <Link to={txLink(`counterparty=${VARIABLE_ACCOUNT_NUM}&direction=out`)}
                 className="report-bilance-row"
                 style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
                 title="Součet plateb z Hlavního účtu na Nepravidelné v období. Pool, ze kterého se platí roční výdaje.">
@@ -488,10 +488,10 @@ export default function ReportPage() {
                 </span>
               </Link>
             )}
-            <Link to={txLink(`q=${SAVINGS_ACCOUNT_NUM}`)}
+            <Link to={txLink(`counterparty=${SAVINGS_ACCOUNT_NUM}`)}
               className={`report-bilance-row report-bilance-result ${savings.net >= 0 ? '' : 'text-danger'}`}
               style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
-              title="Klik: transakce na spořicím účtu v období (převody, ze kterých vychází výsledek)">
+              title="Klik: převody na spořicí účet v období (4 řádky níže = ty, ze kterých vychází výsledek)">
               <span>Skutečně naspořeno</span>
               <span>{savings.net >= 0 ? '+' : '−'} {formatCurrency(Math.abs(savings.net))}</span>
             </Link>

@@ -56,6 +56,8 @@ export default function TransactionsPage() {
   const [appliedAmountMax, setAppliedAmountMax] = useState(amountMax);
   const [search, setSearch] = useState(searchParams.get('q') || '');
   const [appliedSearch, setAppliedSearch] = useState(search);
+  const [counterparty, setCounterparty] = useState(searchParams.get('counterparty') || '');
+  const [direction, setDirection] = useState(searchParams.get('direction') || '');
   const [loading, setLoading] = useState(true);
   const [customMode, setCustomMode] = useState(!!(urlFrom && urlTo));
   const [customFrom, setCustomFrom] = useState(urlFrom || '');
@@ -102,9 +104,11 @@ export default function TransactionsPage() {
     if (appliedAmountMin !== '') params.set('amount_min', appliedAmountMin);
     if (appliedAmountMax !== '') params.set('amount_max', appliedAmountMax);
     if (appliedSearch.trim() !== '') params.set('q', appliedSearch.trim());
+    if (counterparty.trim() !== '') params.set('counterparty', counterparty.trim());
+    if (direction === 'in' || direction === 'out') params.set('direction', direction);
     params.set('limit', String(PAGE_SIZE));
     return params;
-  }, [filterCats, appliedAmountMin, appliedAmountMax, appliedSearch]);
+  }, [filterCats, appliedAmountMin, appliedAmountMax, appliedSearch, counterparty, direction]);
 
   const loadTransactions = useCallback(() => {
     // Custom range (z URL nebo z UI přepínače) má přednost — fulltext + from/to se vždy kombinují
@@ -223,6 +227,8 @@ export default function TransactionsPage() {
     setAmountMin('');
     setAmountMax('');
     setSearch('');
+    setCounterparty('');
+    setDirection('');
   }
 
   function toggleSelectAll() {
@@ -379,6 +385,36 @@ export default function TransactionsPage() {
       </div>
 
       <div className="tx-filters">
+        {(counterparty || direction === 'in' || direction === 'out') && (
+          <div style={{ marginBottom: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {counterparty && (
+              <span className="tx-chip tx-chip-active" style={{ cursor: 'default' }}>
+                Protistrana: {counterparty}
+                <button
+                  type="button"
+                  onClick={() => setCounterparty('')}
+                  style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, marginLeft: 6, display: 'inline-flex', alignItems: 'center' }}
+                  title="Zrušit filtr protistrany"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            )}
+            {(direction === 'in' || direction === 'out') && (
+              <span className="tx-chip tx-chip-active" style={{ cursor: 'default' }}>
+                {direction === 'in' ? 'Jen příchozí' : 'Jen odchozí'}
+                <button
+                  type="button"
+                  onClick={() => setDirection('')}
+                  style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, marginLeft: 6, display: 'inline-flex', alignItems: 'center' }}
+                  title="Zrušit filtr směru"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            )}
+          </div>
+        )}
         <div style={{ position: 'relative', marginBottom: 4 }}>
           <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text2)', pointerEvents: 'none' }} />
           <input
@@ -442,7 +478,7 @@ export default function TransactionsPage() {
             onChange={e => setAmountMax(e.target.value)}
           />
           <span className="text-muted" style={{ fontSize: 12 }}>Kč</span>
-          {(filterCats.size > 0 || amountMin !== '' || amountMax !== '' || search !== '') && (
+          {(filterCats.size > 0 || amountMin !== '' || amountMax !== '' || search !== '' || counterparty !== '' || direction !== '') && (
             <button
               type="button"
               className="btn btn-ghost tx-filter-clear"

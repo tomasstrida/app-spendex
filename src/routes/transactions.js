@@ -7,9 +7,9 @@ const { findDuplicates, wouldEmptyDuplicateGroup } = require('../utils/duplicate
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
-// GET /api/transactions?from=...&to=...&category_id=&category_ids=1,2,none&amount_min=&amount_max=&limit=&offset=
+// GET /api/transactions?from=...&to=...&category_id=&category_ids=1,2,none&amount_min=&amount_max=&counterparty=&limit=&offset=
 router.get('/', requireAuth, (req, res) => {
-  const { from, to, category_id, category_ids, amount_min, amount_max, q, direction, limit = 200, offset = 0 } = req.query;
+  const { from, to, category_id, category_ids, amount_min, amount_max, q, counterparty, direction, limit = 200, offset = 0 } = req.query;
   let query = 'SELECT t.*, c.name as category_name, c.color as category_color FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.user_id = ?';
   const params = [req.user.id];
 
@@ -17,6 +17,13 @@ router.get('/', requireAuth, (req, res) => {
   if (to)   { query += ' AND t.date <= ?'; params.push(to); }
   if (direction === 'in')  query += ' AND t.amount > 0';
   if (direction === 'out') query += ' AND t.amount < 0';
+
+  // Přesný filtr: protistrana začíná zadaným číslem účtu (např. „1679014082"
+  // matchne „1679014082/3030"). Užívá Schůzka pro klik na „Skutečně naspořeno".
+  if (counterparty !== undefined && String(counterparty).trim() !== '') {
+    query += ' AND t.counterparty_account LIKE ? || \'%\'';
+    params.push(String(counterparty).trim());
+  }
 
   // Full-text vyhledávání napříč textovými poli (vč. názvu kategorie)
   if (q !== undefined && String(q).trim() !== '') {
