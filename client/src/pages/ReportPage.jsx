@@ -497,24 +497,30 @@ export default function ReportPage() {
             </Link>
             {savings.transfers && savings.transfers.length > 0 && (
               <div className="savings-transfers">
-                {savings.transfers.map(tr => (
-                  <div
-                    key={tr.id}
-                    className={`savings-transfer-row ${tr.is_regular ? 'savings-transfer-regular' : 'savings-transfer-special'}`}
-                  >
-                    <span className="savings-transfer-date">
-                      {new Date(tr.date + 'T00:00:00').toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' })}
-                    </span>
-                    <span className="savings-transfer-desc">
-                      {tr.amount < 0 ? '→ ' : '← '}
-                      {tr.description || <span className="text-muted">—</span>}
-                      {tr.is_regular && <span className="savings-transfer-badge">pravidelný</span>}
-                    </span>
-                    <span className={`savings-transfer-amount ${tr.amount < 0 ? 'tx-amount-out' : 'tx-amount-in'}`}>
-                      {tr.amount < 0 ? '−' : '+'}{formatCurrency(Math.abs(tr.amount))}
-                    </span>
-                  </div>
-                ))}
+                {savings.transfers.map(tr => {
+                  // tr.amount je z perspektivy zdrojového účtu (typ. Hlavní): záporné
+                  // = peníze tam odešly na spořicí, kladné = vrátily se zpět. Z pohledu
+                  // spořicího účtu (a uživatele — „kolik jsem naspořil") to obrátíme.
+                  const onSavings = -tr.amount;
+                  return (
+                    <div
+                      key={tr.id}
+                      className={`savings-transfer-row ${tr.is_regular ? 'savings-transfer-regular' : 'savings-transfer-special'}`}
+                    >
+                      <span className="savings-transfer-date">
+                        {new Date(tr.date + 'T00:00:00').toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' })}
+                      </span>
+                      <span className="savings-transfer-desc">
+                        {onSavings > 0 ? '→ ' : '← '}
+                        {tr.description || <span className="text-muted">—</span>}
+                        {tr.is_regular && <span className="savings-transfer-badge">pravidelný</span>}
+                      </span>
+                      <span className={`savings-transfer-amount ${onSavings > 0 ? 'tx-amount-in' : 'tx-amount-out'}`}>
+                        {onSavings > 0 ? '+' : '−'}{formatCurrency(Math.abs(onSavings))}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
             <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
