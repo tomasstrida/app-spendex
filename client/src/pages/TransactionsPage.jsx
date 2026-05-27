@@ -426,33 +426,48 @@ export default function TransactionsPage() {
             style={{ width: '100%', maxWidth: 420, paddingLeft: 32 }}
           />
         </div>
-        <div className="tx-chip-row">
-          <button
-            type="button"
-            className={`tx-chip tx-chip-none${filterCats.has('none') ? ' tx-chip-active' : ''}`}
-            onClick={() => toggleCatChip('none')}
-            title="Transakce bez kategorie"
-          >
-            Bez kategorie
-          </button>
-          {categories.map(c => {
-            const active = filterCats.has(String(c.id));
-            const color = c.color || '#6366f1';
+        <div className="tx-chip-groups">
+          <div className="tx-chip-row">
+            <button
+              type="button"
+              className={`tx-chip tx-chip-none${filterCats.has('none') ? ' tx-chip-active' : ''}`}
+              onClick={() => toggleCatChip('none')}
+              title="Transakce bez kategorie"
+            >
+              Bez kategorie
+            </button>
+          </div>
+          {[
+            { type: 1, label: 'Měsíční' },
+            { type: 2, label: 'Roční' },
+            { type: 3, label: 'Fondy' },
+          ].map(group => {
+            const items = categories.filter(c => c.type === group.type);
+            if (items.length === 0) return null;
             return (
-              <button
-                type="button"
-                key={c.id}
-                className={`tx-chip${active ? ' tx-chip-active' : ''}`}
-                onClick={() => toggleCatChip(String(c.id))}
-                style={active ? {
-                  background: color + '33',
-                  color: color,
-                  borderColor: color + '66',
-                } : { '--chip-dot': color }}
-              >
-                <span className="tx-chip-dot" style={{ background: color }} />
-                {c.name}
-              </button>
+              <div key={group.type} className="tx-chip-row">
+                <span className="tx-chip-group-label">{group.label}</span>
+                {items.map(c => {
+                  const active = filterCats.has(String(c.id));
+                  const color = c.color || '#6366f1';
+                  return (
+                    <button
+                      type="button"
+                      key={c.id}
+                      className={`tx-chip${active ? ' tx-chip-active' : ''}`}
+                      onClick={() => toggleCatChip(String(c.id))}
+                      style={active ? {
+                        background: color + '33',
+                        color: color,
+                        borderColor: color + '66',
+                      } : { '--chip-dot': color }}
+                    >
+                      <span className="tx-chip-dot" style={{ background: color }} />
+                      {c.name}
+                    </button>
+                  );
+                })}
+              </div>
             );
           })}
         </div>

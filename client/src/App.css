@@ -822,11 +822,24 @@ a.report-budget-card .report-budget-row { margin-bottom: 6px; }
   margin-bottom: 12px;
 }
 
+.tx-chip-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 .tx-chip-row {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+}
+.tx-chip-group-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text2);
+  min-width: 64px;
+  font-weight: 600;
 }
 
 .tx-chip {
