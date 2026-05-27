@@ -58,6 +58,8 @@ export default function TransactionsPage() {
   const [appliedSearch, setAppliedSearch] = useState(search);
   const [counterparty, setCounterparty] = useState(searchParams.get('counterparty') || '');
   const [direction, setDirection] = useState(searchParams.get('direction') || '');
+  const [matchPatterns, setMatchPatterns] = useState(searchParams.get('match_patterns') || '');
+  const [spendingOnly, setSpendingOnly] = useState(searchParams.get('spending_only') === '1');
   const [loading, setLoading] = useState(true);
   const [customMode, setCustomMode] = useState(!!(urlFrom && urlTo));
   const [customFrom, setCustomFrom] = useState(urlFrom || '');
@@ -106,9 +108,11 @@ export default function TransactionsPage() {
     if (appliedSearch.trim() !== '') params.set('q', appliedSearch.trim());
     if (counterparty.trim() !== '') params.set('counterparty', counterparty.trim());
     if (direction === 'in' || direction === 'out') params.set('direction', direction);
+    if (matchPatterns.trim() !== '') params.set('match_patterns', matchPatterns.trim());
+    if (spendingOnly) params.set('spending_only', '1');
     params.set('limit', String(PAGE_SIZE));
     return params;
-  }, [filterCats, appliedAmountMin, appliedAmountMax, appliedSearch, counterparty, direction]);
+  }, [filterCats, appliedAmountMin, appliedAmountMax, appliedSearch, counterparty, direction, matchPatterns, spendingOnly]);
 
   const loadTransactions = useCallback(() => {
     // Custom range (z URL nebo z UI přepínače) má přednost — fulltext + from/to se vždy kombinují
@@ -229,6 +233,8 @@ export default function TransactionsPage() {
     setSearch('');
     setCounterparty('');
     setDirection('');
+    setMatchPatterns('');
+    setSpendingOnly(false);
   }
 
   function toggleSelectAll() {
@@ -385,7 +391,7 @@ export default function TransactionsPage() {
       </div>
 
       <div className="tx-filters">
-        {(counterparty || direction === 'in' || direction === 'out') && (
+        {(counterparty || direction === 'in' || direction === 'out' || matchPatterns || spendingOnly) && (
           <div style={{ marginBottom: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {counterparty && (
               <span className="tx-chip tx-chip-active" style={{ cursor: 'default' }}>
@@ -408,6 +414,32 @@ export default function TransactionsPage() {
                   onClick={() => setDirection('')}
                   style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, marginLeft: 6, display: 'inline-flex', alignItems: 'center' }}
                   title="Zrušit filtr směru"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            )}
+            {matchPatterns && (
+              <span className="tx-chip tx-chip-active" style={{ cursor: 'default' }}>
+                Patterny: {matchPatterns}
+                <button
+                  type="button"
+                  onClick={() => setMatchPatterns('')}
+                  style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, marginLeft: 6, display: 'inline-flex', alignItems: 'center' }}
+                  title="Zrušit filtr patternů"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            )}
+            {spendingOnly && (
+              <span className="tx-chip tx-chip-active" style={{ cursor: 'default' }}>
+                Jen výdajové účty
+                <button
+                  type="button"
+                  onClick={() => setSpendingOnly(false)}
+                  style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, marginLeft: 6, display: 'inline-flex', alignItems: 'center' }}
+                  title="Zrušit omezení na výdajové účty"
                 >
                   <X size={12} />
                 </button>
@@ -493,7 +525,7 @@ export default function TransactionsPage() {
             onChange={e => setAmountMax(e.target.value)}
           />
           <span className="text-muted" style={{ fontSize: 12 }}>Kč</span>
-          {(filterCats.size > 0 || amountMin !== '' || amountMax !== '' || search !== '' || counterparty !== '' || direction !== '') && (
+          {(filterCats.size > 0 || amountMin !== '' || amountMax !== '' || search !== '' || counterparty !== '' || direction !== '' || matchPatterns !== '' || spendingOnly) && (
             <button
               type="button"
               className="btn btn-ghost tx-filter-clear"

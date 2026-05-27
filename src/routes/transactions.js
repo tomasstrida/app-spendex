@@ -25,6 +25,26 @@ router.get('/', requireAuth, (req, res) => {
     params.push(String(counterparty).trim());
   }
 
+  // spending_only=1 → ignoruj tx z účtů s rolí jinou než „spending"
+  // (replikuje SPENDING_FILTER, který stats.js používá pro by_category).
+  if (req.query.spending_only === '1') {
+    query += ` AND (t.account_id IS NULL OR EXISTS (
+      SELECT 1 FROM accounts a WHERE a.id = t.account_id AND a.role = 'spending'
+    ))`;
+  }
+
+  // match_patterns=A,B,C → t.description LIKE %A% OR LIKE %B% OR LIKE %C%
+  // Užívá Schůzka pro klik na „Fixní platby" (5 patternů trackeru).
+  if (req.query.match_patterns !== undefined && String(req.query.match_patterns).trim() !== '') {
+    const patterns = String(req.query.match_patterns)
+      .split(',').map(s => s.trim()).filter(Boolean);
+    if (patterns.length > 0) {
+      const ors = patterns.map(() => 't.description LIKE ?').join(' OR ');
+      query += ` AND (${ors})`;
+      for (const p of patterns) params.push(`%${p}%`);
+    }
+  }
+
   // Full-text vyhledávání napříč textovými poli (vč. názvu kategorie)
   if (q !== undefined && String(q).trim() !== '') {
     const like = `%${String(q).trim()}%`;

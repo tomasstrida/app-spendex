@@ -445,14 +445,20 @@ export default function ReportPage() {
               <span>Příjmy celkem</span>
               <span>{formatCurrency(totalIncome)}</span>
             </Link>
-            {totalFixed > 0 && (
-              <Link to={txLink('direction=out')} className="report-bilance-row"
-                style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
-                title="Klik: všechny odchozí transakce v období (fixní platby najdeš zde)">
-                <span>Fixní platby</span>
-                <span>− {formatCurrency(totalFixed)}</span>
-              </Link>
-            )}
+            {totalFixed > 0 && (() => {
+              const patterns = fixedExpenses.map(f => f.match_pattern).filter(Boolean);
+              const linkExtra = patterns.length
+                ? `match_patterns=${encodeURIComponent(patterns.join(','))}&direction=out&spending_only=1`
+                : 'direction=out&spending_only=1';
+              return (
+                <Link to={txLink(linkExtra)} className="report-bilance-row"
+                  style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                  title="Klik: 5 fixních plateb (Nájem, PRE, RAV4, T-Mobile, Nordic Telecom) v období">
+                  <span>Fixní platby</span>
+                  <span>− {formatCurrency(totalFixed)}</span>
+                </Link>
+              );
+            })()}
             {variablePoolFunded > 0 && (
               <Link to={txLink(`counterparty=${VARIABLE_ACCOUNT_NUM}&direction=out`)}
                 className="report-bilance-row"
@@ -462,10 +468,10 @@ export default function ReportPage() {
                 <span>− {formatCurrency(variablePoolFunded)}</span>
               </Link>
             )}
-            <Link to={txLink(typ1CatIds ? `category_ids=${typ1CatIds}` : '')}
+            <Link to={txLink(typ1CatIds ? `category_ids=${typ1CatIds}&spending_only=1` : 'spending_only=1')}
               className="report-bilance-row"
               style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
-              title="Klik: transakce Typ 1 (měsíční) kategorií v období">
+              title="Klik: transakce Typ 1 (měsíční) kategorií v období, jen z výdajových účtů">
               <span>Měsíční výdaje</span>
               <span>
                 − {formatCurrency(totalType1)}
@@ -475,10 +481,10 @@ export default function ReportPage() {
               </span>
             </Link>
             {(totalType3 > 0 || type3MonthlyBudget > 0) && (
-              <Link to={txLink(typ3CatIds ? `category_ids=${typ3CatIds}` : '')}
+              <Link to={txLink(typ3CatIds ? `category_ids=${typ3CatIds}&spending_only=1` : 'spending_only=1')}
                 className="report-bilance-row"
                 style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
-                title="Klik: transakce Typ 3 (drahé věci / fondy) v období">
+                title="Klik: transakce Typ 3 (drahé věci / fondy) v období, jen z výdajových účtů">
                 <span>Drahé věci</span>
                 <span>
                   − {formatCurrency(totalType3)}
