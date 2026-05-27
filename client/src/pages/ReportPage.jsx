@@ -403,7 +403,9 @@ export default function ReportPage() {
   const typ1CatIds = byCategory.filter(c => c.type === 1).map(c => c.id).join(',');
   const typ3CatIds = byCategory.filter(c => c.type === 3).map(c => c.id).join(',');
   function txLink(extra) {
-    const base = periodStart && periodEnd ? `from=${periodStart}&to=${periodEnd}` : '';
+    // Posíláme `period=YYYY-MM`, ne `from/to`, aby Transakce zachovaly měsíční
+    // přepínač (z URL from/to by se odvodil customMode = dva date inputs).
+    const base = period ? `period=${period}` : '';
     return `/transactions?${base}${extra ? '&' + extra : ''}`;
   }
 
@@ -565,7 +567,7 @@ export default function ReportPage() {
                   }
                   const searchKey = row.match_counterparty_account || row.match_pattern || row.person;
                   const to = `/transactions?q=${encodeURIComponent(searchKey)}`
-                    + (periodStart && periodEnd ? `&from=${periodStart}&to=${periodEnd}` : '');
+                    + (period ? `&period=${period}` : '');
                   return (
                     <Link key={rowKey} to={to} className="report-income-row"
                       style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}>

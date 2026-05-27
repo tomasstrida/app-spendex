@@ -47,8 +47,11 @@ export default function TransactionsPage() {
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
   const [filterCats, setFilterCats] = useState(() => {
-    const initial = searchParams.get('category_id');
-    return new Set(initial ? [initial] : []);
+    // Akceptujeme oboje: category_ids=1,2,none (multi) i category_id=1 (single).
+    const multi = searchParams.get('category_ids');
+    if (multi) return new Set(multi.split(',').map(s => s.trim()).filter(Boolean));
+    const single = searchParams.get('category_id');
+    return new Set(single ? [single] : []);
   });
   const [amountMin, setAmountMin] = useState(searchParams.get('amount_min') || '');
   const [amountMax, setAmountMax] = useState(searchParams.get('amount_max') || '');
