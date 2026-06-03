@@ -2,7 +2,7 @@
 const cron = require('node-cron');
 const { createBackup } = require('./backup');
 const { createR2Client } = require('./r2Client');
-const { sendBackupFailureAlert } = require('./email');
+const { sendBackupFailureAlert, sendBackupSuccessAlert } = require('./email');
 
 function shouldSchedule(env = process.env) {
   return Boolean(
@@ -15,6 +15,13 @@ async function runBackupJob() {
     const r2 = createR2Client();
     const res = await createBackup({ r2 });
     console.log(`[backup] OK ${res.key} (${res.sizeBytes} B, prune ${res.prunedCount})`);
+    if (process.env.BACKUP_SUCCESS_EMAIL === '1') {
+      try {
+        await sendBackupSuccessAlert(res);
+      } catch (alertErr) {
+        console.error('[backup] success e-mail selhal:', alertErr);
+      }
+    }
   } catch (err) {
     console.error('[backup] SELHALO:', err);
     try {
