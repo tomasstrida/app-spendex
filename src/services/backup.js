@@ -1,5 +1,12 @@
 'use strict';
 
+const fs = require('node:fs');
+const path = require('node:path');
+const zlib = require('node:zlib');
+const Database = require('better-sqlite3');
+
+const DEFAULT_RETENTION_DAYS = Number(process.env.BACKUP_RETENTION_DAYS) || 30;
+
 function pad(n) {
   return String(n).padStart(2, '0');
 }
@@ -23,4 +30,53 @@ function selectKeysToPrune(objects, now, retentionDays) {
     .map((o) => o.key);
 }
 
-module.exports = { backupObjectKey, selectKeysToPrune };
+/** Smaže zálohy starší než retentionDays. Vrací počet smazaných. */
+async function pruneOldBackups(r2, now, retentionDays) {
+  const objects = await r2.list('backups/');
+  const keys = selectKeysToPrune(objects, now, retentionDays);
+  await r2.delete(keys);
+  return keys.length;
+}
+
+/** Vrátí seznam záloh seřazený sestupně dle data (nejnovější první). */
+async function listBackups(r2) {
+  const objects = await r2.list('backups/');
+  return objects.sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime());
+}
+
+/**
+ * Vytvoří konzistentní snapshot data.db, zkomprimuje a nahraje na R2, pak prořeže staré.
+ * deps: { r2, dbPath, tmpDir, now, retentionDays }
+ */
+async function createBackup({
+  r2,
+  dbPath = process.env.DB_PATH || path.join(__dirname, '../../data.db'),
+  tmpDir = require('node:os').tmpdir(),
+  now = new Date(),
+  retentionDays = DEFAULT_RETENTION_DAYS,
+}) {
+  const snapshotPath = path.join(tmpDir, `snapshot-${now.getTime()}.db`);
+  try {
+    // Konzistentní snapshot i ve WAL módu (NE prostá kopie souboru).
+    const src = new Database(dbPath, { readonly: true });
+    await src.backup(snapshotPath);
+    src.close();
+
+    const gz = zlib.gzipSync(fs.readFileSync(snapshotPath));
+    const key = backupObjectKey(now);
+    await r2.put(key, gz);
+
+    const prunedCount = await pruneOldBackups(r2, now, retentionDays);
+    return { key, sizeBytes: gz.length, prunedCount };
+  } finally {
+    fs.rmSync(snapshotPath, { force: true });
+  }
+}
+
+module.exports = {
+  backupObjectKey,
+  selectKeysToPrune,
+  pruneOldBackups,
+  listBackups,
+  createBackup,
+};
