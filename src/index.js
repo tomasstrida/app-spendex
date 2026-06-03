@@ -69,4 +69,5 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Spendex running on port ${PORT}`);
+  require('./services/scheduler').startScheduler();
 });
