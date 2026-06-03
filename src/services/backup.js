@@ -1,11 +1,13 @@
 'use strict';
 
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const zlib = require('node:zlib');
 const Database = require('better-sqlite3');
 
-const DEFAULT_RETENTION_DAYS = Number(process.env.BACKUP_RETENTION_DAYS) || 30;
+const _retentionEnv = Number(process.env.BACKUP_RETENTION_DAYS);
+const DEFAULT_RETENTION_DAYS = Number.isFinite(_retentionEnv) && _retentionEnv >= 0 ? _retentionEnv : 30;
 
 function pad(n) {
   return String(n).padStart(2, '0');
@@ -51,7 +53,7 @@ async function listBackups(r2) {
 async function createBackup({
   r2,
   dbPath = process.env.DB_PATH || path.join(__dirname, '../../data.db'),
-  tmpDir = require('node:os').tmpdir(),
+  tmpDir = os.tmpdir(),
   now = new Date(),
   retentionDays = DEFAULT_RETENTION_DAYS,
 }) {
@@ -59,8 +61,11 @@ async function createBackup({
   try {
     // Konzistentní snapshot i ve WAL módu (NE prostá kopie souboru).
     const src = new Database(dbPath, { readonly: true });
-    await src.backup(snapshotPath);
-    src.close();
+    try {
+      await src.backup(snapshotPath);
+    } finally {
+      src.close();
+    }
 
     const gz = zlib.gzipSync(fs.readFileSync(snapshotPath));
     const key = backupObjectKey(now);

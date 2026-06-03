@@ -67,39 +67,44 @@ function makeFakeR2() {
 
 test('createBackup: nahraje gzipovaný konzistentní snapshot DB', async () => {
   const { dir, dbPath } = makeTempDb();
-  const r2 = makeFakeR2();
-  const now = new Date(Date.UTC(2026, 5, 3, 3, 0, 5));
+  try {
+    const r2 = makeFakeR2();
+    const now = new Date(Date.UTC(2026, 5, 3, 3, 0, 5));
 
-  const res = await createBackup({ r2, dbPath, tmpDir: dir, now });
+    const res = await createBackup({ r2, dbPath, tmpDir: dir, now });
 
-  assert.equal(res.key, 'backups/data-2026-06-03-030005.db.gz');
-  assert.equal(r2.puts.length, 1);
+    assert.equal(res.key, 'backups/data-2026-06-03-030005.db.gz');
+    assert.equal(r2.puts.length, 1);
 
-  // Nahraný obsah musí jít rozbalit zpět na validní SQLite s našimi daty.
-  const uploaded = r2.puts[0].body;
-  const restoredPath = path.join(dir, 'restored.db');
-  fs.writeFileSync(restoredPath, zlib.gunzipSync(uploaded));
-  const rdb = new Database(restoredPath);
-  const row = rdb.prepare('SELECT v FROM t WHERE id = 1').get();
-  rdb.close();
-  assert.equal(row.v, 'ahoj');
-
-  fs.rmSync(dir, { recursive: true, force: true });
+    // Nahraný obsah musí jít rozbalit zpět na validní SQLite s našimi daty.
+    const uploaded = r2.puts[0].body;
+    const restoredPath = path.join(dir, 'restored.db');
+    fs.writeFileSync(restoredPath, zlib.gunzipSync(uploaded));
+    const rdb = new Database(restoredPath);
+    const row = rdb.prepare('SELECT v FROM t WHERE id = 1').get();
+    rdb.close();
+    assert.equal(row.v, 'ahoj');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('createBackup: po uploadu smaže staré zálohy přes prune', async () => {
   const { dir, dbPath } = makeTempDb();
-  const r2 = makeFakeR2();
-  const now = new Date(Date.UTC(2026, 5, 3, 3, 0, 5));
-  const day = 24 * 60 * 60 * 1000;
-  r2.listResult = [
-    { key: 'backups/old', lastModified: new Date(now - 40 * day), sizeBytes: 1 },
-    { key: 'backups/fresh', lastModified: new Date(now - 2 * day), sizeBytes: 1 },
-  ];
+  try {
+    const r2 = makeFakeR2();
+    const now = new Date(Date.UTC(2026, 5, 3, 3, 0, 5));
+    const day = 24 * 60 * 60 * 1000;
+    r2.listResult = [
+      { key: 'backups/old', lastModified: new Date(now - 40 * day), sizeBytes: 1 },
+      { key: 'backups/fresh', lastModified: new Date(now - 2 * day), sizeBytes: 1 },
+    ];
 
-  const res = await createBackup({ r2, dbPath, tmpDir: dir, now, retentionDays: 30 });
+    const res = await createBackup({ r2, dbPath, tmpDir: dir, now, retentionDays: 30 });
 
-  assert.deepEqual(r2.deleted, ['backups/old']);
-  assert.equal(res.prunedCount, 1);
-  fs.rmSync(dir, { recursive: true, force: true });
+    assert.deepEqual(r2.deleted, ['backups/old']);
+    assert.equal(res.prunedCount, 1);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
