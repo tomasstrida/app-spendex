@@ -55,4 +55,19 @@ async function sendPasswordResetEmail(email, name, token) {
   });
 }
 
-module.exports = { sendEmail, sendVerificationEmail, sendPasswordResetEmail };
+async function sendBackupFailureAlert(err) {
+  const to = process.env.BACKUP_ALERT_EMAIL || 'tomas.strida@gmail.com';
+  const when = new Date().toISOString();
+  await sendEmail({
+    to,
+    subject: '⚠️ Spendex: záloha DB selhala',
+    htmlContent: `
+      <p>Denní záloha databáze Spendex selhala.</p>
+      <p><strong>Čas:</strong> ${when}</p>
+      <p><strong>Chyba:</strong> ${err && err.message ? err.message : String(err)}</p>
+      <pre>${err && err.stack ? err.stack : ''}</pre>
+    `,
+  });
+}
+
+module.exports = { sendEmail, sendVerificationEmail, sendPasswordResetEmail, sendBackupFailureAlert };
