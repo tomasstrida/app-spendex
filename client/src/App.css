@@ -733,6 +733,7 @@ a.report-budget-card .report-budget-row { margin-bottom: 6px; }
 /* ── Helpers ── */
 .text-muted { color: var(--text2); }
 .text-danger { color: var(--danger); }
+.text-success { color: var(--success); }
 
 /* ── Import ── */
 .import-upload-area {

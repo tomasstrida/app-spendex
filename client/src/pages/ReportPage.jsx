@@ -792,13 +792,17 @@ export default function ReportPage() {
               const ok   = budgets.filter(b => budgetStatus(b.spent, b.amount) === 'ok').length;
               const warn = budgets.filter(b => budgetStatus(b.spent, b.amount) === 'warn').length;
               const over = budgets.filter(b => budgetStatus(b.spent, b.amount) === 'over').length;
-              const overAmount = budgets.reduce((s, b) => s + Math.max(0, b.spent - b.amount), 0);
+              const diff = budgets.reduce((s, b) => s + (b.spent - b.amount), 0);
               return (
                 <div style={{ display: 'flex', gap: 16, fontSize: 13, marginTop: 4, flexWrap: 'wrap' }}>
                   {ok   > 0 && <span>✅ {ok} splněno</span>}
                   {warn > 0 && <span>⚠️ {warn} mírně přes</span>}
                   {over > 0 && <span>🔴 {over} překročeno</span>}
-                  {overAmount > 0 && <span className="text-danger">celkem přes o {formatCurrency(overAmount)}</span>}
+                  {diff !== 0 && (
+                    <span className={diff > 0 ? 'text-danger' : 'text-success'}>
+                      rozdíl oproti plánu {diff > 0 ? '+' : '−'}{formatCurrency(Math.abs(diff))}
+                    </span>
+                  )}
                 </div>
               );
             })()}
