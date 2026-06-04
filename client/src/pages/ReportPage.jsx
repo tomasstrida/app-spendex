@@ -743,6 +743,7 @@ export default function ReportPage() {
                   <span className="report-budget-name">Kategorie</span>
                   <span className="report-budget-spent">Utraceno</span>
                   <span className="report-budget-limit">Rozpočet</span>
+                  <span className="report-budget-over">Přes</span>
                   <span className="report-budget-status">Stav</span>
                 </div>
               <div className="report-budget-list">
@@ -754,6 +755,7 @@ export default function ReportPage() {
                       <span className="report-budget-name">{b.category_name}</span>
                       <span className={`report-budget-spent ${STATUS[st].cls}`}>{formatCurrency(b.spent)}</span>
                       <span className="text-muted report-budget-limit">/ {formatCurrency(b.amount)}</span>
+                      <span className="report-budget-over text-danger">{b.spent > b.amount ? `+${formatCurrency(b.spent - b.amount)}` : ''}</span>
                       <span className="report-budget-status">{STATUS[st].icon}</span>
                     </>
                   );
@@ -790,11 +792,13 @@ export default function ReportPage() {
               const ok   = budgets.filter(b => budgetStatus(b.spent, b.amount) === 'ok').length;
               const warn = budgets.filter(b => budgetStatus(b.spent, b.amount) === 'warn').length;
               const over = budgets.filter(b => budgetStatus(b.spent, b.amount) === 'over').length;
+              const overAmount = budgets.reduce((s, b) => s + Math.max(0, b.spent - b.amount), 0);
               return (
-                <div style={{ display: 'flex', gap: 16, fontSize: 13, marginTop: 4 }}>
+                <div style={{ display: 'flex', gap: 16, fontSize: 13, marginTop: 4, flexWrap: 'wrap' }}>
                   {ok   > 0 && <span>✅ {ok} splněno</span>}
                   {warn > 0 && <span>⚠️ {warn} mírně přes</span>}
                   {over > 0 && <span>🔴 {over} překročeno</span>}
+                  {overAmount > 0 && <span className="text-danger">celkem přes o {formatCurrency(overAmount)}</span>}
                 </div>
               );
             })()}
@@ -830,58 +834,6 @@ export default function ReportPage() {
               </div>
             </section>
           )}
-
-          {/* ── ROČNÍ / SEZÓNNÍ (Typ 2) – roční čerpání budgetu (kalendářní rok) ── */}
-          {type2Cats.length > 0 && (() => {
-            const year = period ? Number(period.split('-')[0]) : new Date().getFullYear();
-            return (
-              <section className="report-section">
-                <div className="report-section-header">
-                  <h2 className="report-section-title">Roční / sezónní výdaje <span className="text-muted" style={{ fontSize: 13, fontWeight: 400 }}>· {year}</span></h2>
-                </div>
-                <div className="report-budget-row" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', marginBottom: 4 }}>
-                  <span className="report-budget-dot" style={{ background: 'transparent' }} />
-                  <span className="report-budget-name">Kategorie</span>
-                  <span className="report-budget-spent">Utraceno za rok</span>
-                  <span className="report-budget-limit" style={{ whiteSpace: 'nowrap' }}>Roční rozpočet</span>
-                  <span className="report-budget-status" />
-                </div>
-                <div className="report-budget-list">
-                  {type2Cats.map(c => {
-                    const yearSpent = type2YearSpent[c.id] || 0;
-                    const yearBudget = type2BudgetByCat[c.id] || 0;
-                    const over = yearBudget > 0 && yearSpent > yearBudget;
-                    const to = `/transactions?category_id=${c.id}&from=${year}-01-01&to=${year}-12-31`;
-                    return (
-                      <Link key={c.id} to={to} className="report-budget-card"
-                        style={{ color: 'inherit' }}>
-                        <div className="report-budget-row">
-                          <span className="report-budget-dot" style={{ background: c.color || '#6366f1' }} />
-                          <span className="report-budget-name">{c.name}</span>
-                          <span className={`report-budget-spent${over ? ' text-danger' : ''}`}>{formatCurrency(yearSpent)}</span>
-                          <span className="text-muted report-budget-limit">{yearBudget > 0 ? `/ ${formatCurrency(yearBudget)}` : ''}</span>
-                          <span className="report-budget-status" />
-                        </div>
-                        {yearBudget > 0 && (
-                          <YearThermometer spent={yearSpent} amount={yearBudget}
-                            year={year} color={c.color} />
-                        )}
-                      </Link>
-                    );
-                  })}
-                </div>
-                <div className="report-subtotal">
-                  <span>Roční výdaje celkem · {year}</span>
-                  <span>
-                    {formatCurrency(totalType2YearSpent)}
-                    {totalType2YearBudget > 0 && (
-                      <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(totalType2YearBudget)}</span>
-                    )}
-                  </span>
-                </div>
-              </section>
-            );
-          })()}
 
           {/* ── GRAF VÝDAJŮ ── */}
           {chartData.length > 0 && (

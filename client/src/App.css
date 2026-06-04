@@ -517,6 +517,7 @@ a.report-budget-card .report-budget-row { margin-bottom: 6px; }
 .report-budget-name { flex: 1; }
 .report-budget-spent { font-weight: 600; text-align: right; min-width: 80px; }
 .report-budget-limit { min-width: 80px; }
+.report-budget-over { min-width: 80px; text-align: right; font-weight: 600; white-space: nowrap; }
 .report-budget-status { min-width: 24px; text-align: center; }
 
 /* Subtotal */
