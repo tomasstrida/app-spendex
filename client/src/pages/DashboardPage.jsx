@@ -131,7 +131,6 @@ export default function DashboardPage() {
         <div className="dashboard-content">
           {/* Typ 1 – Měsíční */}
           <section className="section">
-            <h2 className="section-title">{t.dashboard.budgets}</h2>
             {!budgets?.length ? (
               <div className="empty-state">
                 <p>{t.dashboard.noBudgets}</p>
