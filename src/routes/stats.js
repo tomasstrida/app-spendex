@@ -117,6 +117,17 @@ router.get('/overview', requireAuth, (req, res) => {
       AND t.counterparty_account LIKE ? || '%'
   `).get(req.user.id, start, end, mainAccount, variableAccount);
 
+  // Jednotlivé položky drahých věcí (Typ 3) v zobrazeném období – seznam transakcí.
+  const expensiveItems = db.prepare(`
+    SELECT t.id, t.date, t.description, t.amount,
+           c.id AS category_id, c.name AS category_name, c.color AS category_color
+    FROM transactions t
+    JOIN categories c ON c.id = t.category_id AND c.user_id = t.user_id
+    WHERE t.user_id = ? AND c.type = 3
+      AND t.date >= ? AND t.date <= ?
+    ORDER BY t.date DESC, t.id DESC
+  `).all(req.user.id, start, end);
+
   res.json({
     period: periodKey,
     period_start: start,
@@ -128,6 +139,7 @@ router.get('/overview', requireAuth, (req, res) => {
     savings,
     reserve,
     variable_pool_funded: variablePoolDotace.amount,
+    expensive_items: expensiveItems,
   });
 });
 

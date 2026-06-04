@@ -15,7 +15,7 @@ const cs = {
   },
   dashboard: {
     title: 'Přehled',
-    totalSpent: 'Celkem utraceno',
+    totalSpent: 'Utraceno v období',
     budgets: 'Rozpočty',
     noBudgets: 'Žádné rozpočty pro toto období.',
     noBudgetsHint: 'Přidejte rozpočty v sekci Rozpočty.',

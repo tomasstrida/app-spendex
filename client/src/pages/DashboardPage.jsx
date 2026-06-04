@@ -66,85 +66,37 @@ function BudgetBar({ budget, period, periodStart, periodEnd }) {
   );
 }
 
-// ── Typ 3 na dashboardu ───────────────────────────────────────────────────────
-
-function FundCard({ fund }) {
-  const navigate = useNavigate();
-  const year = new Date().getFullYear();
-  return (
-    <div className="budget-item" style={{ cursor: 'default' }}>
-      <div className="budget-item-header">
-        <div className="budget-item-name">
-          <span className="budget-dot" style={{ background: fund.color || '#6366f1' }} />
-          <span style={{ cursor: 'pointer' }}
-            onClick={() => navigate(`/transactions?category_id=${fund.id}&from=${year}-01-01&to=${year}-12-31`)}>
-            {fund.name}
-          </span>
-        </div>
-      </div>
-      <div className="fund-info-row">
-        {fund.typical_price && (
-          <span className="fund-info-item">
-            <span className="text-muted">typická cena</span>
-            <strong>{formatCurrency(fund.typical_price)}</strong>
-          </span>
-        )}
-        {fund.monthly_contribution && (
-          <span className="fund-info-item">
-            <span className="text-muted">příspěvek / měsíc</span>
-            <strong>~{formatCurrency(fund.monthly_contribution)}</strong>
-          </span>
-        )}
-        <span className="fund-info-item">
-          <span className="text-muted">naposledy</span>
-          <strong>
-            {fund.last_payment_date
-              ? fund.months_since_last === 0 ? 'tento měsíc' : `před ${fund.months_since_last} měs.`
-              : 'nikdy'}
-          </strong>
-        </span>
-        <span className="fund-info-item">
-          <span className="text-muted">letos</span>
-          <strong>{formatCurrency(fund.total_year)}</strong>
-        </span>
-      </div>
-    </div>
-  );
-}
-
 // ── Hlavní komponenta ─────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const navigate = useNavigate();
   const { period, setPeriod, currentPeriod, resetToCurrent } = usePeriod();
   const [periodStart, setPeriodStart] = useState(null);
   const [periodEnd, setPeriodEnd] = useState(null);
   const [data, setData] = useState(null);
   const [budgets, setBudgets] = useState(null);
   const [categories, setCategories] = useState([]);
-  const [funds, setFunds] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!period) return;
     setLoading(true);
-    const year = new Date().getFullYear();
     Promise.all([
       fetch(`/api/stats/overview?period=${period}`).then(r => r.json()),
       fetch(`/api/budgets?period=${period}`).then(r => r.json()),
       fetch('/api/categories').then(r => r.json()),
-      fetch(`/api/categories/fund-status?year=${year}`).then(r => r.json()),
-    ]).then(([stats, buds, cats, fundStatus]) => {
+    ]).then(([stats, buds, cats]) => {
       setData(stats);
       setPeriodStart(stats.period_start);
       setPeriodEnd(stats.period_end);
       // Měsíční rozpočty: jen Typ 1
       setBudgets((buds.budgets || []).filter(b => !b.category_type || b.category_type === 1));
       setCategories(cats);
-      setFunds(fundStatus || []);
     }).finally(() => setLoading(false));
   }, [period]);
 
   const type3Cats = categories.filter(c => c.type === 3);
+  const expensiveItems = data?.expensive_items || [];
 
   return (
     <Layout>
@@ -203,13 +155,35 @@ export default function DashboardPage() {
             )}
           </section>
 
-          {/* Typ 3 – Drahé věci */}
+          {/* Typ 3 – Drahé věci: seznam položek v zobrazeném období */}
           {type3Cats.length > 0 && (
             <section className="section">
               <h2 className="section-title">Drahé věci</h2>
-              <div className="budget-list">
-                {funds.map(f => <FundCard key={f.id} fund={f} />)}
-              </div>
+              {expensiveItems.length === 0 ? (
+                <div className="empty-state">
+                  <p className="text-muted">Žádné drahé věci v tomto období.</p>
+                </div>
+              ) : (
+                <div className="report-budget-list">
+                  {expensiveItems.map(it => (
+                    <div key={it.id} className="report-budget-row"
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => navigate(`/transactions?category_id=${it.category_id}&period=${period}`)}>
+                      <span className="report-budget-dot" style={{ background: it.category_color || '#6366f1' }} />
+                      <span className="report-budget-name">
+                        <span className="text-muted" style={{ marginRight: 8 }}>
+                          {`${+it.date.slice(8, 10)}. ${+it.date.slice(5, 7)}.`}
+                        </span>
+                        {it.description || it.category_name}
+                        <span className="text-muted" style={{ display: 'block', fontSize: 11 }}>{it.category_name}</span>
+                      </span>
+                      <span className={`report-budget-spent${it.amount < 0 ? '' : ' text-success'}`}>
+                        {formatCurrency(-it.amount)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           )}
         </div>
