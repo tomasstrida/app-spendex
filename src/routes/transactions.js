@@ -47,12 +47,13 @@ router.get('/', requireAuth, (req, res) => {
 
   // Full-text vyhledávání napříč textovými poli (vč. názvu kategorie)
   if (q !== undefined && String(q).trim() !== '') {
+    // necitlivé na velikost písmen i diakritiku (unaccent_lower – viz db/connection.js)
     const like = `%${String(q).trim()}%`;
     query += ` AND (
-      t.description LIKE ? OR t.note LIKE ? OR t.place LIKE ?
-      OR t.counterparty_account LIKE ? OR t.ab_category LIKE ?
-      OR t.tx_type LIKE ? OR t.entered_by LIKE ? OR t.external_id LIKE ?
-      OR c.name LIKE ?
+      unaccent_lower(t.description) LIKE unaccent_lower(?) OR unaccent_lower(t.note) LIKE unaccent_lower(?) OR unaccent_lower(t.place) LIKE unaccent_lower(?)
+      OR unaccent_lower(t.counterparty_account) LIKE unaccent_lower(?) OR unaccent_lower(t.ab_category) LIKE unaccent_lower(?)
+      OR unaccent_lower(t.tx_type) LIKE unaccent_lower(?) OR unaccent_lower(t.entered_by) LIKE unaccent_lower(?) OR unaccent_lower(t.external_id) LIKE unaccent_lower(?)
+      OR unaccent_lower(c.name) LIKE unaccent_lower(?)
     )`;
     for (let i = 0; i < 9; i++) params.push(like);
   }
