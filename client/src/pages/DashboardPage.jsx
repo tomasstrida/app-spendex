@@ -77,6 +77,30 @@ export default function DashboardPage() {
   const [budgets, setBudgets] = useState(null);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [editingNoteId, setEditingNoteId] = useState(null);
+  const [noteDraft, setNoteDraft] = useState('');
+
+  function startNote(it) {
+    setEditingNoteId(it.id);
+    setNoteDraft(it.note || '');
+  }
+
+  async function saveExpensiveNote(it) {
+    const note = noteDraft.trim();
+    setEditingNoteId(null);
+    if (note === (it.note || '')) return; // beze změny
+    const r = await fetch(`/api/transactions/${it.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note }),
+    });
+    if (r.ok) {
+      setData(prev => ({
+        ...prev,
+        expensive_items: (prev.expensive_items || []).map(x => x.id === it.id ? { ...x, note } : x),
+      }));
+    }
+  }
 
   useEffect(() => {
     if (!period) return;
@@ -157,20 +181,43 @@ export default function DashboardPage() {
               ) : (
                 <div className="report-budget-list" style={{ maxWidth: 640 }}>
                   {expensiveItems.map(it => (
-                    <div key={it.id} className="report-budget-row"
-                      style={{ cursor: 'pointer' }}
-                      onClick={() => navigate(`/transactions?category_id=${it.category_id}&period=${period}`)}>
-                      <span className="report-budget-dot" style={{ background: it.category_color || '#6366f1' }} />
-                      <span className="report-budget-name">
-                        <span className="text-muted" style={{ marginRight: 8 }}>
-                          {`${+it.date.slice(8, 10)}. ${+it.date.slice(5, 7)}.`}
+                    <div key={it.id} style={{ padding: '4px 0' }}>
+                      <div className="report-budget-row" style={{ cursor: 'pointer' }}
+                        onClick={() => navigate(`/transactions?category_id=${it.category_id}&period=${period}`)}>
+                        <span className="report-budget-dot" style={{ background: it.category_color || '#6366f1' }} />
+                        <span className="report-budget-name">
+                          <span className="text-muted" style={{ marginRight: 8 }}>
+                            {`${+it.date.slice(8, 10)}. ${+it.date.slice(5, 7)}.`}
+                          </span>
+                          {it.description || it.category_name}
+                          <span className="text-muted" style={{ display: 'block', fontSize: 11 }}>{it.category_name}</span>
                         </span>
-                        {it.description || it.category_name}
-                        <span className="text-muted" style={{ display: 'block', fontSize: 11 }}>{it.category_name}</span>
-                      </span>
-                      <span className={`report-budget-spent${it.amount < 0 ? '' : ' text-success'}`}>
-                        {formatCurrency(-it.amount)}
-                      </span>
+                        <span className={`report-budget-spent${it.amount < 0 ? '' : ' text-success'}`}>
+                          {formatCurrency(-it.amount)}
+                        </span>
+                      </div>
+                      <div style={{ paddingLeft: 18, marginTop: 2 }}>
+                        {editingNoteId === it.id ? (
+                          <input className="input" autoFocus
+                            value={noteDraft}
+                            onChange={e => setNoteDraft(e.target.value)}
+                            onBlur={() => saveExpensiveNote(it)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') saveExpensiveNote(it);
+                              if (e.key === 'Escape') setEditingNoteId(null);
+                            }}
+                            placeholder="Co to bylo?"
+                            style={{ fontSize: 12, maxWidth: 400, padding: '2px 8px' }}
+                          />
+                        ) : (
+                          <span onClick={() => startNote(it)}
+                            className={it.note ? '' : 'text-muted'}
+                            style={{ cursor: 'pointer', fontSize: 12 }}
+                            title="Klikněte pro úpravu poznámky">
+                            {it.note ? `📝 ${it.note}` : '+ poznámka'}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

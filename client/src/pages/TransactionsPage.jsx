@@ -15,7 +15,7 @@ const ALL_COLS = [
   { key: 'entered_by',           label: 'Kdo zadal',       default: false },
   { key: 'counterparty_account', label: 'Číslo účtu',      default: false },
   { key: 'place',                label: 'Obchodní místo',  default: false },
-  { key: 'note',                 label: 'Zpráva/Poznámka', default: false },
+  { key: 'note',                 label: 'Zpráva/Poznámka', default: true },
   { key: 'amount',               label: 'Částka',          default: true,  always: true },
 ];
 
@@ -25,7 +25,19 @@ const PAGE_SIZE = 400;
 function loadCols() {
   try {
     const saved = JSON.parse(localStorage.getItem(LS_KEY));
-    if (saved) return saved;
+    if (saved) {
+      // Jednorázová migrace: přidat sloupec note stávajícím uživatelům (před 'amount'),
+      // aniž bychom resetovali jejich ostatní volby sloupců.
+      if (!localStorage.getItem('spendex_tx_note_migrated')) {
+        localStorage.setItem('spendex_tx_note_migrated', '1');
+        if (!saved.includes('note')) {
+          const idx = saved.indexOf('amount');
+          if (idx >= 0) saved.splice(idx, 0, 'note'); else saved.push('note');
+          localStorage.setItem(LS_KEY, JSON.stringify(saved));
+        }
+      }
+      return saved;
+    }
   } catch { /* ignore */ }
   return ALL_COLS.filter(c => c.default).map(c => c.key);
 }
@@ -635,6 +647,15 @@ export default function TransactionsPage() {
                       value={editData.amount}
                       onChange={e => setEditData(d => ({ ...d, amount: e.target.value }))}
                       style={{ maxWidth: 120 }}
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+                    <label className="form-label" style={{ fontSize: 11 }}>Zpráva/Poznámka</label>
+                    <input
+                      className="input"
+                      value={editData.note}
+                      onChange={e => setEditData(d => ({ ...d, note: e.target.value }))}
+                      placeholder="Co to bylo?"
                     />
                   </div>
                 </div>
