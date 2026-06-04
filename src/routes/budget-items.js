@@ -54,7 +54,26 @@ router.get('/', requireAuth, (req, res) => {
   const category_year_spent = {};
   for (const r of annualSpent) category_year_spent[r.category_id] = r.spent;
 
-  res.json({ year, items: result, category_year_spent });
+  // Měsíční čerpání per kategorie (Typ 2): pole 12 hodnot [leden..prosinec].
+  // Slouží ke kumulativnímu grafu čerpání ročního budgetu v čase.
+  const monthlySpent = db.prepare(`
+    SELECT t.category_id,
+           CAST(strftime('%m', t.date) AS INTEGER) AS month,
+           COALESCE(SUM(-t.amount), 0) AS spent
+    FROM transactions t
+    JOIN categories c ON c.id = t.category_id
+    WHERE t.user_id = ? AND c.user_id = ? AND c.type = 2
+      AND t.date >= ? AND t.date <= ?
+      AND t.category_id IS NOT NULL
+    GROUP BY t.category_id, month
+  `).all(req.user.id, req.user.id, `${year}-01-01`, `${year}-12-31`);
+  const category_month_spent = {};
+  for (const r of monthlySpent) {
+    if (!category_month_spent[r.category_id]) category_month_spent[r.category_id] = Array(12).fill(0);
+    if (r.month >= 1 && r.month <= 12) category_month_spent[r.category_id][r.month - 1] = r.spent;
+  }
+
+  res.json({ year, items: result, category_year_spent, category_month_spent });
 });
 
 // POST /api/budget-items

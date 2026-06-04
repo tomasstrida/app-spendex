@@ -26,69 +26,6 @@ const FIXED_STATUS = {
   missing:  { icon: '❌' },
 };
 
-// ── Donut chart (SVG) ────────────────────────────────────────────────────────
-
-function polarToXY(cx, cy, r, deg) {
-  const rad = ((deg - 90) * Math.PI) / 180;
-  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
-}
-
-function arcPath(cx, cy, r, ri, startDeg, sweep) {
-  if (sweep >= 359.99) sweep = 359.99;
-  const end = startDeg + sweep;
-  const s = polarToXY(cx, cy, r, startDeg);
-  const e = polarToXY(cx, cy, r, end);
-  const si = polarToXY(cx, cy, ri, end);
-  const ei = polarToXY(cx, cy, ri, startDeg);
-  const lg = sweep > 180 ? 1 : 0;
-  return [
-    `M${s.x} ${s.y}`,
-    `A${r} ${r} 0 ${lg} 1 ${e.x} ${e.y}`,
-    `L${si.x} ${si.y}`,
-    `A${ri} ${ri} 0 ${lg} 0 ${ei.x} ${ei.y}`,
-    'Z',
-  ].join(' ');
-}
-
-function DonutChart({ data, total }) {
-  const cx = 90, cy = 90, r = 78, ri = 52;
-  const filtered = data.filter(d => d.spent > 0);
-  if (!filtered.length || !total) return null;
-
-  let angle = 0;
-  const segments = filtered.map(d => {
-    const sweep = (d.spent / total) * 360;
-    const seg = { ...d, startAngle: angle, sweep };
-    angle += sweep;
-    return seg;
-  });
-
-  return (
-    <div className="donut-wrap">
-      <svg viewBox="0 0 180 180" width="180" height="180" style={{ flexShrink: 0 }}>
-        {segments.map((s, i) => (
-          <path key={i} d={arcPath(cx, cy, r, ri, s.startAngle, s.sweep)}
-            fill={s.color || '#6366f1'} />
-        ))}
-        <text x={cx} y={cy - 6} textAnchor="middle" fill="var(--text)"
-          fontSize="13" fontWeight="700">
-          {Math.round(total / 1000)}k
-        </text>
-        <text x={cx} y={cx + 10} textAnchor="middle" fill="var(--text2)" fontSize="10">Kč celkem</text>
-      </svg>
-      <div className="donut-legend">
-        {filtered.slice(0, 12).map((d, i) => (
-          <div key={i} className="donut-legend-item">
-            <span className="donut-legend-dot" style={{ background: d.color || '#6366f1' }} />
-            <span className="donut-legend-name">{d.name}</span>
-            <span className="donut-legend-val">{formatCurrency(d.spent)}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ── Formulář pevných výdajů ──────────────────────────────────────────────────
 
 function FixedExpenseForm({ initial, onSave, onCancel }) {
@@ -330,7 +267,6 @@ export default function ReportPage() {
   // Výdaje dle typu kategorie (z by_category)
   const byCategory = stats?.by_category || [];
   const type3Spent = byCategory.filter(c => c.type === 3 && c.spent > 0);
-  const chartData  = byCategory.filter(c => c.spent > 0);
 
   const totalFixed   = fixedExpenses.reduce((s, f) => s + f.amount, 0);
   // Striktní whitelist: do bilance i sekce Příjmy vstupují jen ručně aliasované zdroje
@@ -343,7 +279,6 @@ export default function ReportPage() {
   const totalType3   = type3Spent.reduce((s, c) => s + c.spent, 0);
   // Očekávaný měsíční příspěvek do fondů (Typ 3)
   const type3MonthlyBudget = funds.reduce((s, f) => s + (f.monthly_contribution || 0), 0);
-  const totalSpent   = stats?.total_spent || 0;
   const savings      = stats?.savings || { net: 0 };
   const variablePoolFunded = stats?.variable_pool_funded || 0;
 
@@ -789,15 +724,6 @@ export default function ReportPage() {
             </section>
           )}
 
-          {/* ── GRAF VÝDAJŮ ── */}
-          {chartData.length > 0 && (
-            <section className="report-section">
-              <div className="report-section-header">
-                <h2 className="report-section-title">Výdaje dle kategorií</h2>
-              </div>
-              <DonutChart data={chartData} total={totalSpent} />
-            </section>
-          )}
 
         </div>
       )}

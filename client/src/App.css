@@ -510,9 +510,10 @@
 }
 a.report-budget-row { transition: background 0.12s; }
 a.report-budget-row:hover { background: var(--bg2); border-radius: 6px; }
-a.report-budget-card { display: block; padding: 6px 8px; border-radius: 6px; transition: background 0.12s; }
+.report-budget-card { display: block; padding: 6px 8px; border-radius: 6px; }
+a.report-budget-card { transition: background 0.12s; }
 a.report-budget-card:hover { background: var(--bg2); text-decoration: none; }
-a.report-budget-card .report-budget-row { margin-bottom: 6px; }
+.report-budget-card .report-budget-row { margin-bottom: 6px; }
 .report-budget-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .report-budget-name { flex: 1; }
 .report-budget-spent { font-weight: 600; text-align: right; min-width: 80px; }
