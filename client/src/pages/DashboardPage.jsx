@@ -5,32 +5,6 @@ import { ChevronLeft, ChevronRight, TrendingDown } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
 
-const MONTHS_SHORT = ['led','úno','bře','dub','kvě','čvn','čvc','srp','zář','říj','lis','pro'];
-
-function windowLabel(ws, we) {
-  if (ws === 1 && we === 12) return 'celý rok';
-  if (ws === we) return MONTHS_SHORT[ws - 1];
-  return `${MONTHS_SHORT[ws - 1]}–${MONTHS_SHORT[we - 1]}`;
-}
-
-function getItemStatus(item, year) {
-  const now = new Date();
-  const cm = now.getMonth() + 1;
-  if (item.spent >= item.amount) return 'paid';
-  if (year !== now.getFullYear()) return item.spent > 0 ? 'partial' : 'missed';
-  const sameYear = item.window_start <= item.window_end;
-  const inWindow = sameYear
-    ? cm >= item.window_start && cm <= item.window_end
-    : cm >= item.window_start || cm <= item.window_end;
-  const windowPast = sameYear ? cm > item.window_end : false;
-  if (inWindow) return 'active';
-  if (windowPast) return item.spent > 0 ? 'partial' : 'missed';
-  return 'waiting';
-}
-
-const STATUS_ICON = { paid: '✅', active: '🟡', waiting: '⏳', partial: '⚠️', missed: '⚠️' };
-const STATUS_CLS  = { paid: '',   active: 'text-warn', waiting: 'text-muted', partial: 'text-warn', missed: 'text-danger' };
-
 // ── Teploměr Typ 1 ────────────────────────────────────────────────────────────
 
 function Thermometer({ spent, amount, periodStart, periodEnd, color }) {
@@ -92,43 +66,6 @@ function BudgetBar({ budget, period, periodStart, periodEnd }) {
   );
 }
 
-// ── Typ 2 na dashboardu ───────────────────────────────────────────────────────
-
-function Type2Card({ cat, items, year }) {
-  const navigate = useNavigate();
-  if (items.length === 0) return null;
-
-  return (
-    <div className="budget-item" style={{ cursor: 'default' }}>
-      <div className="budget-item-header">
-        <div className="budget-item-name">
-          <span className="budget-dot" style={{ background: cat.color || '#6366f1' }} />
-          <span style={{ cursor: 'pointer' }}
-            onClick={() => navigate(`/transactions?category_id=${cat.id}&from=${year}-01-01&to=${year}-12-31`)}>
-            {cat.name}
-          </span>
-        </div>
-      </div>
-      <div className="type2-items-list type2-items-list--compact">
-        {items.map(item => {
-          const st = getItemStatus(item, year);
-          return (
-            <div key={item.id} className="type2-item-row">
-              <span className="type2-item-name">{item.name}</span>
-              <span className="type2-item-window text-muted">{windowLabel(item.window_start, item.window_end)}</span>
-              <span className={`type2-item-spent${item.spent > item.amount ? ' text-danger' : ''}`}>
-                {formatCurrency(item.spent)}
-              </span>
-              <span className="type2-item-amount text-muted">/ {formatCurrency(item.amount)}</span>
-              <span className={STATUS_CLS[st]}>{STATUS_ICON[st]}</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 // ── Typ 3 na dashboardu ───────────────────────────────────────────────────────
 
 function FundCard({ fund }) {
@@ -184,7 +121,6 @@ export default function DashboardPage() {
   const [data, setData] = useState(null);
   const [budgets, setBudgets] = useState(null);
   const [categories, setCategories] = useState([]);
-  const [budgetItems, setBudgetItems] = useState([]);
   const [funds, setFunds] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -196,23 +132,19 @@ export default function DashboardPage() {
       fetch(`/api/stats/overview?period=${period}`).then(r => r.json()),
       fetch(`/api/budgets?period=${period}`).then(r => r.json()),
       fetch('/api/categories').then(r => r.json()),
-      fetch(`/api/budget-items?year=${year}`).then(r => r.json()),
       fetch(`/api/categories/fund-status?year=${year}`).then(r => r.json()),
-    ]).then(([stats, buds, cats, items, fundStatus]) => {
+    ]).then(([stats, buds, cats, fundStatus]) => {
       setData(stats);
       setPeriodStart(stats.period_start);
       setPeriodEnd(stats.period_end);
       // Měsíční rozpočty: jen Typ 1
       setBudgets((buds.budgets || []).filter(b => !b.category_type || b.category_type === 1));
       setCategories(cats);
-      setBudgetItems(items.items || []);
       setFunds(fundStatus || []);
     }).finally(() => setLoading(false));
   }, [period]);
 
-  const type2Cats = categories.filter(c => c.type === 2);
   const type3Cats = categories.filter(c => c.type === 3);
-  const year = new Date().getFullYear();
 
   return (
     <Layout>
@@ -270,24 +202,6 @@ export default function DashboardPage() {
               </div>
             )}
           </section>
-
-          {/* Typ 2 – Roční / sezónní */}
-          {type2Cats.length > 0 && (
-            <section className="section">
-              <h2 className="section-title">Roční / sezónní</h2>
-              <div className="budget-list">
-                {type2Cats.map(cat => {
-                  const items = budgetItems.filter(i => i.category_id === cat.id);
-                  return <Type2Card key={cat.id} cat={cat} items={items} year={year} />;
-                }).filter(Boolean)}
-              </div>
-              {type2Cats.every(cat => budgetItems.filter(i => i.category_id === cat.id).length === 0) && (
-                <div className="empty-state">
-                  <p className="text-muted">Žádné podpoložky. Nakonfigurujte je v sekci Rozpočty.</p>
-                </div>
-              )}
-            </section>
-          )}
 
           {/* Typ 3 – Drahé věci */}
           {type3Cats.length > 0 && (
