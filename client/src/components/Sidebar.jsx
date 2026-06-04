@@ -8,6 +8,7 @@ import {
   Tag,
   PiggyBank,
   ClipboardList,
+  CalendarRange,
   Upload,
   Settings,
   LogOut,
@@ -21,6 +22,7 @@ const navGroups = [
     items: [
       { to: '/',             icon: LayoutDashboard, label: t.nav.dashboard, end: true },
       { to: '/report',       icon: ClipboardList,   label: t.nav.report },
+      { to: '/annual-budgets', icon: CalendarRange, label: t.nav.annualBudgets },
       { to: '/transactions', icon: ArrowLeftRight,  label: t.nav.transactions },
     ],
   },

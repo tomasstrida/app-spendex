@@ -5,6 +5,7 @@ const cs = {
     categories: 'Kategorie',
     budgets: 'Rozpočty',
     report: 'Schůzka',
+    annualBudgets: 'Roční budgety',
     accounts: 'Účty',
     import: 'Import',
     duplicates: 'Duplicity',

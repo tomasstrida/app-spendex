@@ -11,6 +11,7 @@ import BudgetsPage from './pages/BudgetsPage';
 import ImportPage from './pages/ImportPage';
 import SettingsPage from './pages/SettingsPage';
 import ReportPage from './pages/ReportPage';
+import AnnualBudgetsPage from './pages/AnnualBudgetsPage';
 import DuplicatesPage from './pages/DuplicatesPage';
 import AccountsPage from './pages/AccountsPage';
 import { PeriodProvider } from './contexts/PeriodContext';
@@ -66,6 +67,7 @@ export default function App() {
             <Route path="/categories"   element={<R el={<CategoriesPage />} />} />
             <Route path="/budgets"      element={<R el={<BudgetsPage />} />} />
             <Route path="/report"       element={<R el={<ReportPage />} />} />
+            <Route path="/annual-budgets" element={<R el={<AnnualBudgetsPage />} />} />
             <Route path="/accounts"     element={<R el={<AccountsPage />} />} />
             <Route path="/import"       element={<R el={<ImportPage />} />} />
             <Route path="/duplicates"  element={<R el={<DuplicatesPage />} />} />

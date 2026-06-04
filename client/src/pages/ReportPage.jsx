@@ -28,40 +28,6 @@ const FIXED_STATUS = {
 
 // ── Donut chart (SVG) ────────────────────────────────────────────────────────
 
-// ── Teploměr ročního čerpání ─────────────────────────────────────────────────
-// Stejný princip jako Dashboard Thermometer, jen pro kalendářní rok.
-function YearThermometer({ spent, amount, year, color }) {
-  if (!(amount > 0)) return null;
-  const today = new Date();
-  const start = new Date(`${year}-01-01T00:00:00`);
-  const end   = new Date(`${year}-12-31T00:00:00`);
-  const periodOver = today > end;
-  const spentPct   = Math.min((spent / amount) * 100, 100);
-  const over       = spent > amount;
-  const totalDays  = Math.round((end - start) / 86400000) + 1;
-  const daysPassed = Math.max(0, Math.min(Math.round((today - start) / 86400000), totalDays));
-  const dayPct     = Math.min((daysPassed / totalDays) * 100, 100);
-  const projection = daysPassed > 0 ? Math.round((spent / daysPassed) * totalDays) : 0;
-  const fillColor  = over ? undefined : (spentPct > dayPct ? '#f97316' : (color || '#6366f1'));
-  return (
-    <div>
-      <div className="budget-bar-track" style={{ position: 'relative' }}>
-        <div className={`budget-bar-fill${over ? ' over' : ''}`}
-          style={{ width: `${spentPct}%`, background: fillColor }} />
-        {dayPct > 0 && dayPct < 100 && (
-          <div className="budget-bar-day-marker" style={{ left: `${dayPct}%` }} />
-        )}
-      </div>
-      {!periodOver && projection > 0 && projection > amount && (
-        <div className="budget-projection">
-          projekce: <strong>{formatCurrency(projection)}</strong>
-          <span className="text-danger"> (+{formatCurrency(projection - amount)})</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function polarToXY(cx, cy, r, deg) {
   const rad = ((deg - 90) * Math.PI) / 180;
   return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
@@ -298,8 +264,6 @@ export default function ReportPage() {
   const [incomeSources, setIncomeSources] = useState([]);
   const [fixedExpenses, setFixedExpenses] = useState([]);
   const [budgets, setBudgets] = useState([]);       // Typ 1
-  const [budgetItems, setBudgetItems] = useState([]); // Typ 2 podpoložky
-  const [type2YearSpent, setType2YearSpent] = useState({}); // mapa category_id → roční utraceno
   const [funds, setFunds] = useState([]);             // Typ 3 fond-status
   const [stats, setStats] = useState(null);          // total_spent + by_category
   const [loading, setLoading] = useState(true);
@@ -319,17 +283,14 @@ export default function ReportPage() {
       fetch(`/api/fixed-expenses?period=${period}`).then(r => r.json()),
       fetch(`/api/budgets?period=${period}`).then(r => r.json()),
       fetch(`/api/stats/overview?period=${period}`).then(r => r.json()),
-      fetch(`/api/budget-items?year=${year}`).then(r => r.json()),
       fetch(`/api/categories/fund-status?year=${year}`).then(r => r.json()),
-    ]).then(([inc, fixed, bud, st, items, fundStatus]) => {
+    ]).then(([inc, fixed, bud, st, fundStatus]) => {
       setIncomeSources(inc.sources || []);
       setFixedExpenses(Array.isArray(fixed) ? fixed : []);
       setBudgets((bud.budgets || []).filter(b => !b.category_type || b.category_type === 1));
       setPeriodStart(bud.period_start);
       setPeriodEnd(bud.period_end);
       setStats(st);
-      setBudgetItems(items.items || []);
-      setType2YearSpent(items.category_year_spent || {});
       setFunds(Array.isArray(fundStatus) ? fundStatus : []);
     }).finally(() => setLoading(false));
   }, [period]);
@@ -368,12 +329,6 @@ export default function ReportPage() {
 
   // Výdaje dle typu kategorie (z by_category)
   const byCategory = stats?.by_category || [];
-  // Roční plán po kategoriích: součet podpoložek dané kategorie / 12 = měsíční budget
-  const type2BudgetByCat = {};
-  budgetItems.forEach(i => { type2BudgetByCat[i.category_id] = (type2BudgetByCat[i.category_id] || 0) + (i.amount || 0); });
-  // Roční sekce: zobraz kategorii pokud má roční utraceno > 0 NEBO roční budget > 0
-  const type2Cats  = byCategory.filter(c => c.type === 2 && ((type2YearSpent[c.id] || 0) > 0 || (type2BudgetByCat[c.id] || 0) > 0));
-  const type2Spent = byCategory.filter(c => c.type === 2 && c.spent > 0);
   const type3Spent = byCategory.filter(c => c.type === 3 && c.spent > 0);
   const chartData  = byCategory.filter(c => c.spent > 0);
 
@@ -385,13 +340,8 @@ export default function ReportPage() {
   const unaliasedTotal   = unaliasedSources.reduce((s, i) => s + (i.actual || 0), 0);
   const totalType1       = budgets.reduce((s, b) => s + b.spent, 0);
   const totalType1Budget = budgets.reduce((s, b) => s + b.amount, 0);
-  const totalType2   = type2Spent.reduce((s, c) => s + c.spent, 0);
-  // Roční sekce subtotals (celý kalendářní rok, ne aktuální období)
-  const totalType2YearSpent  = Object.values(type2YearSpent).reduce((s, n) => s + (n || 0), 0);
-  const totalType2YearBudget = Object.values(type2BudgetByCat).reduce((s, n) => s + (n || 0), 0);
   const totalType3   = type3Spent.reduce((s, c) => s + c.spent, 0);
-  // Očekávaný měsíční budget: roční plán /12, fond = součet měsíčních příspěvků
-  const type2MonthlyBudget = Math.round(budgetItems.reduce((s, i) => s + (i.amount || 0), 0) / 12);
+  // Očekávaný měsíční příspěvek do fondů (Typ 3)
   const type3MonthlyBudget = funds.reduce((s, f) => s + (f.monthly_contribution || 0), 0);
   const totalSpent   = stats?.total_spent || 0;
   const savings      = stats?.savings || { net: 0 };
@@ -838,58 +788,6 @@ export default function ReportPage() {
               </div>
             </section>
           )}
-
-          {/* ── ROČNÍ BUDGETY (Typ 2) – teploměr podle aktuálního dne v roce ── */}
-          {type2Cats.length > 0 && (() => {
-            const year = period ? Number(period.split('-')[0]) : new Date().getFullYear();
-            return (
-              <section className="report-section">
-                <div className="report-section-header">
-                  <h2 className="report-section-title">Roční budgety <span className="text-muted" style={{ fontSize: 13, fontWeight: 400 }}>· {year}</span></h2>
-                </div>
-                <div className="report-budget-row" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', marginBottom: 4 }}>
-                  <span className="report-budget-dot" style={{ background: 'transparent' }} />
-                  <span className="report-budget-name">Kategorie</span>
-                  <span className="report-budget-spent">Utraceno za rok</span>
-                  <span className="report-budget-limit" style={{ whiteSpace: 'nowrap' }}>Roční rozpočet</span>
-                  <span className="report-budget-status" />
-                </div>
-                <div className="report-budget-list">
-                  {type2Cats.map(c => {
-                    const yearSpent = type2YearSpent[c.id] || 0;
-                    const yearBudget = type2BudgetByCat[c.id] || 0;
-                    const over = yearBudget > 0 && yearSpent > yearBudget;
-                    const to = `/transactions?category_id=${c.id}&from=${year}-01-01&to=${year}-12-31`;
-                    return (
-                      <Link key={c.id} to={to} className="report-budget-card"
-                        style={{ color: 'inherit' }}>
-                        <div className="report-budget-row">
-                          <span className="report-budget-dot" style={{ background: c.color || '#6366f1' }} />
-                          <span className="report-budget-name">{c.name}</span>
-                          <span className={`report-budget-spent${over ? ' text-danger' : ''}`}>{formatCurrency(yearSpent)}</span>
-                          <span className="text-muted report-budget-limit">{yearBudget > 0 ? `/ ${formatCurrency(yearBudget)}` : ''}</span>
-                          <span className="report-budget-status" />
-                        </div>
-                        {yearBudget > 0 && (
-                          <YearThermometer spent={yearSpent} amount={yearBudget}
-                            year={year} color={c.color} />
-                        )}
-                      </Link>
-                    );
-                  })}
-                </div>
-                <div className="report-subtotal">
-                  <span>Roční budgety celkem · {year}</span>
-                  <span>
-                    {formatCurrency(totalType2YearSpent)}
-                    {totalType2YearBudget > 0 && (
-                      <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(totalType2YearBudget)}</span>
-                    )}
-                  </span>
-                </div>
-              </section>
-            );
-          })()}
 
           {/* ── GRAF VÝDAJŮ ── */}
           {chartData.length > 0 && (
