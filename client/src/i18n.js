@@ -1,6 +1,6 @@
 const cs = {
   nav: {
-    dashboard: 'Přehled',
+    dashboard: 'Měsíční rozpočty',
     transactions: 'Transakce',
     categories: 'Kategorie',
     budgets: 'Rozpočty',
@@ -14,7 +14,7 @@ const cs = {
     sectionConfig: 'Konfigurace',
   },
   dashboard: {
-    title: 'Přehled',
+    title: 'Měsíční rozpočty',
     totalSpent: 'Utraceno v období',
     budgets: 'Rozpočty',
     noBudgets: 'Žádné rozpočty pro toto období.',

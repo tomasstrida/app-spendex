@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { usePeriod } from '../contexts/PeriodContext';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, TrendingDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
 
@@ -129,14 +129,6 @@ export default function DashboardPage() {
         <div className="page-loading">{t.common.loading}</div>
       ) : (
         <div className="dashboard-content">
-          <div className="stat-card">
-            <div className="stat-card-icon"><TrendingDown size={20} /></div>
-            <div>
-              <div className="stat-card-label">{t.dashboard.totalSpent}</div>
-              <div className="stat-card-value">{formatCurrency(data?.total_spent || 0)}</div>
-            </div>
-          </div>
-
           {/* Typ 1 – Měsíční */}
           <section className="section">
             <h2 className="section-title">{t.dashboard.budgets}</h2>
