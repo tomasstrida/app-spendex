@@ -164,7 +164,7 @@ export default function DashboardPage() {
                   <p className="text-muted">Žádné drahé věci v tomto období.</p>
                 </div>
               ) : (
-                <div className="report-budget-list">
+                <div className="report-budget-list" style={{ maxWidth: 640 }}>
                   {expensiveItems.map(it => (
                     <div key={it.id} className="report-budget-row"
                       style={{ cursor: 'pointer' }}
