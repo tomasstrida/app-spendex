@@ -23,11 +23,14 @@ router.post('/inbound', inboundLimiter, checkSecret, async (req, res) => {
     const { envelope_from = '', from = '', raw = '' } = req.body || {};
 
     // Vrstva 2: whitelist odesílatele.
+    // POZOR: Gmail forward (přes filtr) zachovává PŮVODNÍ obálku (envelope sender zůstane
+    // info@airbank.cz), ne přeposílatele. Whitelist proto stavíme na: (a) From je z airbank.cz
+    // A (b) e-mail prošel schránkou povoleného uživatele — Gmail forward zanechá jeho adresu
+    // v hlavičkách (Delivered-To / X-Forwarded-For), takže ji najdeme v raw MIME.
     const allowed = (process.env.EMAIL_ALLOWED_SENDER || '').toLowerCase();
-    const env = String(envelope_from).toLowerCase();
     const fromHdr = String(from).toLowerCase();
-    // envelope sender musí být povolená adresa A původní From musí být z airbank.cz
-    if (!allowed || env !== allowed || !fromHdr.includes('airbank.cz')) {
+    const rawLower = String(raw).toLowerCase();
+    if (!allowed || !fromHdr.includes('airbank.cz') || !rawLower.includes(allowed)) {
       return res.status(202).json({ status: 'ignored' });
     }
 
