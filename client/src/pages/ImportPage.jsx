@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Upload, Check, AlertCircle, Plus, Pencil, Trash2, X, Download } from 'lucide-react';
+import { Upload, Check, AlertCircle, Plus, Pencil, Trash2, X, Download, Inbox, Mail } from 'lucide-react';
 import Layout from '../components/Layout';
 import { formatCurrency } from '../i18n';
 
@@ -186,6 +186,110 @@ function AccountSelector({ accounts, selectedId, detectedIds, onSelect, onCreate
   );
 }
 
+function EmailInbox() {
+  const [items, setItems] = useState([]);
+  const [cats, setCats] = useState([]);
+  const [busy, setBusy] = useState(null);
+
+  const load = useCallback(async () => {
+    const [ri, rc] = await Promise.all([
+      fetch('/api/email-inbox'),
+      fetch('/api/categories'),
+    ]);
+    if (ri.ok) setItems(await ri.json());
+    if (rc.ok) setCats(await rc.json());
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function approve(item, categoryId) {
+    setBusy(item.id);
+    try {
+      const r = await fetch(`/api/email-inbox/${item.id}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category_id: categoryId || null }),
+      });
+      if (r.ok) await load();
+    } finally { setBusy(null); }
+  }
+
+  async function remove(item) {
+    setBusy(item.id);
+    try {
+      const r = await fetch(`/api/email-inbox/${item.id}`, { method: 'DELETE' });
+      if (r.ok) await load();
+    } finally { setBusy(null); }
+  }
+
+  const pending = items.filter(i => i.status === 'pending');
+  const unparsed = items.filter(i => i.status === 'unparsed');
+
+  if (items.length === 0) return null;
+
+  return (
+    <section style={{ marginBottom: 24 }}>
+      <h2 className="page-title" style={{ fontSize: 18, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Mail size={18} /> Z e-mailu
+        <span className="badge" style={{ background: 'var(--primary)', color: '#fff', borderRadius: 10, padding: '2px 8px', fontSize: 12 }}>
+          {items.length}
+        </span>
+      </h2>
+
+      {pending.map(item => {
+        const tx = item.parsed_json ? JSON.parse(item.parsed_json) : {};
+        return (
+          <div key={item.id} className="card" style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+              <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tx.description || '—'}</div>
+              <div className="text-muted" style={{ fontSize: 12 }}>{tx.date} {tx.tx_time || ''}</div>
+            </div>
+            <div style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{formatCurrency(tx.amount)}</div>
+            <select
+              defaultValue={item.suggested_category_id || ''}
+              id={`cat-${item.id}`}
+              style={{ flex: '0 1 180px' }}
+            >
+              <option value="">— kategorie —</option>
+              {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <button className="btn btn-primary btn-sm" disabled={busy === item.id}
+              onClick={() => approve(item, document.getElementById(`cat-${item.id}`).value)}>
+              <Check size={14} /> Zařadit
+            </button>
+            <button className="btn btn-ghost btn-icon" disabled={busy === item.id}
+              onClick={() => remove(item)} title="Smazat">
+              <Trash2 size={14} />
+            </button>
+          </div>
+        );
+      })}
+
+      {unparsed.length > 0 && (
+        <div className="card" style={{ marginTop: 8 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Inbox size={14} /> Nerozpoznané ({unparsed.length})
+          </h3>
+          {unparsed.map(item => (
+            <details key={item.id} style={{ marginBottom: 6 }}>
+              <summary style={{ cursor: 'pointer', fontSize: 13 }}>
+                {item.created_at}
+                <button className="btn btn-ghost btn-icon" style={{ marginLeft: 8 }}
+                  disabled={busy === item.id} onClick={() => remove(item)} title="Smazat">
+                  <Trash2 size={14} />
+                </button>
+              </summary>
+              <pre style={{ fontSize: 11, whiteSpace: 'pre-wrap', background: 'var(--bg2)', padding: 8, borderRadius: 6 }}>
+                {item.raw_text}
+              </pre>
+            </details>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function ImportPage() {
   const [step, setStep] = useState(STEP.UPLOAD);
   const [categories, setCategories] = useState([]);
@@ -361,6 +465,7 @@ export default function ImportPage() {
 
   return (
     <Layout>
+      <EmailInbox />
       <div className="page-header">
         <h1 className="page-title">Import z Air Bank</h1>
       </div>
