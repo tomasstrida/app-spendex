@@ -21,6 +21,26 @@ router.get('/', requireAuth, (req, res) => {
   res.json(rows);
 });
 
+// GET /api/email-inbox/history — kompletní historie všech e-mailových položek (všechny stavy).
+// U zařazených (imported) dohledá skutečnou kategorii zařazené transakce přes external_id,
+// jinak (pending/unparsed/rejected) použije navrženou kategorii.
+router.get('/history', requireAuth, (req, res) => {
+  const rows = db.prepare(`
+    SELECT i.id, i.received_at, i.parsed_json, i.external_id, i.status, i.created_at,
+           COALESCE(tc.name, sc.name)  AS category_name,
+           COALESCE(tc.color, sc.color) AS category_color
+    FROM email_inbox i
+    LEFT JOIN categories sc ON sc.id = i.suggested_category_id
+    LEFT JOIN transactions t ON i.status = 'imported'
+                            AND t.user_id = i.user_id
+                            AND t.external_id = i.external_id
+    LEFT JOIN categories tc ON tc.id = t.category_id
+    WHERE i.user_id = ?
+    ORDER BY i.created_at DESC, i.id DESC
+  `).all(req.user.id);
+  res.json(rows);
+});
+
 // POST /api/email-inbox/:id/approve { category_id } — zařadí pending položku do transactions
 router.post('/:id/approve', requireAuth, writeLimiter, (req, res) => {
   const { category_id = null } = req.body || {};

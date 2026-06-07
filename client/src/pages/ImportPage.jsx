@@ -292,6 +292,67 @@ function EmailInbox() {
   );
 }
 
+const EMAIL_STATUS = {
+  imported:  { label: 'Zařazeno',     color: '#22c55e' },
+  pending:   { label: 'Čeká',         color: '#f59e0b' },
+  unparsed:  { label: 'Nerozpoznáno', color: 'var(--text2)' },
+  rejected:  { label: 'Zamítnuto',    color: '#ef4444' },
+};
+
+function EmailHistory() {
+  const [rows, setRows] = useState([]);
+
+  useEffect(() => {
+    fetch('/api/email-inbox/history')
+      .then(r => (r.ok ? r.json() : []))
+      .then(setRows)
+      .catch(() => {});
+  }, []);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <section style={{ marginTop: 24 }}>
+      <h2 className="page-title" style={{ fontSize: 18, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Mail size={18} /> Historie z e-mailu
+      </h2>
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr style={{ color: 'var(--text2)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>
+              <th style={{ textAlign: 'left', padding: '10px 12px' }}>Přijato</th>
+              <th style={{ textAlign: 'left', padding: '10px 12px' }}>Popis</th>
+              <th style={{ textAlign: 'left', padding: '10px 12px' }}>Kategorie</th>
+              <th style={{ textAlign: 'right', padding: '10px 12px' }}>Částka</th>
+              <th style={{ textAlign: 'left', padding: '10px 12px' }}>Stav</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(item => {
+              let tx = {};
+              try { tx = item.parsed_json ? JSON.parse(item.parsed_json) : {}; } catch { /* poškozený JSON */ }
+              const st = EMAIL_STATUS[item.status] || { label: item.status, color: 'var(--text2)' };
+              return (
+                <tr key={item.id} style={{ borderTop: '1px solid var(--border)' }}>
+                  <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }} className="text-muted">{item.received_at || item.created_at}</td>
+                  <td style={{ padding: '8px 12px' }}>{tx.description || '—'}</td>
+                  <td style={{ padding: '8px 12px' }} className="text-muted">{item.category_name || '—'}</td>
+                  <td style={{ padding: '8px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {tx.amount != null ? formatCurrency(tx.amount) : '—'}
+                  </td>
+                  <td style={{ padding: '8px 12px' }}>
+                    <span style={{ color: st.color, fontWeight: 600, fontSize: 12 }}>{st.label}</span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 export default function ImportPage() {
   const [step, setStep] = useState(STEP.UPLOAD);
   const [categories, setCategories] = useState([]);
@@ -646,6 +707,8 @@ export default function ImportPage() {
           </div>
         )}
       </section>
+
+      <EmailHistory />
     </Layout>
   );
 }
