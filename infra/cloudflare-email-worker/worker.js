@@ -14,7 +14,7 @@ export default {
     const fromHeader = message.headers.get('from') || '';
     const subject = message.headers.get('subject') || '';
 
-    await fetch(env.WEBHOOK_URL, {
+    const res = await fetch(env.WEBHOOK_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -22,5 +22,8 @@ export default {
       },
       body: JSON.stringify({ envelope_from: message.from, from: fromHeader, subject, raw }),
     });
+    if (!res.ok) {
+      console.error(`Spendex webhook returned ${res.status}`);
+    }
   },
 };

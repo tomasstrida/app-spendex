@@ -21,10 +21,20 @@ AirBank → Gmail (auto-forward) → `inbox@spendex.uk` (MX na Cloudflare)
      (ukládej jako **Secret**, ne plain text)
    - `ALLOWED_SENDER` = tvoje Gmail adresa (envelope sender přeposílaných e-mailů)
 6. **Routing rule:** Email Routing → Routes → `inbox@spendex.uk` → *Send to a Worker* → tento Worker.
-7. **Gmail:** Nastavení → Přeposílání → přidej `inbox@spendex.uk`, potvrď ověřovací
-   kód (přijde jako e-mail, který Worker přepošle — najdeš ho v Railway logu nebo
-   dočasně přidej logování), a vytvoř filtr „od info@airbank.cz → přeposlat na
-   inbox@spendex.uk".
+7. **Gmail — ověřovací kód (POZOR na gotchu):** Gmail při přidání přeposílací adresy
+   pošle ověřovací e-mail s envelope senderem `forwarding-noreply@google.com`
+   (ne tvojí Gmail adresou). Tento Worker proto e-mail **tiše zahodí** — podmínka
+   `envelopeFrom !== ALLOWED_SENDER` propustí jen e-maily z povolené adresy, takže
+   se k ověřovacímu kódu jinak nedostaneš. Postup:
+   1. **Dočasně přepni routing** pro `inbox@spendex.uk` na *Send to an address* a
+      nasměruj ho na svou reálnou e-mailovou schránku (tu si v Cloudflare nejdřív
+      ověříš). Díky tomu ti Gmail ověřovací e-mail dorazí do reálné schránky.
+   2. V Gmailu (Nastavení → Přeposílání) přidej `inbox@spendex.uk`, opiš ověřovací
+      kód z e-mailu, který ti přišel do reálné schránky, a potvrď.
+   3. **Až poté** přepni routing pro `inbox@spendex.uk` zpět na *Send to a Worker*
+      (tento Worker).
+   4. Nakonec v Gmailu vytvoř filtr „od info@airbank.cz → přeposlat na
+      inbox@spendex.uk".
 
 ## Bezpečnostní vrstvy
 
