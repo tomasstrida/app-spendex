@@ -46,6 +46,9 @@ router.post('/:id/approve', requireAuth, writeLimiter, (req, res) => {
            tx.note || '', row.external_id || null, tx.tx_time || null, tx.tx_type || null,
            tx.counterparty_account || null, tx.entered_by || null, tx.place || null,
            tx.account_id || null, tx.ab_category || null);
+    // Idempotence: status nastavíme 'imported' i když INSERT OR IGNORE nic nevložil
+    // (transakce už existuje, např. ze souběžného CSV importu se shodným external_id).
+    // Cíl uživatele je splněn → položku z fronty odebíráme tak jako tak.
     db.prepare("UPDATE email_inbox SET status = 'imported' WHERE id = ?").run(row.id);
     return r;
   })();
