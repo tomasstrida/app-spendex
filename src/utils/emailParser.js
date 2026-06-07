@@ -26,7 +26,7 @@ function parseEmailNotification(text) {
   // Také odstraníme BOM/zero-width znaky (U+FEFF, U+200B apod.) které mohou být v textu
   const body = String(text)
     .replace(/ /g, ' ')
-    .replace(/[﻿​‌‍⁠]/g, '');
+    .replace(/[\uFEFF\u200B\u200C\u200D\u2060]/g, '');
 
   // Kód transakce — povinné (= AirBank referenční číslo, shodné s CSV)
   const codeM = body.match(/Kód transakce:\s*(\d+)/i);
