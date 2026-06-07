@@ -190,6 +190,7 @@ function EmailInbox() {
   const [items, setItems] = useState([]);
   const [cats, setCats] = useState([]);
   const [busy, setBusy] = useState(null);
+  const [selectedCats, setSelectedCats] = useState({});
 
   const load = useCallback(async () => {
     const [ri, rc] = await Promise.all([
@@ -237,7 +238,8 @@ function EmailInbox() {
       </h2>
 
       {pending.map(item => {
-        const tx = item.parsed_json ? JSON.parse(item.parsed_json) : {};
+        let tx = {};
+        try { tx = item.parsed_json ? JSON.parse(item.parsed_json) : {}; } catch { /* poškozený JSON v parsed_json */ }
         return (
           <div key={item.id} className="card" style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ flex: '1 1 200px', minWidth: 0 }}>
@@ -246,15 +248,15 @@ function EmailInbox() {
             </div>
             <div style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{formatCurrency(tx.amount)}</div>
             <select
-              defaultValue={item.suggested_category_id || ''}
-              id={`cat-${item.id}`}
+              value={selectedCats[item.id] ?? (item.suggested_category_id || '')}
+              onChange={e => setSelectedCats(prev => ({ ...prev, [item.id]: e.target.value }))}
               style={{ flex: '0 1 180px' }}
             >
               <option value="">— kategorie —</option>
               {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             <button className="btn btn-primary btn-sm" disabled={busy === item.id}
-              onClick={() => approve(item, document.getElementById(`cat-${item.id}`).value)}>
+              onClick={() => approve(item, selectedCats[item.id] ?? item.suggested_category_id ?? '')}>
               <Check size={14} /> Zařadit
             </button>
             <button className="btn btn-ghost btn-icon" disabled={busy === item.id}
