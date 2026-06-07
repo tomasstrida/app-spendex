@@ -194,6 +194,22 @@ function initSchema() {
 
     CREATE INDEX IF NOT EXISTS idx_dup_dismiss_user ON duplicate_dismissals(user_id);
     CREATE INDEX IF NOT EXISTS idx_csv_archive_user ON csv_archive(user_id);
+
+    CREATE TABLE IF NOT EXISTS email_inbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      received_at TEXT,
+      raw_text TEXT,
+      parsed_json TEXT,
+      external_id TEXT,
+      suggested_category_id INTEGER,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (suggested_category_id) REFERENCES categories(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_email_inbox_user ON email_inbox(user_id, status);
   `);
 
   // Migrace: budgety bez 'default' záznamu — vezmi nejnovější per user+category a nastav jako default
