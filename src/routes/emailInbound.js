@@ -1,9 +1,12 @@
 'use strict';
 const express = require('express');
 const router = express.Router();
+const rateLimit = require('express-rate-limit');
 const { simpleParser } = require('mailparser');
 const db = require('../db/connection');
 const { ingestEmail } = require('../services/emailIngest');
+
+const inboundLimiter = rateLimit({ windowMs: 60 * 1000, max: 30 });
 
 // Vrstva 1: sdílený secret (query ?secret= nebo hlavička x-webhook-secret).
 function checkSecret(req, res, next) {
@@ -15,7 +18,7 @@ function checkSecret(req, res, next) {
 
 // POST /api/email/inbound
 // Body (JSON od Cloudflare Workeru): { envelope_from, from, subject, raw }
-router.post('/inbound', checkSecret, async (req, res) => {
+router.post('/inbound', inboundLimiter, checkSecret, async (req, res) => {
   try {
     const { envelope_from = '', from = '', raw = '' } = req.body || {};
 
