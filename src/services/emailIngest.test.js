@@ -95,6 +95,23 @@ test('duplicita: stejná tx už v transactions → status duplicate, nevloží s
   assert.equal(cnt.c, 1);
 });
 
+test('duplicita proti pending: stejná tx přijde podruhé → duplicate, druhý pending nevznikne', () => {
+  const { db, tmp } = freshDb();
+  seed(db);
+  const text = `zůstatek na účtu Společný číslo 1679014023/3030 se snížil o částku 349,00 CZK. Dostupný zůstatek k 07.06.2026 v 12:00 je 100,00 CZK.
+Odchozí úhrada na účet NĚJAKÝ ESHOP s.r.o. číslo 2222222222/0800
+Datum zaúčtování: 07.06.2026
+Kód transakce: 160610777111`;
+  const { ingestEmail } = require('./emailIngest');
+  const first = ingestEmail(db, { userEmail: 'tom@example.com', fromHeader: 'info@airbank.cz', text });
+  const second = ingestEmail(db, { userEmail: 'tom@example.com', fromHeader: 'info@airbank.cz', text });
+  const cnt = db.prepare("SELECT COUNT(*) c FROM email_inbox WHERE status = 'pending'").get();
+  cleanup(db, tmp);
+  assert.equal(first.status, 'pending');
+  assert.equal(second.status, 'duplicate');
+  assert.equal(cnt.c, 1);
+});
+
 test('neznámý odesílatel / mimo whitelist → ignored, nic se neuloží', () => {
   const { db, tmp } = freshDb();
   seed(db);

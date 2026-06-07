@@ -6,8 +6,9 @@ const seedRules = require('../../scripts/seed/rules');
 
 /**
  * Zpracuje jeden notifikační e-mail. Čistá vůči HTTP — dostává už dekódovaný text.
+ * Kontrola From hlavičky (whitelist airbank.cz) probíhá ve webhook routeru, ne zde.
  * @param {import('better-sqlite3').Database} db
- * @param {{userEmail: string, fromHeader: string, text: string}} input
+ * @param {{userEmail: string, text: string}} input
  * @returns {{status: 'imported'|'pending'|'unparsed'|'duplicate'|'ignored', external_id?: string}}
  */
 function ingestEmail(db, { userEmail, text }) {
