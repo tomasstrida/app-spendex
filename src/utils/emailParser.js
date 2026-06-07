@@ -47,10 +47,12 @@ function parseEmailNotification(text) {
   const srcM = body.match(/na\s+ú[cč]tu\s+.*?[cč]íslo\s*(\d+)\/\d+\s+se\s+(?:sn[ií][žz]il|zv[ýy][šs]il)/i);
   const source_account = srcM ? srcM[1] : null;
 
-  // Protistrana + protiúčet: "úhrada na účet/od <jméno> číslo <num>/<bank>"
+  // Protistrana + protiúčet:
+  //  - odchozí: "Odchozí úhrada na účet <jméno> číslo <num>/<bank>"
+  //  - příchozí: "Příchozí úhrada z účtu <jméno> číslo <num>/<bank>"  (reálný AirBank formát)
   let description = '';
   let counterparty_account = null;
-  const cpM = body.match(/úhrada\s+(?:na\s+ú[cč]et|od)\s+(.+?)\s+[cč]íslo\s*(\d+\/\d+)/i);
+  const cpM = body.match(/úhrada\s+(?:na\s+ú[cč]et|z\s+ú[cč]tu|od)\s+(.+?)\s+[cč]íslo\s*(\d+\/\d+)/i);
   if (cpM) {
     description = cpM[1].trim();
     counterparty_account = cpM[2];
