@@ -8,6 +8,7 @@ const passport = require('../services/passport');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/email');
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });
+const emailLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 5 });
 
 // --- Google OAuth ---
 if (process.env.GOOGLE_CLIENT_ID) {
@@ -19,7 +20,7 @@ if (process.env.GOOGLE_CLIENT_ID) {
 }
 
 // --- Registrace ---
-router.post('/register', authLimiter, async (req, res) => {
+router.post('/register', authLimiter, emailLimiter, async (req, res) => {
   const { email, name, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'E-mail a heslo jsou povinné.' });
   if (password.length < 8) return res.status(400).json({ error: 'Heslo musí mít alespoň 8 znaků.' });
@@ -30,9 +31,10 @@ router.post('/register', authLimiter, async (req, res) => {
 
     const hash = await bcrypt.hash(password, 12);
     const token = uuidv4();
+    const verifyExpires = Date.now() + 24 * 60 * 60 * 1000;
     db.prepare(
-      'INSERT INTO users (email, name, password_hash, verify_token) VALUES (?, ?, ?, ?)'
-    ).run(email, name || email.split('@')[0], hash, token);
+      'INSERT INTO users (email, name, password_hash, verify_token, verify_expires) VALUES (?, ?, ?, ?, ?)'
+    ).run(email, name || email.split('@')[0], hash, token, verifyExpires);
 
     await sendVerificationEmail(email, name, token);
     res.json({ ok: true, message: 'Zkontrolujte svůj e-mail a potvrďte účet.' });
@@ -43,13 +45,16 @@ router.post('/register', authLimiter, async (req, res) => {
 });
 
 // --- Ověření e-mailu ---
-router.get('/verify', (req, res) => {
+router.get('/verify', authLimiter, (req, res) => {
   const { token } = req.query;
   const user = db.prepare('SELECT * FROM users WHERE verify_token = ?').get(token);
   if (!user) return res.redirect('/login?error=invalid_token');
-
-  db.prepare('UPDATE users SET email_verified = 1, verify_token = NULL WHERE id = ?').run(user.id);
-  req.login(user, () => res.redirect('/'));
+  if (user.verify_expires != null && user.verify_expires < Date.now()) {
+    return res.redirect('/login?error=invalid_token');
+  }
+  db.prepare('UPDATE users SET email_verified = 1, verify_token = NULL, verify_expires = NULL WHERE id = ?').run(user.id);
+  if (typeof req.login === 'function') return req.login(user, () => res.redirect('/'));
+  return res.redirect('/');
 });
 
 // --- Přihlášení (local) ---
@@ -58,7 +63,7 @@ router.post('/local', authLimiter, passport.authenticate('local'), (req, res) =>
 });
 
 // --- Zapomenuté heslo ---
-router.post('/forgot', authLimiter, async (req, res) => {
+router.post('/forgot', authLimiter, emailLimiter, async (req, res) => {
   const { email } = req.body;
   const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
   // Vždy vrátit OK (neodhalovat existenci účtu)
