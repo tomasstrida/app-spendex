@@ -84,21 +84,4 @@ async function sendBackupMissingAlert(maxAgeHours) {
   });
 }
 
-async function sendBackupSuccessAlert(res) {
-  const to = process.env.BACKUP_ALERT_EMAIL || 'tomas.strida@gmail.com';
-  const when = new Date().toISOString();
-  const sizeMb = (res.sizeBytes / 1024 / 1024).toFixed(2);
-  await sendEmail({
-    to,
-    subject: '✅ Spendex: záloha DB proběhla',
-    htmlContent: `
-      <p>Denní záloha databáze Spendex proběhla úspěšně.</p>
-      <p><strong>Čas:</strong> ${when}</p>
-      <p><strong>Soubor:</strong> ${res.key}</p>
-      <p><strong>Velikost:</strong> ${sizeMb} MB (${res.sizeBytes} B, gzip)</p>
-      <p><strong>Smazáno starých záloh:</strong> ${res.prunedCount}</p>
-    `,
-  });
-}
-
-module.exports = { sendEmail, sendVerificationEmail, sendPasswordResetEmail, sendBackupFailureAlert, sendBackupSuccessAlert, sendBackupMissingAlert };
+module.exports = { sendEmail, sendVerificationEmail, sendPasswordResetEmail, sendBackupFailureAlert, sendBackupMissingAlert };
