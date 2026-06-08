@@ -34,6 +34,6 @@ test('migrace vytvoří tabulku income_sources', () => {
   try { fs.unlinkSync(tmp + '-wal'); fs.unlinkSync(tmp + '-shm'); } catch { /* ok */ }
   assert.deepEqual(
     cols.sort(),
-    ['created_at', 'id', 'match_pattern', 'person', 'planned_amount', 'sort_order', 'user_id'].sort()
+    ['account_id', 'created_at', 'id', 'match_counterparty_account', 'match_pattern', 'person', 'planned_amount', 'sort_order', 'user_id'].sort()
   );
 });
