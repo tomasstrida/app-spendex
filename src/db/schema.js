@@ -267,6 +267,7 @@ function initSchema() {
     'ALTER TABLE income_sources ADD COLUMN account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL',
     "ALTER TABLE settings ADD COLUMN notify_scope TEXT DEFAULT 'pending_only'",
     'DROP TABLE IF EXISTS airbank_tokens',
+    'ALTER TABLE users ADD COLUMN verify_expires INTEGER',
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* sloupec/index již existuje nebo nelze aplikovat */ }
