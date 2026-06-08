@@ -223,6 +223,9 @@ export default function SettingsPage() {
           {pushState === 'unsupported' && !isStandalone() && /iPhone|iPad|iPod/.test(navigator.userAgent) && (
             <p className="form-hint" style={{ marginBottom: 12 }}>{t.settings.notifications_ios_hint}</p>
           )}
+          {pushState === 'unsupported' && !/iPhone|iPad|iPod/.test(navigator.userAgent) && (
+            <p className="form-hint" style={{ marginBottom: 12 }}>{t.settings.notifications_unsupported}</p>
+          )}
           {pushState === 'denied' && (
             <p className="form-hint" style={{ marginBottom: 12 }}>{t.settings.notifications_denied}</p>
           )}

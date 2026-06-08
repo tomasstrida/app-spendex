@@ -49,6 +49,7 @@ const cs = {
     notifications_disable: 'Vypnout na tomto zařízení',
     notifications_denied: 'Notifikace zakázané v prohlížeči — povol je v nastavení telefonu.',
     notifications_ios_hint: 'Na iPhonu nejdřív přidej Spendex na plochu (Sdílet → Přidat na plochu) a otevři ho odtud.',
+    notifications_unsupported: 'Tento prohlížeč push notifikace nepodporuje.',
     notifications_scope_label: 'Co notifikovat',
     notifications_scope_off: 'Vypnuto',
     notifications_scope_pending: 'Jen nezařazené platby',
