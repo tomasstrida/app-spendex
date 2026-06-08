@@ -235,6 +235,14 @@ function initSchema() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_household_members_owner ON household_members(data_owner_id);
+
+    CREATE TABLE IF NOT EXISTS household_invites (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      data_owner_id INTEGER NOT NULL UNIQUE,
+      token         TEXT NOT NULL UNIQUE,
+      created_at    TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (data_owner_id) REFERENCES users(id) ON DELETE CASCADE
+    );
   `);
 
   // Migrace: budgety bez 'default' záznamu — vezmi nejnovější per user+category a nastav jako default
