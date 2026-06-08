@@ -1,21 +1,16 @@
 'use strict';
 const webpush = require('web-push');
 
-let configured = false;
 function defaultClient() {
-  if (!configured) {
-    const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = process.env;
-    if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
-      webpush.setVapidDetails(VAPID_SUBJECT || 'mailto:tomas.strida@gmail.com', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
-      configured = true;
-    }
-  }
+  const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = process.env;
+  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return null;
+  webpush.setVapidDetails(VAPID_SUBJECT || 'mailto:tomas.strida@gmail.com', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
   return webpush;
 }
 
 async function sendToUser(db, userId, payload, client) {
   const sender = client || defaultClient();
-  if (!client && !configured) return;
+  if (!sender) return;
   const subs = db.prepare('SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?').all(userId);
   const body = JSON.stringify(payload);
   for (const s of subs) {

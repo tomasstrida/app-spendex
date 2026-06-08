@@ -84,3 +84,12 @@ test('notifyForResult: imported + scope pending_only → nic; scope all → ode�
   cleanup(db, tmp);
   assert.equal(calls, 1);
 });
+
+test('formatBody: bez kategorie → "potřebuje kategorii", s kategorií → "→ kat"', () => {
+  const { formatBody } = require('./pushNotify');
+  const pending = formatBody({ amount: -349, currency: 'CZK', merchant: 'Albert' });
+  const imported = formatBody({ amount: -349, currency: 'CZK', merchant: 'Albert', categoryName: 'Potraviny' });
+  assert.ok(pending.includes('Albert'));
+  assert.ok(pending.includes('potřebuje kategorii'));
+  assert.ok(imported.includes('→ Potraviny'));
+});
