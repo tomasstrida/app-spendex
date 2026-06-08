@@ -31,8 +31,10 @@ function formatBody(notify) {
   const amount = Math.abs(Number(notify.amount) || 0);
   const sum = `${amount.toLocaleString('cs-CZ')} ${notify.currency || 'CZK'}`;
   const merchant = notify.merchant || 'Platba';
-  if (notify.categoryName) return `${sum} • ${merchant} → ${notify.categoryName}`;
-  return `${sum} • ${merchant} — potřebuje kategorii`;
+  // Ikona na začátku = stav kategorizace na první pohled:
+  //   ✅ automaticky zařazeno, ⚠️ potřebuje ruční kategorii
+  if (notify.categoryName) return `✅ ${sum} • ${merchant} → ${notify.categoryName}`;
+  return `⚠️ ${sum} • ${merchant} — potřebuje kategorii`;
 }
 
 async function notifyForResult(db, result, client) {

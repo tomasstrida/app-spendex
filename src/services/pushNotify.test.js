@@ -91,5 +91,7 @@ test('formatBody: bez kategorie → "potřebuje kategorii", s kategorií → "�
   const imported = formatBody({ amount: -349, currency: 'CZK', merchant: 'Albert', categoryName: 'Potraviny' });
   assert.ok(pending.includes('Albert'));
   assert.ok(pending.includes('potřebuje kategorii'));
+  assert.ok(pending.startsWith('⚠️'));
   assert.ok(imported.includes('→ Potraviny'));
+  assert.ok(imported.startsWith('✅'));
 });
