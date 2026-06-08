@@ -77,4 +77,4 @@ function startScheduler() {
   console.log(`[backup] heartbeat cron aktivní: "${checkExpr}" (Europe/Prague)`);
 }
 
-module.exports = { shouldSchedule, startScheduler, runBackupJob, runBackupCheckJob, checkBackupHeartbeat };
+module.exports = { shouldSchedule, startScheduler, runBackupJob, runBackupCheckJob, checkBackupHeartbeat, maxAgeHours };

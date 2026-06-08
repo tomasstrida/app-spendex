@@ -51,3 +51,12 @@ test('checkBackupHeartbeat: žádný čerstvý success → mailer volán s maxAg
   cleanup(db, tmp);
   assert.equal(received, 3);
 });
+
+test('maxAgeHours: parsuje env, fallback 3 na nevalidní', () => {
+  const { maxAgeHours } = require('./scheduler');
+  assert.equal(maxAgeHours({ BACKUP_MAX_AGE_HOURS: '5' }), 5);
+  assert.equal(maxAgeHours({ BACKUP_MAX_AGE_HOURS: '0' }), 3);
+  assert.equal(maxAgeHours({ BACKUP_MAX_AGE_HOURS: 'abc' }), 3);
+  assert.equal(maxAgeHours({ BACKUP_MAX_AGE_HOURS: '-2' }), 3);
+  assert.equal(maxAgeHours({}), 3);
+});
