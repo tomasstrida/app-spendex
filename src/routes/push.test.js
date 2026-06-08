@@ -59,3 +59,21 @@ test('POST /api/push/unsubscribe smaže subscription', async () => {
   server.close(); cleanup(db, tmp);
   assert.equal(cnt, 0);
 });
+
+test('POST /api/push/subscribe bez keys → 400', async () => {
+  const { app, db, tmp } = freshApp();
+  const { server, base } = await listen(app);
+  const r = await fetch(`${base}/api/push/subscribe`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint: 'https://x/ep1' }) });
+  server.close(); cleanup(db, tmp);
+  assert.equal(r.status, 400);
+});
+
+test('POST /api/push/test bez zařízení → ok, sent:0', async () => {
+  const { app, db, tmp } = freshApp();
+  const { server, base } = await listen(app);
+  const r = await fetch(`${base}/api/push/test`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+  const j = await r.json();
+  server.close(); cleanup(db, tmp);
+  assert.equal(j.ok, true);
+  assert.equal(j.sent, 0);
+});

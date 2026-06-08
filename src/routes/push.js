@@ -9,7 +9,9 @@ const { sendToUser } = require('../services/pushNotify');
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
 router.get('/public-key', requireAuth, (_req, res) => {
-  res.json({ publicKey: process.env.VAPID_PUBLIC_KEY || null });
+  const publicKey = process.env.VAPID_PUBLIC_KEY;
+  if (!publicKey) return res.status(503).json({ error: 'Push notifikace nejsou na serveru nakonfigurovány.' });
+  res.json({ publicKey });
 });
 
 router.post('/subscribe', requireAuth, writeLimiter, (req, res) => {
@@ -34,8 +36,9 @@ router.post('/unsubscribe', requireAuth, writeLimiter, (req, res) => {
 });
 
 router.post('/test', requireAuth, writeLimiter, async (req, res) => {
+  const count = db.prepare('SELECT COUNT(*) c FROM push_subscriptions WHERE user_id = ?').get(req.user.id).c;
   await sendToUser(db, req.user.id, { title: 'SPENDEX', body: 'Testovací notifikace ✅', url: '/import' });
-  res.json({ ok: true });
+  res.json({ ok: true, sent: count });
 });
 
 module.exports = router;
