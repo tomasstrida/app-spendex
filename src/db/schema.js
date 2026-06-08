@@ -223,6 +223,18 @@ function initSchema() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_email_inbox_user ON email_inbox(user_id, status);
+
+    CREATE TABLE IF NOT EXISTS backup_log (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      status        TEXT NOT NULL,
+      object_key    TEXT,
+      size_bytes    INTEGER,
+      pruned_count  INTEGER,
+      error         TEXT,
+      created_at    TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_backup_log_created ON backup_log(created_at);
   `);
 
   // Migrace: budgety bez 'default' záznamu — vezmi nejnovější per user+category a nastav jako default
