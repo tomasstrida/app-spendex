@@ -60,6 +60,7 @@ app.use('/api/settings', require('./routes/settings'));
 app.use('/api/import', require('./routes/import'));
 app.use('/api/email', require('./routes/emailInbound'));
 app.use('/api/email-inbox', require('./routes/emailInbox'));
+app.use('/api/push', require('./routes/push'));
 app.use('/api/accounts', require('./routes/accounts'));
 
 // --- Frontend (production) ---
