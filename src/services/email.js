@@ -70,6 +70,20 @@ async function sendBackupFailureAlert(err) {
   });
 }
 
+async function sendBackupMissingAlert(maxAgeHours) {
+  const to = process.env.BACKUP_ALERT_EMAIL || 'tomas.strida@gmail.com';
+  const when = new Date().toISOString();
+  await sendEmail({
+    to,
+    subject: '⚠️ Spendex: nezaznamenána záloha DB',
+    htmlContent: `
+      <p>Heartbeat kontrola: za posledních ${maxAgeHours} h nedorazila žádná úspěšná záloha databáze Spendex.</p>
+      <p><strong>Čas kontroly:</strong> ${when}</p>
+      <p>Zkontroluj, že běží proces a zálohovací cron (Railway logy, R2 přístup).</p>
+    `,
+  });
+}
+
 async function sendBackupSuccessAlert(res) {
   const to = process.env.BACKUP_ALERT_EMAIL || 'tomas.strida@gmail.com';
   const when = new Date().toISOString();
@@ -87,4 +101,4 @@ async function sendBackupSuccessAlert(res) {
   });
 }
 
-module.exports = { sendEmail, sendVerificationEmail, sendPasswordResetEmail, sendBackupFailureAlert, sendBackupSuccessAlert };
+module.exports = { sendEmail, sendVerificationEmail, sendPasswordResetEmail, sendBackupFailureAlert, sendBackupSuccessAlert, sendBackupMissingAlert };
