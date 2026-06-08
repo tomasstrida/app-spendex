@@ -51,7 +51,7 @@ AirBank e-mail → /api/email/inbound → emailIngest
   ├─ známá kategorie → vloží transakci (auto-zařazeno)
   │     └─ pokud settings.notify_scope = 'all' → pushNotify.sendToUser(...)
   └─ kategorie chybí → vloží pending řádek do email_inbox
-        └─ vždy → pushNotify.sendToUser(userId, payload)   ← hlavní trigger
+        └─ pokud settings.notify_scope ≠ 'off' → pushNotify.sendToUser(userId, payload)   ← hlavní trigger
 
 pushNotify.sendToUser → web-push → APNs (Apple push) → iPhone
   → service worker 'push' event → zobrazí notifikaci
@@ -68,7 +68,7 @@ pushNotify.sendToUser → web-push → APNs (Apple push) → iPhone
 | `client/public/sw.js` | Service worker (statický, scope `/`). Handluje `push` (zobrazí notifikaci z payloadu) a `notificationclick` (otevře/fokusne `/import`). |
 | `client/public/icon-192.png`, `icon-512.png` | PWA ikony odvozené z `favicon.svg` |
 | `client/index.html` | `<link rel="manifest">`, `theme-color` meta, apple-touch ikona |
-| Nastavení (stránka) | Sekce „Notifikace": tlačítko **Zapnout notifikace** (stav zapnuto/vypnuto na tomto zařízení) + přepínač **Zobrazit i automaticky zařazené platby** |
+| Nastavení (stránka) | Sekce „Notifikace": tlačítko **Zapnout notifikace** (stav zapnuto/vypnuto na tomto zařízení) + výběr rozsahu: **Vypnuto / Jen nezařazené / Všechny platby** |
 | client helper (např. `client/src/push.js`) | logika: requestPermission → register SW → subscribe → POST na backend; čtení VAPID public key z `/api/push/public-key` |
 
 ### Backend
@@ -110,7 +110,10 @@ duplicity.
 
 ```sql
 ALTER TABLE settings ADD COLUMN notify_scope TEXT DEFAULT 'pending_only';
--- hodnoty: 'pending_only' (default) | 'all'
+-- hodnoty: 'off' | 'pending_only' (default) | 'all'
+--   off          → žádné push (přepíše i registrovaný odběr na zařízení)
+--   pending_only → push jen pro nezařazené platby (default)
+--   all          → push i pro automaticky zařazené platby
 ```
 
 (Přidat v `initSchema()` do try/catch bloku jako ostatní migrace.)
@@ -139,9 +142,9 @@ ALTER TABLE settings ADD COLUMN notify_scope TEXT DEFAULT 'pending_only';
 
 - **Unit** (`pushNotify`): odeslání projde všechny subscriptions uživatele;
   mock `web-push`; 410 → smazání řádku.
-- **Unit** (trigger v `emailIngest`): push se zavolá pro `pending` vždy; pro
-  auto-zařazenou platbu jen při `notify_scope = 'all'`; selhání push neshodí
-  ingest.
+- **Unit** (trigger v `emailIngest`): push se zavolá pro `pending`, když
+  `notify_scope ≠ 'off'`; pro auto-zařazenou platbu jen při `notify_scope = 'all'`;
+  při `'off'` se nezavolá vůbec; selhání push neshodí ingest.
 - **Manuální:** `POST /api/push/test` pošle testovací notifikaci na zařízení
   přihlášeného uživatele — ověření reálného doručení na iPhone.
 
