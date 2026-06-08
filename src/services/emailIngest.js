@@ -60,7 +60,10 @@ function ingestEmail(db, { userEmail, text }) {
            extId || null, tx.tx_time || null, tx.tx_type || null,
            tx.counterparty_account || null, tx.entered_by || null, tx.place || null,
            account ? account.id : null, tx.ab_category || null);
-    return { status: 'imported', external_id: extId };
+    return {
+      status: 'imported', external_id: extId, userId,
+      notify: { amount: tx.amount, currency: tx.currency, merchant: tx.place || tx.description || null, categoryName: catName },
+    };
   }
 
   // fallback / kategorie chybí → review fronta
@@ -68,7 +71,10 @@ function ingestEmail(db, { userEmail, text }) {
               VALUES (?, datetime('now'), ?, ?, ?, ?, 'pending')`)
     .run(userId, text || '', JSON.stringify({ ...tx, account_id: account ? account.id : null }),
          extId || null, categoryId);
-  return { status: 'pending', external_id: extId };
+  return {
+    status: 'pending', external_id: extId, userId,
+    notify: { amount: tx.amount, currency: tx.currency, merchant: tx.place || tx.description || null, categoryName: null },
+  };
 }
 
 module.exports = { ingestEmail };

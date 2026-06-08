@@ -122,3 +122,15 @@ test('neznámý odesílatel / mimo whitelist → ignored, nic se neuloží', () 
   assert.equal(r.status, 'ignored'); // uživatel s tímto e-mailem v DB neexistuje
   assert.equal(cnt.c, 0);
 });
+
+test('ingestEmail vrací userId a notify payload (pending i imported)', () => {
+  const { db, tmp } = freshDb();
+  seed(db);
+  const { ingestEmail } = require('./emailIngest');
+  const r = ingestEmail(db, { userEmail: 'tom@example.com', fromHeader: 'info@airbank.cz', text: INTERNAL });
+  cleanup(db, tmp);
+  assert.equal(r.userId, 1);
+  assert.ok(r.notify, 'notify payload chybí');
+  assert.equal(typeof r.notify.amount, 'number');
+  assert.ok('merchant' in r.notify);
+});
