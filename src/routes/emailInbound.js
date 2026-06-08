@@ -1,4 +1,5 @@
 'use strict';
+const crypto = require('crypto');
 const express = require('express');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
@@ -12,8 +13,13 @@ const inboundLimiter = rateLimit({ windowMs: 60 * 1000, max: 30 });
 // Vrstva 1: sdílený secret (query ?secret= nebo hlavička x-webhook-secret).
 function checkSecret(req, res, next) {
   const expected = process.env.EMAIL_WEBHOOK_SECRET;
-  const got = req.query.secret || req.get('x-webhook-secret');
-  if (!expected || got !== expected) return res.status(401).json({ error: 'unauthorized' });
+  const got = req.query.secret || req.get('x-webhook-secret') || '';
+  if (!expected) return res.status(401).json({ error: 'unauthorized' });
+  const a = Buffer.from(String(got));
+  const b = Buffer.from(String(expected));
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
   next();
 }
 
@@ -22,6 +28,10 @@ function checkSecret(req, res, next) {
 router.post('/inbound', inboundLimiter, checkSecret, async (req, res) => {
   try {
     const { envelope_from = '', from = '', raw = '' } = req.body || {};
+
+    if (typeof raw === 'string' && raw.length > 1_000_000) {
+      return res.status(413).json({ error: 'Příliš velká zpráva.' });
+    }
 
     // Vrstva 2: whitelist odesílatele.
     // POZOR: Gmail forward (přes filtr) zachovává PŮVODNÍ obálku (envelope sender zůstane
