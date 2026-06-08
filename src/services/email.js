@@ -3,6 +3,12 @@ const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@spendex.app';
 const FROM_NAME = process.env.FROM_NAME || 'Spendex';
 const APP_URL = process.env.APP_URL || 'http://localhost:3000';
 
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
 async function sendEmail({ to, toName, subject, htmlContent }) {
   const res = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
@@ -32,7 +38,7 @@ async function sendVerificationEmail(email, name, token) {
     toName: name,
     subject: 'Potvrďte svůj účet – Spendex',
     htmlContent: `
-      <p>Ahoj ${name || ''},</p>
+      <p>Ahoj ${escapeHtml(name || '')},</p>
       <p>Pro aktivaci účtu klikněte na odkaz níže:</p>
       <p><a href="${url}">${url}</a></p>
       <p>Odkaz je platný 24 hodin.</p>
@@ -47,7 +53,7 @@ async function sendPasswordResetEmail(email, name, token) {
     toName: name,
     subject: 'Obnovení hesla – Spendex',
     htmlContent: `
-      <p>Ahoj ${name || ''},</p>
+      <p>Ahoj ${escapeHtml(name || '')},</p>
       <p>Pro nastavení nového hesla klikněte na odkaz níže:</p>
       <p><a href="${url}">${url}</a></p>
       <p>Odkaz je platný 1 hodinu.</p>
@@ -84,4 +90,4 @@ async function sendBackupMissingAlert(maxAgeHours) {
   });
 }
 
-module.exports = { sendEmail, sendVerificationEmail, sendPasswordResetEmail, sendBackupFailureAlert, sendBackupMissingAlert };
+module.exports = { escapeHtml, sendEmail, sendVerificationEmail, sendPasswordResetEmail, sendBackupFailureAlert, sendBackupMissingAlert };
