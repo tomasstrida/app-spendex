@@ -7,7 +7,7 @@ const { savingsNet, reserveBalance, savingsAccount, reserveAccount, reservePaidP
 
 // GET /api/stats/overview?period=2026-04
 router.get('/overview', requireAuth, (req, res) => {
-  const billingDay = getUserBillingDay(db, req.user.id);
+  const billingDay = getUserBillingDay(db, req.dataUserId);
   const periodKey = req.query.period || currentPeriodKey(billingDay);
   const { start, end } = getPeriodDates(billingDay, periodKey);
 
@@ -22,7 +22,7 @@ router.get('/overview', requireAuth, (req, res) => {
     FROM transactions t
     WHERE t.user_id = ? AND t.date >= ? AND t.date <= ?
     ${SPENDING_FILTER}
-  `).get(req.user.id, start, end);
+  `).get(req.dataUserId, start, end);
 
   const byCategory = db.prepare(`
     SELECT c.id, c.name, c.color, c.icon, c.type,
@@ -38,7 +38,7 @@ router.get('/overview', requireAuth, (req, res) => {
     WHERE c.user_id = ?
     GROUP BY c.id
     ORDER BY spent DESC
-  `).all(req.user.id, start, end, req.user.id);
+  `).all(req.dataUserId, start, end, req.dataUserId);
 
   // Posledních 12 období
   const trend = db.prepare(`
@@ -52,7 +52,7 @@ router.get('/overview', requireAuth, (req, res) => {
     GROUP BY strftime('%Y-%m', t.date)
     ORDER BY month_key DESC
     LIMIT 12
-  `).all(req.user.id);
+  `).all(req.dataUserId);
 
   const sav = db.prepare(`
     SELECT
@@ -61,7 +61,7 @@ router.get('/overview', requireAuth, (req, res) => {
     FROM transactions
     WHERE user_id = ? AND counterparty_account LIKE ? || '%'
       AND date >= ? AND date <= ?
-  `).get(req.user.id, savingsAccount, start, end);
+  `).get(req.dataUserId, savingsAccount, start, end);
 
   // Detailní rozpis převodů přes spořicí účet za období. `amount` je z pohledu
   // zdrojového účtu: záporné = vklad na spořicí (peníze odešly), kladné = výběr
@@ -72,7 +72,7 @@ router.get('/overview', requireAuth, (req, res) => {
     WHERE user_id = ? AND counterparty_account LIKE ? || '%'
       AND date >= ? AND date <= ?
     ORDER BY date DESC, id DESC
-  `).all(req.user.id, savingsAccount, start, end).map(t => ({
+  `).all(req.dataUserId, savingsAccount, start, end).map(t => ({
     ...t,
     is_regular: t.amount === -25000,
   }));
@@ -90,14 +90,14 @@ router.get('/overview', requireAuth, (req, res) => {
       COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS envelopeReturns
     FROM transactions
     WHERE user_id = ? AND counterparty_account LIKE ? || '%' AND date <= ?
-  `).get(req.user.id, reserveAccount, end);
+  `).get(req.dataUserId, reserveAccount, end);
   const paidStmt = db.prepare(`
     SELECT COALESCE(SUM(ABS(amount)), 0) AS s
     FROM transactions
     WHERE user_id = ? AND amount < 0 AND date <= ? AND description LIKE '%' || ? || '%'
   `);
-  const najemSum = paidStmt.get(req.user.id, end, reservePaidPatterns[0]).s;
-  const preSum   = paidStmt.get(req.user.id, end, reservePaidPatterns[1]).s;
+  const najemSum = paidStmt.get(req.dataUserId, end, reservePaidPatterns[0]).s;
+  const preSum   = paidStmt.get(req.dataUserId, end, reservePaidPatterns[1]).s;
   const reserve = {
     balance: reserveBalance({
       envelopeDeposits: envCol.envelopeDeposits,
@@ -115,7 +115,7 @@ router.get('/overview', requireAuth, (req, res) => {
       AND t.date >= ? AND t.date <= ?
       AND a.account_number = ?
       AND t.counterparty_account LIKE ? || '%'
-  `).get(req.user.id, start, end, mainAccount, variableAccount);
+  `).get(req.dataUserId, start, end, mainAccount, variableAccount);
 
   // Jednotlivé položky drahých věcí (Typ 3) v zobrazeném období – seznam transakcí.
   const expensiveItems = db.prepare(`
@@ -126,7 +126,7 @@ router.get('/overview', requireAuth, (req, res) => {
     WHERE t.user_id = ? AND c.type = 3
       AND t.date >= ? AND t.date <= ?
     ORDER BY t.date DESC, t.id DESC
-  `).all(req.user.id, start, end);
+  `).all(req.dataUserId, start, end);
 
   res.json({
     period: periodKey,

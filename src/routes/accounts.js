@@ -10,7 +10,7 @@ router.get('/', requireAuth, (req, res) => {
   const rows = db.prepare(`
     SELECT id, account_number, name, role, created_at
     FROM accounts WHERE user_id = ? ORDER BY name ASC
-  `).all(req.user.id);
+  `).all(req.dataUserId);
   res.json(rows);
 });
 
@@ -23,7 +23,7 @@ router.post('/', requireAuth, (req, res) => {
     const result = db.prepare(`
       INSERT INTO accounts (user_id, account_number, name, role)
       VALUES (?, ?, ?, ?)
-    `).run(req.user.id, account_number?.trim() || null, name.trim(), role);
+    `).run(req.dataUserId, account_number?.trim() || null, name.trim(), role);
     res.status(201).json(db.prepare('SELECT * FROM accounts WHERE id = ?').get(result.lastInsertRowid));
   } catch (e) {
     if (e.message?.includes('UNIQUE')) return res.status(400).json({ error: 'Účet s tímto číslem již existuje.' });
@@ -33,7 +33,7 @@ router.post('/', requireAuth, (req, res) => {
 
 // PATCH /api/accounts/:id
 router.patch('/:id', requireAuth, (req, res) => {
-  const row = db.prepare('SELECT * FROM accounts WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  const row = db.prepare('SELECT * FROM accounts WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
   if (!row) return res.status(404).json({ error: 'Účet nenalezen.' });
   const name = req.body.name?.trim() ?? row.name;
   const role = req.body.role ?? row.role;
@@ -53,7 +53,7 @@ router.patch('/:id', requireAuth, (req, res) => {
 
 // DELETE /api/accounts/:id
 router.delete('/:id', requireAuth, (req, res) => {
-  const row = db.prepare('SELECT * FROM accounts WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  const row = db.prepare('SELECT * FROM accounts WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
   if (!row) return res.status(404).json({ error: 'Účet nenalezen.' });
   db.prepare('UPDATE transactions SET account_id = NULL WHERE account_id = ?').run(row.id);
   db.prepare('DELETE FROM accounts WHERE id = ?').run(row.id);

@@ -11,7 +11,7 @@ router.get('/fund-status', requireAuth, (req, res) => {
   const year = parseInt(req.query.year) || new Date().getFullYear();
   const cats = db.prepare(
     'SELECT * FROM categories WHERE user_id = ? AND type = 3 ORDER BY name ASC'
-  ).all(req.user.id);
+  ).all(req.dataUserId);
 
   const lastEver = db.prepare(`
     SELECT MAX(date) as last_date
@@ -26,8 +26,8 @@ router.get('/fund-status', requireAuth, (req, res) => {
   `);
 
   const result = cats.map(cat => {
-    const { last_date } = lastEver.get(req.user.id, cat.id);
-    const { total } = yearSpent.get(req.user.id, cat.id, `${year}-01-01`, `${year}-12-31`);
+    const { last_date } = lastEver.get(req.dataUserId, cat.id);
+    const { total } = yearSpent.get(req.dataUserId, cat.id, `${year}-01-01`, `${year}-12-31`);
 
     let months_since_last = null;
     if (last_date) {
@@ -53,7 +53,7 @@ router.get('/fund-status', requireAuth, (req, res) => {
 
 // GET /api/categories
 router.get('/', requireAuth, (req, res) => {
-  const rows = db.prepare('SELECT * FROM categories WHERE user_id = ? ORDER BY name ASC').all(req.user.id);
+  const rows = db.prepare('SELECT * FROM categories WHERE user_id = ? ORDER BY name ASC').all(req.dataUserId);
   res.json(rows);
 });
 
@@ -66,7 +66,7 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
   try {
     result = db.prepare(
       'INSERT INTO categories (user_id, name, color, icon, type, typical_price, frequency_months) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(req.user.id, name, color || '#6366f1', icon || 'tag', type || 1,
+    ).run(req.dataUserId, name, color || '#6366f1', icon || 'tag', type || 1,
       typical_price != null ? parseFloat(typical_price) : null,
       frequency_months != null ? parseInt(frequency_months) : null);
   } catch (e) {
@@ -79,7 +79,7 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
 
 // PATCH /api/categories/:id
 router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
-  const cat = db.prepare('SELECT * FROM categories WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  const cat = db.prepare('SELECT * FROM categories WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
   if (!cat) return res.status(404).json({ error: 'Kategorie nenalezena.' });
 
   const { name, color, icon, type, typical_price, frequency_months } = req.body;
@@ -106,7 +106,7 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
 
 // DELETE /api/categories/:id
 router.delete('/:id', requireAuth, writeLimiter, (req, res) => {
-  const cat = db.prepare('SELECT * FROM categories WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  const cat = db.prepare('SELECT * FROM categories WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
   if (!cat) return res.status(404).json({ error: 'Kategorie nenalezena.' });
   db.prepare('DELETE FROM categories WHERE id = ?').run(cat.id);
   res.json({ ok: true });

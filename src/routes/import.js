@@ -19,7 +19,7 @@ router.post('/preview', requireAuth, writeLimiter, express.text({ limit: '2mb', 
     if (transactions.length > 5000) return res.status(400).json({ error: 'Příliš velký výpis (> 5000 transakcí).' });
 
     const existingRefs = new Set();
-    for (const r of db.prepare('SELECT external_id FROM transactions WHERE user_id = ? AND external_id IS NOT NULL').all(req.user.id)) {
+    for (const r of db.prepare('SELECT external_id FROM transactions WHERE user_id = ? AND external_id IS NOT NULL').all(req.dataUserId)) {
       const v = r.external_id;
       existingRefs.add(v);
       const dash = v.lastIndexOf('-');
@@ -36,7 +36,7 @@ router.post('/preview', requireAuth, writeLimiter, express.text({ limit: '2mb', 
     // Načti uložená mapování pro tohoto uživatele
     const mappingRows = db.prepare(
       'SELECT ab_category, category_id FROM airbank_category_mappings WHERE user_id = ?'
-    ).all(req.user.id);
+    ).all(req.dataUserId);
     const savedMappings = {};
     mappingRows.forEach(r => { savedMappings[r.ab_category] = r.category_id; });
 
@@ -46,7 +46,7 @@ router.post('/preview', requireAuth, writeLimiter, express.text({ limit: '2mb', 
         .map(t => t.counterparty_account?.match(/^(\d+)\/\d+/)?.[1])
         .filter(Boolean)
     );
-    const userAccounts = db.prepare('SELECT * FROM accounts WHERE user_id = ? ORDER BY name ASC').all(req.user.id);
+    const userAccounts = db.prepare('SELECT * FROM accounts WHERE user_id = ? ORDER BY name ASC').all(req.dataUserId);
     // Účty jejichž číslo se NEVYSKYTUJE jako protistrana jsou kandidáti na zdrojový účet
     const candidates = userAccounts.filter(a => a.account_number && !counterpartyNums.has(a.account_number));
 
@@ -76,7 +76,7 @@ router.post('/confirm', requireAuth, writeLimiter, (req, res) => {
   let resolvedAccountId = null;
   let resolvedAccountNumber = null;
   if (account_id) {
-    const acc = db.prepare('SELECT id, account_number FROM accounts WHERE id = ? AND user_id = ?').get(account_id, req.user.id);
+    const acc = db.prepare('SELECT id, account_number FROM accounts WHERE id = ? AND user_id = ?').get(account_id, req.dataUserId);
     if (!acc) return res.status(400).json({ error: 'Neplatný účet.' });
     resolvedAccountId = acc.id;
     resolvedAccountNumber = acc.account_number || null;
@@ -102,7 +102,7 @@ router.post('/confirm', requireAuth, writeLimiter, (req, res) => {
   // Autoritativní sada již uložených external_id pro tohoto uživatele
   const existingIds = new Set(
     db.prepare('SELECT external_id FROM transactions WHERE user_id = ? AND external_id IS NOT NULL')
-      .all(req.user.id)
+      .all(req.dataUserId)
       .map(r => r.external_id)
   );
 
@@ -116,7 +116,7 @@ router.post('/confirm', requireAuth, writeLimiter, (req, res) => {
     if (ids.length > 0) {
       const ph = ids.map(() => '?').join(',');
       const rows = db.prepare(`SELECT id, name FROM categories WHERE user_id = ? AND id IN (${ph})`)
-        .all(req.user.id, ...ids);
+        .all(req.dataUserId, ...ids);
       const nameById = Object.fromEntries(rows.map(r => [r.id, r.name]));
       for (const [ab, cid] of Object.entries(category_map)) {
         if (cid && nameById[cid]) userMapName[ab] = nameById[cid];
@@ -128,7 +128,7 @@ router.post('/confirm', requireAuth, writeLimiter, (req, res) => {
     abCategoryMap: { ...seedRules.abCategoryMap, ...userMapName },
   };
   const catIdByName = Object.fromEntries(
-    db.prepare('SELECT id, name FROM categories WHERE user_id = ?').all(req.user.id)
+    db.prepare('SELECT id, name FROM categories WHERE user_id = ?').all(req.dataUserId)
       .map(r => [r.name, r.id])
   );
   const account = resolvedAccountNumber ? { account_number: resolvedAccountNumber } : null;
@@ -147,7 +147,7 @@ router.post('/confirm', requireAuth, writeLimiter, (req, res) => {
       const catName = applyRules(t, account, effectiveRules);
       const categoryId = catIdByName[catName] || null;
       const result = insert.run(
-        req.user.id, categoryId, t.amount, t.currency, t.date,
+        req.dataUserId, categoryId, t.amount, t.currency, t.date,
         t.description, t.note || '', extId || null,
         t.tx_time || null, t.tx_type || null,
         t.counterparty_account || null, t.entered_by || null, t.place || null,
@@ -163,7 +163,7 @@ router.post('/confirm', requireAuth, writeLimiter, (req, res) => {
 
     // Ulož mapování pro všechny AB kategorie kde bylo přiřazení
     for (const [abCat, catId] of Object.entries(category_map)) {
-      if (catId) upsertMapping.run(req.user.id, abCat, parseInt(catId));
+      if (catId) upsertMapping.run(req.dataUserId, abCat, parseInt(catId));
     }
 
     // Archivace originálu CSV (per soubor, dedup přes UNIQUE(user_id, file_hash))
@@ -173,7 +173,7 @@ router.post('/confirm', requireAuth, writeLimiter, (req, res) => {
         INSERT OR IGNORE INTO csv_archive
           (user_id, filename, source, account_id, content, file_hash, parsed_tx_count)
         VALUES (?, ?, 'airbank', ?, ?, ?, ?)
-      `).run(req.user.id, filename, resolvedAccountId, raw_csv, hash, imported);
+      `).run(req.dataUserId, filename, resolvedAccountId, raw_csv, hash, imported);
       archiveStatus = result.changes > 0 ? 'new' : 'duplicate';
     }
   })();
@@ -189,7 +189,7 @@ router.get('/mappings', requireAuth, (req, res) => {
     JOIN categories c ON c.id = m.category_id
     WHERE m.user_id = ?
     ORDER BY m.ab_category ASC
-  `).all(req.user.id);
+  `).all(req.dataUserId);
   res.json(rows);
 });
 
@@ -201,16 +201,16 @@ router.put('/mappings', requireAuth, (req, res) => {
     INSERT INTO airbank_category_mappings (user_id, ab_category, category_id)
     VALUES (?, ?, ?)
     ON CONFLICT(user_id, ab_category) DO UPDATE SET category_id = excluded.category_id
-  `).run(req.user.id, ab_category, parseInt(category_id));
+  `).run(req.dataUserId, ab_category, parseInt(category_id));
   const row = db.prepare('SELECT * FROM airbank_category_mappings WHERE user_id = ? AND ab_category = ?')
-    .get(req.user.id, ab_category);
+    .get(req.dataUserId, ab_category);
   res.json(row);
 });
 
 // DELETE /api/import/mappings/:id
 router.delete('/mappings/:id', requireAuth, (req, res) => {
   const row = db.prepare('SELECT id FROM airbank_category_mappings WHERE id = ? AND user_id = ?')
-    .get(req.params.id, req.user.id);
+    .get(req.params.id, req.dataUserId);
   if (!row) return res.status(404).json({ error: 'Mapování nenalezeno.' });
   db.prepare('DELETE FROM airbank_category_mappings WHERE id = ?').run(row.id);
   res.json({ ok: true });
@@ -226,14 +226,14 @@ router.get('/archive', requireAuth, (req, res) => {
     LEFT JOIN accounts acc ON acc.id = a.account_id
     WHERE a.user_id = ?
     ORDER BY a.uploaded_at DESC, a.id DESC
-  `).all(req.user.id);
+  `).all(req.dataUserId);
   res.json(rows);
 });
 
 // GET /api/import/archive/:id/download – stáhne originál CSV
 router.get('/archive/:id/download', requireAuth, (req, res) => {
   const row = db.prepare('SELECT filename, content FROM csv_archive WHERE id = ? AND user_id = ?')
-    .get(req.params.id, req.user.id);
+    .get(req.params.id, req.dataUserId);
   if (!row) return res.status(404).json({ error: 'Záznam nenalezen.' });
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   const safeName = String(row.filename || 'export.csv').replace(/[^\w.\- ]+/g, '_').slice(0, 100);
@@ -244,7 +244,7 @@ router.get('/archive/:id/download', requireAuth, (req, res) => {
 // DELETE /api/import/archive/:id – smaže záznam archivu (transakce zůstávají)
 router.delete('/archive/:id', requireAuth, writeLimiter, (req, res) => {
   const row = db.prepare('SELECT id FROM csv_archive WHERE id = ? AND user_id = ?')
-    .get(req.params.id, req.user.id);
+    .get(req.params.id, req.dataUserId);
   if (!row) return res.status(404).json({ error: 'Záznam nenalezen.' });
   db.prepare('DELETE FROM csv_archive WHERE id = ?').run(row.id);
   res.json({ ok: true });

@@ -11,8 +11,8 @@ const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 router.get('/', requireAuth, (req, res) => {
   const year = parseInt(req.query.year) || new Date().getFullYear();
   const params = req.query.category_id
-    ? [req.user.id, parseInt(req.query.category_id)]
-    : [req.user.id];
+    ? [req.dataUserId, parseInt(req.query.category_id)]
+    : [req.dataUserId];
   const whereExtra = req.query.category_id ? ' AND bi.category_id = ?' : '';
 
   const items = db.prepare(`
@@ -36,7 +36,7 @@ router.get('/', requireAuth, (req, res) => {
     const from = `${year}-${String(item.window_start).padStart(2, '0')}-01`;
     const lastDay = new Date(toYear, item.window_end, 0).getDate();
     const to = `${toYear}-${String(item.window_end).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-    const { spent } = getSpent.get(req.user.id, item.category_id, from, to);
+    const { spent } = getSpent.get(req.dataUserId, item.category_id, from, to);
     return { ...item, spent, window_from: from, window_to: to };
   });
 
@@ -50,7 +50,7 @@ router.get('/', requireAuth, (req, res) => {
       AND t.date >= ? AND t.date <= ?
       AND t.category_id IS NOT NULL
     GROUP BY t.category_id
-  `).all(req.user.id, req.user.id, `${year}-01-01`, `${year}-12-31`);
+  `).all(req.dataUserId, req.dataUserId, `${year}-01-01`, `${year}-12-31`);
   const category_year_spent = {};
   for (const r of annualSpent) category_year_spent[r.category_id] = r.spent;
 
@@ -66,7 +66,7 @@ router.get('/', requireAuth, (req, res) => {
       AND t.date >= ? AND t.date <= ?
       AND t.category_id IS NOT NULL
     GROUP BY t.category_id, month
-  `).all(req.user.id, req.user.id, `${year}-01-01`, `${year}-12-31`);
+  `).all(req.dataUserId, req.dataUserId, `${year}-01-01`, `${year}-12-31`);
   const category_month_spent = {};
   for (const r of monthlySpent) {
     if (!category_month_spent[r.category_id]) category_month_spent[r.category_id] = Array(12).fill(0);
@@ -87,19 +87,19 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
   if (ws < 1 || ws > 12 || we < 1 || we > 12) {
     return res.status(400).json({ error: 'Měsíce musí být v rozsahu 1–12.' });
   }
-  const cat = db.prepare('SELECT id FROM categories WHERE id = ? AND user_id = ?').get(category_id, req.user.id);
+  const cat = db.prepare('SELECT id FROM categories WHERE id = ? AND user_id = ?').get(category_id, req.dataUserId);
   if (!cat) return res.status(404).json({ error: 'Kategorie nenalezena.' });
 
   const result = db.prepare(
     'INSERT INTO budget_items (user_id, category_id, name, amount, window_start, window_end) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(req.user.id, parseInt(category_id), name.trim(), parseFloat(amount), ws, we);
+  ).run(req.dataUserId, parseInt(category_id), name.trim(), parseFloat(amount), ws, we);
 
   res.status(201).json(db.prepare('SELECT * FROM budget_items WHERE id = ?').get(result.lastInsertRowid));
 });
 
 // PATCH /api/budget-items/:id
 router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
-  const item = db.prepare('SELECT * FROM budget_items WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  const item = db.prepare('SELECT * FROM budget_items WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
   if (!item) return res.status(404).json({ error: 'Podpoložka nenalezena.' });
 
   const { name, amount, window_start, window_end } = req.body;
@@ -115,7 +115,7 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
 
 // DELETE /api/budget-items/:id
 router.delete('/:id', requireAuth, writeLimiter, (req, res) => {
-  const item = db.prepare('SELECT * FROM budget_items WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  const item = db.prepare('SELECT * FROM budget_items WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
   if (!item) return res.status(404).json({ error: 'Podpoložka nenalezena.' });
   db.prepare('DELETE FROM budget_items WHERE id = ?').run(item.id);
   res.json({ ok: true });

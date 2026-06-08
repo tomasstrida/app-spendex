@@ -10,7 +10,7 @@ const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 // GET /api/budgets?period=2026-04
 // Vrátí výchozí budgety s případnými přepsáními pro dané období.
 router.get('/', requireAuth, (req, res) => {
-  const billingDay = getUserBillingDay(db, req.user.id);
+  const billingDay = getUserBillingDay(db, req.dataUserId);
   const periodKey = req.query.period || currentPeriodKey(billingDay);
   const { start, end } = getPeriodDates(billingDay, periodKey);
 
@@ -40,7 +40,7 @@ router.get('/', requireAuth, (req, res) => {
       ON pb.category_id = db.category_id AND pb.user_id = db.user_id AND pb.month = ?
     WHERE db.user_id = ? AND db.month = 'default'
     ORDER BY c.name ASC
-  `).all(start, end, periodKey, req.user.id);
+  `).all(start, end, periodKey, req.dataUserId);
 
   // id pro frontend = override_id pokud existuje, jinak default_id
   const budgets = rows.map(r => ({
@@ -59,34 +59,34 @@ router.put('/', requireAuth, writeLimiter, (req, res) => {
   const { category_id, period, amount, scope = 'all' } = req.body;
   if (!category_id || !period || amount == null) return res.status(400).json({ error: 'category_id, period a amount jsou povinné.' });
 
-  const cat = db.prepare('SELECT id FROM categories WHERE id = ? AND user_id = ?').get(category_id, req.user.id);
+  const cat = db.prepare('SELECT id FROM categories WHERE id = ? AND user_id = ?').get(category_id, req.dataUserId);
   if (!cat) return res.status(404).json({ error: 'Kategorie nenalezena.' });
 
   db.prepare(`
     INSERT INTO budgets (user_id, category_id, month, amount)
     VALUES (?, ?, 'default', ?)
     ON CONFLICT(user_id, category_id, month) DO UPDATE SET amount = excluded.amount
-  `).run(req.user.id, category_id, amount);
+  `).run(req.dataUserId, category_id, amount);
 
   if (scope === 'all') {
     // Smaž všechna period-přepsání pro tuto kategorii
     db.prepare(`DELETE FROM budgets WHERE user_id = ? AND category_id = ? AND month != 'default'`)
-      .run(req.user.id, category_id);
+      .run(req.dataUserId, category_id);
   } else {
     // Smaž přepsání od tohoto období dál (month >= period, ale není 'default')
     db.prepare(`DELETE FROM budgets WHERE user_id = ? AND category_id = ? AND month != 'default' AND month >= ?`)
-      .run(req.user.id, category_id, period);
+      .run(req.dataUserId, category_id, period);
   }
 
   const row = db.prepare(`SELECT * FROM budgets WHERE user_id = ? AND category_id = ? AND month = 'default'`)
-    .get(req.user.id, category_id);
+    .get(req.dataUserId, category_id);
   res.json(row);
 });
 
 // DELETE /api/budgets/:id
 // Smaže záznam (override i default). Pokud se smaže override, vrátí se výchozí.
 router.delete('/:id', requireAuth, writeLimiter, (req, res) => {
-  const budget = db.prepare('SELECT * FROM budgets WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  const budget = db.prepare('SELECT * FROM budgets WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
   if (!budget) return res.status(404).json({ error: 'Rozpočet nenalezen.' });
   db.prepare('DELETE FROM budgets WHERE id = ?').run(budget.id);
   res.json({ ok: true, was_override: budget.month !== 'default' });

@@ -13,7 +13,7 @@ function freshApp() {
   db.prepare("INSERT INTO categories (id, user_id, name) VALUES (10, 2, 'CizíKat')").run();
   db.prepare("INSERT INTO categories (id, user_id, name) VALUES (11, 1, 'MojeKat')").run();
   const app = express(); app.use(express.json());
-  app.use((req,_res,next)=>{ req.user={id:1}; req.isAuthenticated=()=>true; next(); });
+  app.use((req,_res,next)=>{ req.user={id:1}; req.dataUserId=1; req.isAuthenticated=()=>true; next(); });
   app.use('/api/transactions', require('./transactions'));
   return { app, db, tmp };
 }

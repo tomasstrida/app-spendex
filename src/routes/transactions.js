@@ -11,7 +11,7 @@ const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 router.get('/', requireAuth, (req, res) => {
   const { from, to, category_id, category_ids, amount_min, amount_max, q, counterparty, direction, limit = 200, offset = 0 } = req.query;
   let query = 'SELECT t.*, c.name as category_name, c.color as category_color FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.user_id = ?';
-  const params = [req.user.id];
+  const params = [req.dataUserId];
 
   if (from) { query += ' AND t.date >= ?'; params.push(from); }
   if (to)   { query += ' AND t.date <= ?'; params.push(to); }
@@ -100,7 +100,7 @@ router.get('/', requireAuth, (req, res) => {
 
 // GET /api/transactions/duplicates
 router.get('/duplicates', requireAuth, (req, res) => {
-  res.json(findDuplicates(db, req.user.id));
+  res.json(findDuplicates(db, req.dataUserId));
 });
 
 // POST /api/transactions/duplicates/dismiss  body: { ids: [...] }
@@ -112,13 +112,13 @@ router.post('/duplicates/dismiss', requireAuth, writeLimiter, (req, res) => {
   }
   const ph = ids.map(() => '?').join(',');
   const owned = db.prepare(`SELECT id FROM transactions WHERE user_id = ? AND id IN (${ph})`)
-    .all(req.user.id, ...ids);
+    .all(req.dataUserId, ...ids);
   if (owned.length !== ids.length) {
     return res.status(400).json({ error: 'Některá transakce nepatří uživateli.' });
   }
   const sig = ids.map(Number).sort((a, b) => a - b).join(',');
   db.prepare('INSERT OR IGNORE INTO duplicate_dismissals (user_id, tx_ids) VALUES (?, ?)')
-    .run(req.user.id, sig);
+    .run(req.dataUserId, sig);
   res.json({ ok: true });
 });
 
@@ -129,7 +129,7 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
   if (!Number.isFinite(amt)) return res.status(400).json({ error: 'Částka musí být číslo.' });
   if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'Datum musí být ve formátu YYYY-MM-DD.' });
   if (category_id != null) {
-    const owned = db.prepare('SELECT 1 FROM categories WHERE id = ? AND user_id = ?').get(category_id, req.user.id);
+    const owned = db.prepare('SELECT 1 FROM categories WHERE id = ? AND user_id = ?').get(category_id, req.dataUserId);
     if (!owned) return res.status(400).json({ error: 'Neplatná kategorie.' });
   }
   const cur = (currency && String(currency).slice(0, 8)) || 'CZK';
@@ -137,20 +137,20 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
   const nt = note != null ? String(note).slice(0, 500) : '';
   const result = db.prepare(
     'INSERT INTO transactions (user_id, category_id, amount, currency, date, description, note, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(req.user.id, category_id || null, amt, cur, date, desc, nt, 'manual');
+  ).run(req.dataUserId, category_id || null, amt, cur, date, desc, nt, 'manual');
   const row = db.prepare('SELECT * FROM transactions WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json(row);
 });
 
 // PATCH /api/transactions/:id
 router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
-  const tx = db.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  const tx = db.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
   if (!tx) return res.status(404).json({ error: 'Transakce nenalezena.' });
   const { amount, currency, date, description, note, category_id } = req.body;
   if (amount !== undefined && !Number.isFinite(Number(amount))) return res.status(400).json({ error: 'Částka musí být číslo.' });
   if (date !== undefined && (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date))) return res.status(400).json({ error: 'Datum musí být ve formátu YYYY-MM-DD.' });
   if (category_id !== undefined && category_id !== null) {
-    const owned = db.prepare('SELECT 1 FROM categories WHERE id = ? AND user_id = ?').get(category_id, req.user.id);
+    const owned = db.prepare('SELECT 1 FROM categories WHERE id = ? AND user_id = ?').get(category_id, req.dataUserId);
     if (!owned) return res.status(400).json({ error: 'Neplatná kategorie.' });
   }
   db.prepare(
@@ -169,7 +169,7 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
 
 // DELETE /api/transactions/:id
 router.delete('/:id', requireAuth, writeLimiter, (req, res) => {
-  const tx = db.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  const tx = db.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
   if (!tx) return res.status(404).json({ error: 'Transakce nenalezena.' });
   db.prepare('DELETE FROM transactions WHERE id = ?').run(tx.id);
   res.json({ ok: true });
@@ -179,13 +179,13 @@ router.delete('/:id', requireAuth, writeLimiter, (req, res) => {
 router.delete('/', requireAuth, writeLimiter, (req, res) => {
   const { ids, guardDuplicateGroups } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Neplatná data.' });
-  if (guardDuplicateGroups && wouldEmptyDuplicateGroup(db, req.user.id, ids)) {
+  if (guardDuplicateGroups && wouldEmptyDuplicateGroup(db, req.dataUserId, ids)) {
     return res.status(400).json({ error: 'Ve skupině duplicit musí zůstat alespoň jedna transakce.' });
   }
   const placeholders = ids.map(() => '?').join(',');
   const result = db.prepare(
     `DELETE FROM transactions WHERE id IN (${placeholders}) AND user_id = ?`
-  ).run(...ids, req.user.id);
+  ).run(...ids, req.dataUserId);
   res.json({ deleted: result.changes });
 });
 

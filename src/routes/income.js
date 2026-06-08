@@ -10,9 +10,9 @@ const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
 // GET /api/income?period=YYYY-MM
 router.get('/', requireAuth, (req, res) => {
-  const billingDay = getUserBillingDay(db, req.user.id);
+  const billingDay = getUserBillingDay(db, req.dataUserId);
   const period = req.query.period || currentPeriodKey(billingDay);
-  const sources = incomeSourcesForPeriod(db, req.user.id, period, billingDay);
+  const sources = incomeSourcesForPeriod(db, req.dataUserId, period, billingDay);
   res.json({ period, sources });
 });
 
@@ -33,18 +33,18 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
   }
   if (account_id != null && account_id !== '') {
     const id = parseInt(account_id);
-    const acc = Number.isFinite(id) && db.prepare('SELECT id FROM accounts WHERE id = ? AND user_id = ?').get(id, req.user.id);
+    const acc = Number.isFinite(id) && db.prepare('SELECT id FROM accounts WHERE id = ? AND user_id = ?').get(id, req.dataUserId);
     if (!acc) return res.status(400).json({ error: 'Neplatný cílový účet.' });
   }
   const result = db.prepare(
     'INSERT INTO income_sources (user_id, person, planned_amount, match_pattern, match_counterparty_account, account_id, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)'
   ).run(
-    req.user.id,
+    req.dataUserId,
     person.trim(),
     parseFloat(planned_amount) || 0,
     match_pattern && match_pattern.trim() ? match_pattern.trim() : null,
     match_counterparty_account && String(match_counterparty_account).trim() ? String(match_counterparty_account).trim() : null,
-    resolveAccountId(db, req.user.id, account_id, null),
+    resolveAccountId(db, req.dataUserId, account_id, null),
     sort_order ?? 0
   );
   res.status(201).json(db.prepare('SELECT * FROM income_sources WHERE id = ?').get(result.lastInsertRowid));
@@ -52,7 +52,7 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
 
 // PATCH /api/income/:id
 router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
-  const row = db.prepare('SELECT * FROM income_sources WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  const row = db.prepare('SELECT * FROM income_sources WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
   if (!row) return res.status(404).json({ error: 'Záznam nenalezen.' });
   const { person, planned_amount, match_pattern, match_counterparty_account, account_id, sort_order } = req.body;
   db.prepare('UPDATE income_sources SET person = ?, planned_amount = ?, match_pattern = ?, match_counterparty_account = ?, account_id = ?, sort_order = ? WHERE id = ?').run(
@@ -62,7 +62,7 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
     match_counterparty_account !== undefined
       ? (match_counterparty_account && String(match_counterparty_account).trim() ? String(match_counterparty_account).trim() : null)
       : row.match_counterparty_account,
-    resolveAccountId(db, req.user.id, account_id, row.account_id),
+    resolveAccountId(db, req.dataUserId, account_id, row.account_id),
     sort_order ?? row.sort_order,
     row.id
   );
@@ -71,7 +71,7 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
 
 // DELETE /api/income/:id
 router.delete('/:id', requireAuth, writeLimiter, (req, res) => {
-  const row = db.prepare('SELECT * FROM income_sources WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  const row = db.prepare('SELECT * FROM income_sources WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
   if (!row) return res.status(404).json({ error: 'Záznam nenalezen.' });
   db.prepare('DELETE FROM income_sources WHERE id = ?').run(row.id);
   res.json({ ok: true });

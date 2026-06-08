@@ -17,7 +17,7 @@ router.get('/', requireAuth, (req, res) => {
     LEFT JOIN categories c ON c.id = i.suggested_category_id
     WHERE i.user_id = ? AND i.status IN ('pending', 'unparsed')
     ORDER BY i.created_at DESC, i.id DESC
-  `).all(req.user.id);
+  `).all(req.dataUserId);
   res.json(rows);
 });
 
@@ -37,7 +37,7 @@ router.get('/history', requireAuth, (req, res) => {
     LEFT JOIN categories tc ON tc.id = t.category_id
     WHERE i.user_id = ?
     ORDER BY i.created_at DESC, i.id DESC
-  `).all(req.user.id);
+  `).all(req.dataUserId);
   res.json(rows);
 });
 
@@ -45,7 +45,7 @@ router.get('/history', requireAuth, (req, res) => {
 router.post('/:id/approve', requireAuth, writeLimiter, (req, res) => {
   const { category_id = null } = req.body || {};
   const row = db.prepare("SELECT * FROM email_inbox WHERE id = ? AND user_id = ? AND status = 'pending'")
-    .get(req.params.id, req.user.id);
+    .get(req.params.id, req.dataUserId);
   if (!row) return res.status(404).json({ error: 'Položka nenalezena.' });
   if (!row.parsed_json) return res.status(400).json({ error: 'Položku nelze zařadit (nerozpoznaná).' });
 
@@ -53,7 +53,7 @@ router.post('/:id/approve', requireAuth, writeLimiter, (req, res) => {
   // category_id z UI má přednost; jinak navržená kategorie
   let categoryId = category_id ? parseInt(category_id) : row.suggested_category_id;
   if (categoryId) {
-    const ok = db.prepare('SELECT 1 FROM categories WHERE id = ? AND user_id = ?').get(categoryId, req.user.id);
+    const ok = db.prepare('SELECT 1 FROM categories WHERE id = ? AND user_id = ?').get(categoryId, req.dataUserId);
     if (!ok) return res.status(400).json({ error: 'Neplatná kategorie.' });
   }
 
@@ -62,7 +62,7 @@ router.post('/:id/approve', requireAuth, writeLimiter, (req, res) => {
         (user_id, category_id, amount, currency, date, description, note, source, external_id,
          tx_time, tx_type, counterparty_account, entered_by, place, account_id, ab_category)
         VALUES (?, ?, ?, ?, ?, ?, ?, 'airbank-email', ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(req.user.id, categoryId || null, tx.amount, tx.currency, tx.date, tx.description,
+      .run(req.dataUserId, categoryId || null, tx.amount, tx.currency, tx.date, tx.description,
            tx.note || '', row.external_id || null, tx.tx_time || null, tx.tx_type || null,
            tx.counterparty_account || null, tx.entered_by || null, tx.place || null,
            tx.account_id || null, tx.ab_category || null);
@@ -78,7 +78,7 @@ router.post('/:id/approve', requireAuth, writeLimiter, (req, res) => {
 
 // DELETE /api/email-inbox/:id — zahodí položku (pending i unparsed)
 router.delete('/:id', requireAuth, writeLimiter, (req, res) => {
-  const row = db.prepare('SELECT id FROM email_inbox WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  const row = db.prepare('SELECT id FROM email_inbox WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
   if (!row) return res.status(404).json({ error: 'Položka nenalezena.' });
   db.prepare("UPDATE email_inbox SET status = 'rejected' WHERE id = ?").run(row.id);
   res.json({ ok: true });

@@ -31,7 +31,7 @@ router.get('/', requireAuth, (req, res) => {
     JOIN categories c ON c.id = ab.category_id AND c.user_id = ab.user_id
     WHERE ab.user_id = ?
     ORDER BY c.name ASC
-  `).all(from, to, req.user.id);
+  `).all(from, to, req.dataUserId);
 
   res.json({ year, budgets: rows });
 });
@@ -42,23 +42,23 @@ router.put('/', requireAuth, writeLimiter, (req, res) => {
   const { category_id, amount } = req.body;
   if (!category_id || amount == null) return res.status(400).json({ error: 'category_id a amount jsou povinné.' });
 
-  const cat = db.prepare('SELECT id FROM categories WHERE id = ? AND user_id = ?').get(category_id, req.user.id);
+  const cat = db.prepare('SELECT id FROM categories WHERE id = ? AND user_id = ?').get(category_id, req.dataUserId);
   if (!cat) return res.status(404).json({ error: 'Kategorie nenalezena.' });
 
   db.prepare(`
     INSERT INTO annual_budgets (user_id, category_id, amount)
     VALUES (?, ?, ?)
     ON CONFLICT(user_id, category_id) DO UPDATE SET amount = excluded.amount
-  `).run(req.user.id, category_id, amount);
+  `).run(req.dataUserId, category_id, amount);
 
   const row = db.prepare('SELECT * FROM annual_budgets WHERE user_id = ? AND category_id = ?')
-    .get(req.user.id, category_id);
+    .get(req.dataUserId, category_id);
   res.json(row);
 });
 
 // DELETE /api/annual-budgets/:id
 router.delete('/:id', requireAuth, writeLimiter, (req, res) => {
-  const budget = db.prepare('SELECT * FROM annual_budgets WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  const budget = db.prepare('SELECT * FROM annual_budgets WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
   if (!budget) return res.status(404).json({ error: 'Roční rozpočet nenalezen.' });
   db.prepare('DELETE FROM annual_budgets WHERE id = ?').run(budget.id);
   res.json({ ok: true });
