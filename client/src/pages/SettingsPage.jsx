@@ -112,15 +112,20 @@ export default function SettingsPage() {
   async function handleEnablePush() {
     try {
       const r = await enablePush();
-      if (r === 'granted') setPushState('on');
+      if (r === 'granted') { setPushState('on'); setTestMsg(''); }
       else if (r === 'denied') setPushState('denied');
       else if (r === 'unsupported') setPushState('unsupported');
     } catch (e) { setTestMsg(e.message); }
   }
 
   async function handleDisablePush() {
-    await disablePush();
-    setPushState('off');
+    try {
+      await disablePush();
+      setPushState('off');
+      setTestMsg('');
+    } catch (e) {
+      setTestMsg(e.message);
+    }
   }
 
   async function handleTestPush() {
@@ -215,7 +220,7 @@ export default function SettingsPage() {
         <div className="card">
           <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>{t.settings.notifications_title}</h2>
 
-          {pushState === 'unsupported' && !isStandalone() && (
+          {pushState === 'unsupported' && !isStandalone() && /iPhone|iPad|iPod/.test(navigator.userAgent) && (
             <p className="form-hint" style={{ marginBottom: 12 }}>{t.settings.notifications_ios_hint}</p>
           )}
           {pushState === 'denied' && (
