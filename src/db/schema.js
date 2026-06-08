@@ -54,17 +54,6 @@ function initSchema() {
       UNIQUE (user_id, category_id, month)
     );
 
-    CREATE TABLE IF NOT EXISTS airbank_tokens (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER UNIQUE NOT NULL,
-      access_token TEXT,
-      refresh_token TEXT,
-      expires_at INTEGER,
-      account_id TEXT,
-      updated_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    );
-
     CREATE TABLE IF NOT EXISTS settings (
       user_id INTEGER PRIMARY KEY,
       billing_day INTEGER DEFAULT 1,
@@ -277,6 +266,7 @@ function initSchema() {
     'ALTER TABLE income_sources ADD COLUMN match_counterparty_account TEXT',
     'ALTER TABLE income_sources ADD COLUMN account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL',
     "ALTER TABLE settings ADD COLUMN notify_scope TEXT DEFAULT 'pending_only'",
+    'DROP TABLE IF EXISTS airbank_tokens',
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* sloupec/index již existuje nebo nelze aplikovat */ }
