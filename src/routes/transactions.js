@@ -125,12 +125,19 @@ router.post('/duplicates/dismiss', requireAuth, writeLimiter, (req, res) => {
 // POST /api/transactions
 router.post('/', requireAuth, writeLimiter, (req, res) => {
   const { amount, currency, date, description, note, category_id } = req.body;
-  if (!amount || !date) return res.status(400).json({ error: 'Částka a datum jsou povinné.' });
-
+  const amt = Number(amount);
+  if (!Number.isFinite(amt)) return res.status(400).json({ error: 'Částka musí být číslo.' });
+  if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'Datum musí být ve formátu YYYY-MM-DD.' });
+  if (category_id != null) {
+    const owned = db.prepare('SELECT 1 FROM categories WHERE id = ? AND user_id = ?').get(category_id, req.user.id);
+    if (!owned) return res.status(400).json({ error: 'Neplatná kategorie.' });
+  }
+  const cur = (currency && String(currency).slice(0, 8)) || 'CZK';
+  const desc = description != null ? String(description).slice(0, 500) : '';
+  const nt = note != null ? String(note).slice(0, 500) : '';
   const result = db.prepare(
     'INSERT INTO transactions (user_id, category_id, amount, currency, date, description, note, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(req.user.id, category_id || null, amount, currency || 'CZK', date, description || '', note || '', 'manual');
-
+  ).run(req.user.id, category_id || null, amt, cur, date, desc, nt, 'manual');
   const row = db.prepare('SELECT * FROM transactions WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json(row);
 });
@@ -139,20 +146,24 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
 router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
   const tx = db.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!tx) return res.status(404).json({ error: 'Transakce nenalezena.' });
-
   const { amount, currency, date, description, note, category_id } = req.body;
+  if (amount !== undefined && !Number.isFinite(Number(amount))) return res.status(400).json({ error: 'Částka musí být číslo.' });
+  if (date !== undefined && (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date))) return res.status(400).json({ error: 'Datum musí být ve formátu YYYY-MM-DD.' });
+  if (category_id !== undefined && category_id !== null) {
+    const owned = db.prepare('SELECT 1 FROM categories WHERE id = ? AND user_id = ?').get(category_id, req.user.id);
+    if (!owned) return res.status(400).json({ error: 'Neplatná kategorie.' });
+  }
   db.prepare(
     'UPDATE transactions SET amount = ?, currency = ?, date = ?, description = ?, note = ?, category_id = ? WHERE id = ?'
   ).run(
-    amount ?? tx.amount,
-    currency ?? tx.currency,
+    amount !== undefined ? Number(amount) : tx.amount,
+    currency !== undefined ? String(currency).slice(0, 8) : tx.currency,
     date ?? tx.date,
-    description ?? tx.description,
-    note ?? tx.note,
+    description !== undefined ? String(description).slice(0, 500) : tx.description,
+    note !== undefined ? String(note).slice(0, 500) : tx.note,
     category_id !== undefined ? category_id : tx.category_id,
     tx.id
   );
-
   res.json(db.prepare('SELECT * FROM transactions WHERE id = ?').get(tx.id));
 });
 
