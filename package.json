@@ -1,6 +1,6 @@
 {
   "name": "spendex",
-  "version": "2.0.38",
+  "version": "2.0.39",
   "description": "Spendex – personal finance management app",
   "main": "src/index.js",
   "scripts": {
@@ -20,6 +20,7 @@
     "express": "^4.19.2",
     "express-rate-limit": "^7.3.1",
     "express-session": "^1.18.0",
+    "helmet": "^8.2.0",
     "mailparser": "^3.9.9",
     "node-cron": "^3.0.3",
     "passport": "^0.7.0",
