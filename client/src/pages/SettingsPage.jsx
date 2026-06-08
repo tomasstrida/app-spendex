@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Trash2 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatPeriod } from '../i18n';
+import { pushSupported, isStandalone, enablePush, disablePush, currentSubscription, sendTestPush } from '../push';
 
 function MappingsSection({ categories }) {
   const [mappings, setMappings] = useState([]);
@@ -83,6 +84,9 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   const [categories, setCategories] = useState([]);
+  const [notifyScope, setNotifyScope] = useState('pending_only');
+  const [pushState, setPushState] = useState('unknown'); // 'on' | 'off' | 'denied' | 'unsupported'
+  const [testMsg, setTestMsg] = useState('');
 
   useEffect(() => {
     Promise.all([
@@ -92,8 +96,52 @@ export default function SettingsPage() {
       setBillingDay(String(s.billing_day));
       setPreview({ start: s.period_start, end: s.period_end });
       setCategories(cats);
+      if (s.notify_scope) setNotifyScope(s.notify_scope);
     });
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      if (!pushSupported()) { setPushState('unsupported'); return; }
+      if (Notification.permission === 'denied') { setPushState('denied'); return; }
+      const sub = await currentSubscription();
+      setPushState(sub ? 'on' : 'off');
+    })();
+  }, []);
+
+  async function handleEnablePush() {
+    try {
+      const r = await enablePush();
+      if (r === 'granted') setPushState('on');
+      else if (r === 'denied') setPushState('denied');
+      else if (r === 'unsupported') setPushState('unsupported');
+    } catch (e) { setTestMsg(e.message); }
+  }
+
+  async function handleDisablePush() {
+    await disablePush();
+    setPushState('off');
+  }
+
+  async function handleTestPush() {
+    try {
+      const r = await sendTestPush();
+      setTestMsg(r.sent > 0
+        ? t.settings.notifications_test_sent.replace('{n}', r.sent)
+        : t.settings.notifications_test_none);
+    } catch (e) { setTestMsg(e.message); }
+  }
+
+  async function handleScopeChange(scope) {
+    setNotifyScope(scope);
+    const day = parseInt(billingDay, 10) || 1;
+    await fetch('/api/settings', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ billing_day: day, notify_scope: scope }),
+    });
+  }
 
   async function handleSave(e) {
     e.preventDefault();
@@ -162,6 +210,53 @@ export default function SettingsPage() {
         <div className="card">
           <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Mapování kategorií Air Bank</h2>
           <MappingsSection categories={categories} />
+        </div>
+
+        <div className="card">
+          <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>{t.settings.notifications_title}</h2>
+
+          {pushState === 'unsupported' && !isStandalone() && (
+            <p className="form-hint" style={{ marginBottom: 12 }}>{t.settings.notifications_ios_hint}</p>
+          )}
+          {pushState === 'denied' && (
+            <p className="form-hint" style={{ marginBottom: 12 }}>{t.settings.notifications_denied}</p>
+          )}
+
+          {pushState === 'off' && (
+            <button className="btn btn-primary" style={{ marginBottom: 16 }} onClick={handleEnablePush}>
+              {t.settings.notifications_enable}
+            </button>
+          )}
+          {pushState === 'on' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+              <p style={{ fontSize: 13, margin: 0 }}>{t.settings.notifications_enabled}</p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-secondary" onClick={handleDisablePush}>
+                  {t.settings.notifications_disable}
+                </button>
+                <button className="btn btn-secondary" onClick={handleTestPush}>
+                  {t.settings.notifications_test}
+                </button>
+              </div>
+            </div>
+          )}
+          {testMsg && <p className="form-hint" style={{ marginBottom: 12 }}>{testMsg}</p>}
+
+          <div className="form-group" style={{ marginTop: 4 }}>
+            <label style={{ fontSize: 13, fontWeight: 500 }}>
+              {t.settings.notifications_scope_label}
+              <select
+                className="input"
+                style={{ marginLeft: 8, fontSize: 13 }}
+                value={notifyScope}
+                onChange={(e) => handleScopeChange(e.target.value)}
+              >
+                <option value="off">{t.settings.notifications_scope_off}</option>
+                <option value="pending_only">{t.settings.notifications_scope_pending}</option>
+                <option value="all">{t.settings.notifications_scope_all}</option>
+              </select>
+            </label>
+          </div>
         </div>
       </div>
     </Layout>

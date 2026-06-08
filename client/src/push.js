@@ -71,5 +71,6 @@ export async function disablePush() {
 }
 
 export async function sendTestPush() {
-  await fetch('/api/push/test', { method: 'POST', credentials: 'include' });
+  const res = await fetch('/api/push/test', { method: 'POST', credentials: 'include' });
+  return res.json(); // { ok: true, sent: <number> }
 }
