@@ -5,6 +5,7 @@ const rateLimit = require('express-rate-limit');
 const { simpleParser } = require('mailparser');
 const db = require('../db/connection');
 const { ingestEmail } = require('../services/emailIngest');
+const { notifyForResult } = require('../services/pushNotify');
 
 const inboundLimiter = rateLimit({ windowMs: 60 * 1000, max: 30 });
 
@@ -42,6 +43,8 @@ router.post('/inbound', inboundLimiter, checkSecret, async (req, res) => {
     }
 
     const result = ingestEmail(db, { userEmail: allowed, fromHeader: fromHdr, text });
+    // Push je best-effort: případné selhání nesmí ovlivnit odpověď webhooku ani import.
+    notifyForResult(db, result).catch((e) => console.error('[push] notifyForResult:', e && e.message));
     return res.json(result);
   } catch (err) {
     return res.status(400).json({ error: err.message });
