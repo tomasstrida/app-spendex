@@ -12,10 +12,11 @@ const seedRules = require('../../scripts/seed/rules');
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
 // POST /api/import/preview
-router.post('/preview', requireAuth, express.text({ limit: '10mb', type: '*/*' }), (req, res) => {
+router.post('/preview', requireAuth, writeLimiter, express.text({ limit: '2mb', type: '*/*' }), (req, res) => {
   try {
     const transactions = parseAirBankCSV(req.body);
     if (!transactions.length) return res.status(400).json({ error: 'CSV neobsahuje žádné transakce.' });
+    if (transactions.length > 5000) return res.status(400).json({ error: 'Příliš velký výpis (> 5000 transakcí).' });
 
     const existingRefs = new Set();
     for (const r of db.prepare('SELECT external_id FROM transactions WHERE user_id = ? AND external_id IS NOT NULL').all(req.user.id)) {
@@ -62,9 +63,10 @@ router.post('/preview', requireAuth, express.text({ limit: '10mb', type: '*/*' }
 });
 
 // POST /api/import/confirm
-router.post('/confirm', requireAuth, (req, res) => {
+router.post('/confirm', requireAuth, writeLimiter, (req, res) => {
   const { transactions, category_map = {}, skip_incoming = false, account_id = null, raw_csv = null, filename = null } = req.body;
   if (!Array.isArray(transactions)) return res.status(400).json({ error: 'Neplatná data.' });
+  if (transactions.length > 5000) return res.status(400).json({ error: 'Příliš mnoho transakcí (> 5000).' });
 
   if (!account_id) {
     return res.status(400).json({ error: 'Vyberte účet, na který se transakce importují.' });
@@ -234,7 +236,8 @@ router.get('/archive/:id/download', requireAuth, (req, res) => {
     .get(req.params.id, req.user.id);
   if (!row) return res.status(404).json({ error: 'Záznam nenalezen.' });
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="${row.filename.replace(/"/g, '')}"`);
+  const safeName = String(row.filename || 'export.csv').replace(/[^\w.\- ]+/g, '_').slice(0, 100);
+  res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
   res.send(row.content);
 });
 
