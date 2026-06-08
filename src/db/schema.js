@@ -195,6 +195,17 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_dup_dismiss_user ON duplicate_dismissals(user_id);
     CREATE INDEX IF NOT EXISTS idx_csv_archive_user ON csv_archive(user_id);
 
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      endpoint TEXT NOT NULL UNIQUE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      user_agent TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS email_inbox (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -251,6 +262,7 @@ function initSchema() {
     'ALTER TABLE fixed_expenses ADD COLUMN match_pattern TEXT',
     'ALTER TABLE income_sources ADD COLUMN match_counterparty_account TEXT',
     'ALTER TABLE income_sources ADD COLUMN account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL',
+    "ALTER TABLE settings ADD COLUMN notify_scope TEXT DEFAULT 'pending_only'",
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* sloupec/index již existuje nebo nelze aplikovat */ }
