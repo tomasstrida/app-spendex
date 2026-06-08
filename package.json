@@ -1,6 +1,6 @@
 {
   "name": "spendex",
-  "version": "2.0.12",
+  "version": "2.0.13",
   "description": "Spendex – personal finance management app",
   "main": "src/index.js",
   "scripts": {
@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "husky": "^9.0.11",
-    "nodemon": "^3.1.0"
+    "nodemon": "^3.1.0",
+    "sharp": "^0.34.5"
   }
 }
