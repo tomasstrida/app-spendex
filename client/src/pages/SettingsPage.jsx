@@ -87,6 +87,9 @@ export default function SettingsPage() {
   const [notifyScope, setNotifyScope] = useState('pending_only');
   const [pushState, setPushState] = useState('unknown'); // 'on' | 'off' | 'denied' | 'unsupported'
   const [testMsg, setTestMsg] = useState('');
+  const [household, setHousehold] = useState(null);
+  const [joinCode, setJoinCode] = useState('');
+  const [hhMsg, setHhMsg] = useState('');
 
   useEffect(() => {
     Promise.all([
@@ -108,6 +111,42 @@ export default function SettingsPage() {
       setPushState(sub ? 'on' : 'off');
     })();
   }, []);
+
+  async function loadHousehold() {
+    const r = await fetch('/api/household', { credentials: 'include' });
+    if (r.ok) setHousehold(await r.json());
+  }
+  useEffect(() => { loadHousehold(); }, []);
+
+  async function createInvite() {
+    await fetch('/api/household/invite', { method: 'POST', credentials: 'include' });
+    loadHousehold();
+  }
+  async function joinHousehold() {
+    const r = await fetch('/api/household/join', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: joinCode.trim() }),
+    });
+    if (r.ok) {
+      setHhMsg(t.settings.household_joined);
+      setJoinCode('');
+      loadHousehold();
+    } else {
+      const j = await r.json().catch(() => ({}));
+      setHhMsg(j.error || t.settings.household_join_bad);
+    }
+  }
+  async function leaveHousehold() {
+    await fetch('/api/household/leave', { method: 'POST', credentials: 'include' });
+    setHhMsg('');
+    loadHousehold();
+  }
+  async function removeMember(uid) {
+    await fetch(`/api/household/members/${uid}`, { method: 'DELETE', credentials: 'include' });
+    loadHousehold();
+  }
 
   async function handleEnablePush() {
     try {
@@ -265,6 +304,74 @@ export default function SettingsPage() {
               </select>
             </label>
           </div>
+        </div>
+
+        <div className="card">
+          <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>{t.settings.household_title}</h2>
+
+          {household && household.role === 'member' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <p style={{ fontSize: 13, margin: 0 }}>{t.settings.household_member_of} <strong>{household.owner?.name || household.owner?.email}</strong></p>
+              <div>
+                <button className="btn btn-secondary" onClick={leaveHousehold}>{t.settings.household_leave}</button>
+              </div>
+            </div>
+          )}
+
+          {household && household.role !== 'member' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {household.role === 'solo' && (
+                <p className="form-hint" style={{ marginBottom: 4 }}>{t.settings.household_solo}</p>
+              )}
+              {household.invite_code ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <label style={{ fontSize: 13, fontWeight: 500 }}>{t.settings.household_code_label}</label>
+                  <input
+                    className="input"
+                    readOnly
+                    value={household.invite_code}
+                    onFocus={(e) => e.target.select()}
+                    style={{ fontSize: 13, maxWidth: 260 }}
+                  />
+                  <div>
+                    <button className="btn btn-secondary" onClick={createInvite}>{t.settings.household_regenerate}</button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <button className="btn btn-primary" onClick={createInvite}>{t.settings.household_create_invite}</button>
+                </div>
+              )}
+              {household.members && household.members.length > 0 && (
+                <div style={{ marginTop: 4 }}>
+                  <p style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>{t.settings.household_owner_members}</p>
+                  <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {household.members.map(m => (
+                      <li key={m.user_id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                        <span>{m.name || m.email}</span>
+                        <button className="btn btn-secondary" onClick={() => removeMember(m.user_id)}>{t.settings.household_remove}</button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                <label style={{ fontSize: 13, fontWeight: 500 }}>{t.settings.household_join_label}</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    className="input"
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value)}
+                    placeholder="kód"
+                    style={{ fontSize: 13, maxWidth: 200 }}
+                  />
+                  <button className="btn btn-primary" onClick={joinHousehold}>{t.settings.household_join}</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {hhMsg && <p className="form-hint" style={{ marginTop: 8 }}>{hhMsg}</p>}
         </div>
       </div>
     </Layout>
