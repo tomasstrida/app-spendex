@@ -13,9 +13,15 @@ export default function RulesPage() {
   const [err, setErr] = useState('');
 
   const load = useCallback(async () => {
-    const [r, c] = await Promise.all([fetch('/api/rules'), fetch('/api/categories')]);
-    setRules(await r.json());
-    setCats(await c.json());
+    try {
+      const [r, c] = await Promise.all([fetch('/api/rules'), fetch('/api/categories')]);
+      if (!r.ok || !c.ok) throw new Error('load');
+      const [rj, cj] = [await r.json(), await c.json()];
+      setRules(Array.isArray(rj) ? rj : []);
+      setCats(Array.isArray(cj) ? cj : []);
+    } catch {
+      setErr('Nepodařilo se načíst pravidla.');
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -24,6 +30,8 @@ export default function RulesPage() {
 
   async function save() {
     setErr('');
+    if (!form.pattern.trim()) { setErr('Zadej text v platbě.'); return; }
+    if (!form.category_id) { setErr('Vyber kategorii.'); return; }
     const body = {
       pattern: form.pattern.trim(),
       category_id: form.category_id ? Number(form.category_id) : null,
@@ -55,7 +63,8 @@ export default function RulesPage() {
 
   async function remove(id) {
     if (!confirm('Smazat pravidlo?')) return;
-    await fetch(`/api/rules/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/rules/${id}`, { method: 'DELETE' });
+    if (!res.ok) { setErr((await res.json().catch(() => ({}))).error || 'Chyba mazání.'); return; }
     if (editId === id) reset();
     load();
   }
