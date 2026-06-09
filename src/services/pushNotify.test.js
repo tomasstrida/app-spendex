@@ -98,6 +98,30 @@ test('notifyForResult posílá na notifyUserId, ne na userId (data owner)', asyn
   assert.deepEqual(sent, ['https://x/martin']);
 });
 
+test('awaiting_card → broadcast všem v domácnosti i se scope off', async () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1,'tom@x'),(2,'martin@x')").run();
+  db.prepare("INSERT INTO household_members (data_owner_id, user_id) VALUES (1, 2)").run();
+  db.prepare("INSERT INTO settings (user_id, billing_day, notify_scope) VALUES (1,1,'off'),(2,1,'off')").run();
+  db.prepare("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (1,'e1','p','a'),(2,'e2','p','a')").run();
+  const sent = [];
+  const client = { sendNotification: async (sub) => { sent.push(sub.endpoint); return { statusCode: 201 }; } };
+  const { notifyForResult } = require('./pushNotify');
+  await notifyForResult(db, {
+    status: 'awaiting_card', userId: 1, broadcast: true,
+    notify: { amount: -482, currency: 'CZK', merchant: 'HAMR', unknownCard: true, last4: '6062' },
+  }, client);
+  cleanup(db, tmp);
+  assert.deepEqual(sent.sort(), ['e1', 'e2']);
+});
+
+test('formatBody: neznámá karta → 💳 text', () => {
+  const { formatBody } = require('./pushNotify');
+  const body = formatBody({ amount: -482, currency: 'CZK', merchant: 'HAMR', unknownCard: true });
+  assert.match(body, /💳/);
+  assert.match(body, /HAMR/);
+});
+
 test('formatBody: bez kategorie → "potřebuje kategorii", s kategorií → "→ kat"', () => {
   const { formatBody } = require('./pushNotify');
   const pending = formatBody({ amount: -349, currency: 'CZK', merchant: 'Albert' });

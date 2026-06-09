@@ -32,13 +32,25 @@ function formatBody(notify) {
   const sum = `${amount.toLocaleString('cs-CZ')} ${notify.currency || 'CZK'}`;
   const merchant = notify.merchant || 'Platba';
   // Ikona na začátku = stav kategorizace na první pohled:
-  //   ✅ automaticky zařazeno, ⚠️ potřebuje ruční kategorii
+  //   💳 neznámá karta (čí?), ✅ automaticky zařazeno, ⚠️ potřebuje ruční kategorii
+  if (notify.unknownCard) return `💳 ${sum} • ${merchant} — čí karta? Přiřaď v aplikaci`;
   if (notify.categoryName) return `✅ ${sum} • ${merchant} → ${notify.categoryName}`;
   return `⚠️ ${sum} • ${merchant} — potřebuje kategorii`;
 }
 
 async function notifyForResult(db, result, client) {
   if (!result || !result.notify) return;
+  if (result.status === 'awaiting_card' && result.broadcast) {
+    const owner = result.userId;
+    if (!owner) return;
+    const members = db.prepare('SELECT user_id FROM household_members WHERE data_owner_id = ?')
+      .all(owner).map(r => r.user_id);
+    const targets = [...new Set([owner, ...members])];
+    for (const t of targets) {
+      await sendToUser(db, t, { title: 'SPENDEX', body: formatBody(result.notify), url: '/import' }, client);
+    }
+    return;
+  }
   if (result.status !== 'pending' && result.status !== 'imported') return;
   const target = result.notifyUserId || result.userId;
   if (!target) return;

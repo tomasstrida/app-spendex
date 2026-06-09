@@ -85,7 +85,12 @@ function ingestEmail(db, { userEmail, text }) {
       db.prepare(`INSERT INTO email_inbox (user_id, received_at, raw_text, parsed_json, external_id, suggested_category_id, status)
                   VALUES (?, datetime('now'), ?, ?, ?, NULL, 'awaiting_card')`)
         .run(userId, text || '', JSON.stringify({ ...tx, account_id: account ? account.id : null }), extId || null);
-      return { status: 'awaiting_card', external_id: extId, userId };
+      return {
+        status: 'awaiting_card', external_id: extId, userId,
+        notify: { amount: tx.amount, currency: tx.currency,
+                  merchant: tx.place || tx.description || null, unknownCard: true, last4: tx.card_last4 },
+        broadcast: true,
+      };
     }
     notifyUserId = card.assigned_user_id;
   }

@@ -157,7 +157,9 @@ test('neznámá karta v domácnosti se členem → awaiting_card, žádná trans
   assert.equal(inbox.status, 'awaiting_card');
   assert.ok(inbox.parsed_json.includes('6062'));
   assert.equal(card.assigned_user_id, null);
-  assert.equal(r.notify, undefined);
+  assert.equal(r.broadcast, true);
+  assert.equal(r.notify.unknownCard, true);
+  assert.equal(r.notify.last4, '6062');
 });
 
 test('přiřazená karta člena → import + notifyUserId = člen', () => {
