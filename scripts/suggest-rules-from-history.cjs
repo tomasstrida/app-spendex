@@ -120,8 +120,9 @@ for (const s of final) {
   s.risks = [];
   if (s.purity < 1) s.risks.push(`purity ${(s.purity * 100).toFixed(0)}% (${s.coverage - s.topN} jinam)`);
   if (s.topCat === incomeCatId) s.risks.push('příjem – řeší income model');
-  const oneWord = !s.pattern.includes(' ');
-  if (oneWord && s.pattern.length <= 4) s.risks.push('krátký 1-slovní pattern');
+  // Krátký/generický: pattern má po odstranění mezer ≤ 4 znaky (značky i iniciály
+  // typu „M F" → substring riskantní). Necháváme na ruční kontrolu.
+  if (s.pattern.replace(/\s+/g, '').length <= 4) s.risks.push('krátký/generický pattern');
   for (const o of final) {
     if (o === s || o.topCat === s.topCat) continue;
     const shared = [...wordsOf(s.pattern)].some((w) => wordsOf(o.pattern).has(w));
