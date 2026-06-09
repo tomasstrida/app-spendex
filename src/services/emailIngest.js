@@ -24,7 +24,7 @@ function categorize(db, userId, tx, account) {
   const catName = applyRules(tx, account ? { account_number: account.account_number } : null, rules);
   const row = db.prepare('SELECT id FROM categories WHERE user_id = ? AND name = ?').get(userId, catName);
   const categoryId = row ? row.id : null;
-  const confident = catName !== seedRules.fallbackCategory && categoryId != null;
+  const confident = catName !== rules.fallbackCategory && categoryId != null;
   return { catName, categoryId, confident };
 }
 
