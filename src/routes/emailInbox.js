@@ -12,9 +12,13 @@ router.get('/', requireAuth, (req, res) => {
   const rows = db.prepare(`
     SELECT i.id, i.received_at, i.raw_text, i.parsed_json, i.external_id,
            i.suggested_category_id, i.status, i.created_at,
-           c.name AS suggested_category_name, c.color AS suggested_category_color
+           c.name AS suggested_category_name, c.color AS suggested_category_color,
+           cu.id AS card_owner_id, cu.name AS card_owner_name
     FROM email_inbox i
     LEFT JOIN categories c ON c.id = i.suggested_category_id
+    LEFT JOIN cards cd ON cd.data_owner_id = i.user_id
+                      AND cd.last4 = json_extract(i.parsed_json, '$.card_last4')
+    LEFT JOIN users cu ON cu.id = cd.assigned_user_id
     WHERE i.user_id = ? AND i.status IN ('pending', 'unparsed')
     ORDER BY i.created_at DESC, i.id DESC
   `).all(req.dataUserId);
