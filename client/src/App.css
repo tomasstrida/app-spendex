@@ -280,6 +280,13 @@
     background: rgba(0, 0, 0, 0.5);
     z-index: 50;
   }
+
+  /* Header se na mobilu zalomí, aby měsíční navigace nepřetékala doprava.
+     Šipky + label drží jeden řádek, tlačítko "Aktuální měsíc" jde pod ně. */
+  .page-header { flex-wrap: wrap; gap: 10px; }
+  .month-nav { width: 100%; flex-wrap: wrap; justify-content: space-between; row-gap: 8px; }
+  .month-nav .month-label { flex: 1; min-width: 0; text-align: center; }
+  .month-nav > .btn-ghost:last-child { flex-basis: 100%; }
 }
 
 /* ── Page ── */
