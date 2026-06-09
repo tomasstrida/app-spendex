@@ -281,7 +281,9 @@ export default function TransactionsPage() {
     setCatEditId(null);
     setEditId(tx.id);
     setEditData({
-      description: tx.description || '',
+      // u e-mailových kartových plateb je obchodník jen v `place` → předvyplň ho do Popisu,
+      // ať ho uživatel při ručním zařazování vidí (a uložením se propíše do description)
+      description: tx.description || tx.place || '',
       category_id: tx.category_id ? String(tx.category_id) : '',
       amount: String(Math.abs(tx.amount)),
       date: tx.date,

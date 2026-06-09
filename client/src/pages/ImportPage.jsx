@@ -268,7 +268,7 @@ function EmailInbox() {
         return (
           <div key={item.id} className="card review-item">
             <div className="review-head">
-              <div className="review-merch">{tx.description || '—'}</div>
+              <div className="review-merch">{tx.description || tx.place || '—'}</div>
               <div className="review-amt">{formatCurrency(tx.amount)}</div>
             </div>
             <div className="review-sub">
@@ -305,7 +305,7 @@ function EmailInbox() {
         return (
           <div key={item.id} className="card review-item">
             <div className="review-head">
-              <div className="review-merch">{tx.description || '—'}</div>
+              <div className="review-merch">{tx.description || tx.place || '—'}</div>
               <div className="review-amt">{formatCurrency(tx.amount)}</div>
             </div>
             <div className="review-sub">
@@ -411,7 +411,7 @@ function EmailHistory() {
               return (
                 <tr key={item.id} style={{ borderTop: '1px solid var(--border)' }}>
                   <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }} className="text-muted">{item.received_at || item.created_at}</td>
-                  <td style={{ padding: '8px 12px' }}>{tx.description || '—'}</td>
+                  <td style={{ padding: '8px 12px' }}>{tx.description || tx.place || '—'}</td>
                   <td style={{ padding: '8px 12px' }} className="text-muted">{item.category_name || '—'}</td>
                   <td style={{ padding: '8px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     {tx.amount != null ? formatCurrency(tx.amount) : '—'}
