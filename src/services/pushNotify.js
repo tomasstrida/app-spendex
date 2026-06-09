@@ -38,13 +38,15 @@ function formatBody(notify) {
 }
 
 async function notifyForResult(db, result, client) {
-  if (!result || !result.userId || !result.notify) return;
+  if (!result || !result.notify) return;
   if (result.status !== 'pending' && result.status !== 'imported') return;
-  const row = db.prepare('SELECT notify_scope FROM settings WHERE user_id = ?').get(result.userId);
+  const target = result.notifyUserId || result.userId;
+  if (!target) return;
+  const row = db.prepare('SELECT notify_scope FROM settings WHERE user_id = ?').get(target);
   const scope = row?.notify_scope || 'pending_only';
   if (scope === 'off') return;
   if (result.status === 'imported' && scope !== 'all') return;
-  await sendToUser(db, result.userId, {
+  await sendToUser(db, target, {
     title: 'SPENDEX',
     body: formatBody(result.notify),
     url: '/import',

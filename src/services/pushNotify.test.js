@@ -85,6 +85,19 @@ test('notifyForResult: imported + scope pending_only → nic; scope all → ode�
   assert.equal(calls, 1);
 });
 
+test('notifyForResult posílá na notifyUserId, ne na userId (data owner)', async () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1,'tom@x'),(2,'martin@x')").run();
+  db.prepare("INSERT INTO settings (user_id, billing_day, notify_scope) VALUES (2, 1, 'all')").run();
+  db.prepare("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (2, 'https://x/martin', 'k', 'a')").run();
+  const sent = [];
+  const fakeClient = { sendNotification: async (sub) => { sent.push(sub.endpoint); return { statusCode: 201 }; } };
+  const { notifyForResult } = require('./pushNotify');
+  await notifyForResult(db, { status: 'imported', userId: 1, notifyUserId: 2, notify: { amount: -482, currency: 'CZK', merchant: 'HAMR', categoryName: 'Restaurace' } }, fakeClient);
+  cleanup(db, tmp);
+  assert.deepEqual(sent, ['https://x/martin']);
+});
+
 test('formatBody: bez kategorie → "potřebuje kategorii", s kategorií → "→ kat"', () => {
   const { formatBody } = require('./pushNotify');
   const pending = formatBody({ amount: -349, currency: 'CZK', merchant: 'Albert' });
