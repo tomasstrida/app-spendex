@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useState, useEffect, createContext, useContext } from 'react';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -53,11 +53,31 @@ function GuestOnly({ children }) {
 
 const R = ({ el }) => <RequireAuth>{el}</RequireAuth>;
 
+// Klik na push notifikaci → service worker pošle {type:'navigate'} → přesměrujeme
+// přes router (spolehlivé i když je appka už otevřená na jiné stránce).
+function SwNavigationBridge() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const onMessage = (event) => {
+      const d = event.data;
+      if (!d || d.type !== 'navigate' || !d.url) return;
+      let target = d.url;
+      try { target = new URL(d.url, window.location.origin).pathname + new URL(d.url, window.location.origin).search; } catch (_e) { /* použij raw */ }
+      navigate(target);
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, [navigate]);
+  return null;
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <PeriodProvider>
+          <SwNavigationBridge />
           <Routes>
             <Route path="/login"    element={<GuestOnly><LoginPage /></GuestOnly>} />
             <Route path="/register" element={<GuestOnly><RegisterPage /></GuestOnly>} />

@@ -19,16 +19,22 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = (event.notification.data && event.notification.data.url) || '/import';
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-      for (const c of list) {
-        if ('focus' in c) {
-          c.focus();
-          if ('navigate' in c) { return c.navigate(url).catch(() => self.clients.openWindow(url)); }
-          return;
-        }
-      }
-      return self.clients.openWindow(url);
-    })
-  );
+  event.waitUntil((async () => {
+    const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    // Jen okna stejného originu (vyhneme se zaostření cizí karty).
+    const windows = list.filter((c) => {
+      try { return new URL(c.url).origin === self.location.origin; } catch (_e) { return false; }
+    });
+    if (windows.length > 0) {
+      const c = windows[0];
+      try { await c.focus(); } catch (_e) { /* fokus nemusí projít */ }
+      // Hlavní cesta: appka přesměruje sama přes React Router (spolehlivé i když
+      // je už otevřená na jiné stránce, kde c.navigate() na iOS PWA selhává).
+      c.postMessage({ type: 'navigate', url });
+      // Pojistka pro starší klienty bez message listeneru.
+      if ('navigate' in c) { c.navigate(url).catch(() => {}); }
+      return;
+    }
+    await self.clients.openWindow(url);
+  })());
 });
