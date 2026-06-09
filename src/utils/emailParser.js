@@ -64,7 +64,7 @@ function parseEmailNotification(text) {
   let tx_type = null;
   const cardLineM = body.match(/Platba kartou(?:\s*\([^)]*\))?\s+v\s+(.+)/i);
   if (cardLineM) {
-    place = cardLineM[1].trim().replace(/,\s*\d{1,3}\s*$/, '').trim();
+    place = cardLineM[1].trim().replace(/,\s*0+\s*$/, '').trim();
     tx_type = 'Platba kartou';
   }
   const cardNumM = body.match(/Karta:\s*([\d*]+)/i);
@@ -80,7 +80,7 @@ function parseEmailNotification(text) {
   // Datum: primárně "Datum zaúčtování", fallback "Datum provedení" (kartové platby), fallback z hlavičky "k 07.06.2026 v ..."
   const date =
     parseCzDate((body.match(/Datum zaú[cč]tování:\s*([\d.]+)/i) || [])[1]) ||
-    parseCzDate((body.match(/Datum provedení:\s*([\d.]+)/i) || [])[1]) ||
+    parseCzDate((body.match(/Datum proveden[ií]:\s*([\d.]+)/i) || [])[1]) ||
     parseCzDate((body.match(/k\s+([\d.]+)\s+v\s+\d{2}:\d{2}/i) || [])[1]);
 
   // Čas: "v 17:47"

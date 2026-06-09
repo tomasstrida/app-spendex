@@ -90,4 +90,5 @@ test('převod nemá kartu ani místo', () => {
   const tx = parseEmailNotification(OUTGOING);
   assert.equal(tx.place, null);
   assert.equal(tx.card_last4, null);
+  assert.equal(tx.tx_type, null);
 });
