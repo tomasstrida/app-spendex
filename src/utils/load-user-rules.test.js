@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs'); const os = require('os'); const path = require('path');
+const os = require('os'); const path = require('path');
 
 function freshDb() {
   const tmp = path.join(os.tmpdir(), `spendex-lur-${Date.now()}-${Math.random()}.db`);
@@ -41,4 +41,7 @@ test('loadUserRules: pravidlo na neexistující kategorii se nezobrazí (JOIN), 
 
   const out = loadUserRules(db, 2);
   assert.equal(out.length, 0); // user 2 má pravidlo na neexistující kategorii 999 → JOIN ho vyřadí
+
+  const outUser1 = loadUserRules(db, 1);
+  assert.equal(outUser1.length, 1); // izolace: uživatel 1 vidí jen své pravidlo
 });
