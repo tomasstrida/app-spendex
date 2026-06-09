@@ -243,6 +243,20 @@ function initSchema() {
       created_at    TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (data_owner_id) REFERENCES users(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS cards (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      data_owner_id    INTEGER NOT NULL,
+      last4            TEXT NOT NULL,
+      assigned_user_id INTEGER,
+      label            TEXT,
+      created_at       TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (data_owner_id)    REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (assigned_user_id) REFERENCES users(id) ON DELETE SET NULL,
+      UNIQUE(data_owner_id, last4)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_cards_owner ON cards(data_owner_id);
   `);
 
   // Migrace: budgety bez 'default' záznamu — vezmi nejnovější per user+category a nastav jako default
