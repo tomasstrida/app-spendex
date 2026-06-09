@@ -169,15 +169,18 @@ test('přiřazená karta člena → import + notifyUserId = člen', () => {
   db.prepare("INSERT INTO cards (data_owner_id, last4, assigned_user_id) VALUES (1, '6062', 2)").run();
   const seedRules = require('../../scripts/seed/rules');
   seedRules.textOverrides.push({ pattern: 'HAMR', category: 'Restaurace' });
-  const { ingestEmail } = require('./emailIngest');
-  const r = ingestEmail(db, { userEmail: 'tom@example.com', text: CARD_TX });
-  seedRules.textOverrides.pop();
-  const tx = db.prepare("SELECT * FROM transactions WHERE user_id = 1").get();
-  cleanup(db, tmp);
-  assert.equal(r.status, 'imported');
-  assert.equal(r.notifyUserId, 2);
-  assert.equal(tx.category_id, 7);
-  assert.equal(tx.place, 'HAMR - BRANIK,RESTAURA, PRAHA 4');
+  try {
+    const { ingestEmail } = require('./emailIngest');
+    const r = ingestEmail(db, { userEmail: 'tom@example.com', text: CARD_TX });
+    const tx = db.prepare("SELECT * FROM transactions WHERE user_id = 1").get();
+    cleanup(db, tmp);
+    assert.equal(r.status, 'imported');
+    assert.equal(r.notifyUserId, 2);
+    assert.equal(tx.category_id, 7);
+    assert.equal(tx.place, 'HAMR - BRANIK,RESTAURA, PRAHA 4');
+  } finally {
+    seedRules.textOverrides.pop();
+  }
 });
 
 test('solo uživatel (bez členů) → karta auto-přiřazená vlastníkovi, import, notify vlastník', () => {
@@ -186,12 +189,58 @@ test('solo uživatel (bez členů) → karta auto-přiřazená vlastníkovi, imp
   db.prepare("INSERT INTO categories (id, user_id, name) VALUES (7, 1, 'Restaurace')").run();
   const seedRules = require('../../scripts/seed/rules');
   seedRules.textOverrides.push({ pattern: 'HAMR', category: 'Restaurace' });
-  const { ingestEmail } = require('./emailIngest');
-  const r = ingestEmail(db, { userEmail: 'tom@example.com', text: CARD_TX });
-  seedRules.textOverrides.pop();
-  const card = db.prepare("SELECT * FROM cards WHERE data_owner_id = 1 AND last4 = '6062'").get();
+  try {
+    const { ingestEmail } = require('./emailIngest');
+    const r = ingestEmail(db, { userEmail: 'tom@example.com', text: CARD_TX });
+    const card = db.prepare("SELECT * FROM cards WHERE data_owner_id = 1 AND last4 = '6062'").get();
+    cleanup(db, tmp);
+    assert.equal(r.status, 'imported');
+    assert.equal(r.notifyUserId, 1);
+    assert.equal(card.assigned_user_id, 1);
+  } finally {
+    seedRules.textOverrides.pop();
+  }
+});
+
+test('releaseHeldCard: jistá kategorie → import transakce + řádek imported, idempotentní', () => {
+  const { db, tmp } = freshDb();
+  seed(db);
+  db.prepare("INSERT INTO categories (id, user_id, name) VALUES (7, 1, 'Restaurace')").run();
+  const parsed = JSON.stringify({ amount: -482, currency: 'CZK', date: '2026-06-08', description: '', note: '', place: 'HAMR - BRANIK', card_last4: '6062', account_id: 10, tx_type: 'Platba kartou' });
+  db.prepare("INSERT INTO email_inbox (user_id, raw_text, parsed_json, external_id, status) VALUES (1, '', ?, '26918903543-1679014023', 'awaiting_card')").run(parsed);
+  const seedRules = require('../../scripts/seed/rules');
+  seedRules.textOverrides.push({ pattern: 'HAMR', category: 'Restaurace' });
+  try {
+    const { releaseHeldCard } = require('./emailIngest');
+    const n1 = releaseHeldCard(db, 1, '6062');
+    const n2 = releaseHeldCard(db, 1, '6062'); // druhý běh už nic
+    const tx = db.prepare("SELECT * FROM transactions WHERE user_id = 1").get();
+    const txCount = db.prepare("SELECT COUNT(*) c FROM transactions").get();
+    const inbox = db.prepare("SELECT status FROM email_inbox WHERE external_id = '26918903543-1679014023'").get();
+    assert.equal(n1, 1);
+    assert.equal(n2, 0);
+    assert.equal(txCount.c, 1);
+    assert.equal(tx.category_id, 7);
+    assert.equal(tx.place, 'HAMR - BRANIK');
+    assert.equal(inbox.status, 'imported');
+  } finally {
+    seedRules.textOverrides.pop();
+    cleanup(db, tmp);
+  }
+});
+
+test('releaseHeldCard: nejistá kategorie → řádek pending se suggested_category_id (fallback)', () => {
+  const { db, tmp } = freshDb();
+  seed(db);
+  const parsed = JSON.stringify({ amount: -120, currency: 'CZK', date: '2026-06-08', description: '', note: '', place: 'NEZNÁMÝ OBCHOD XY', card_last4: '7777', account_id: 10, tx_type: 'Platba kartou' });
+  db.prepare("INSERT INTO email_inbox (user_id, raw_text, parsed_json, external_id, status) VALUES (1, '', ?, '99999-1679014023', 'awaiting_card')").run(parsed);
+  const { releaseHeldCard } = require('./emailIngest');
+  const n = releaseHeldCard(db, 1, '7777');
+  const txCount = db.prepare("SELECT COUNT(*) c FROM transactions").get();
+  const inbox = db.prepare("SELECT status, suggested_category_id FROM email_inbox WHERE external_id = '99999-1679014023'").get();
   cleanup(db, tmp);
-  assert.equal(r.status, 'imported');
-  assert.equal(r.notifyUserId, 1);
-  assert.equal(card.assigned_user_id, 1);
+  assert.equal(n, 1);
+  assert.equal(txCount.c, 0);
+  assert.equal(inbox.status, 'pending');
+  assert.equal(inbox.suggested_category_id, 6); // Ostatní (fallback)
 });
