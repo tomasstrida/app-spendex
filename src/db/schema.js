@@ -1,4 +1,5 @@
 const db = require('./connection');
+const seedRules = require('../../scripts/seed/rules');
 
 function initSchema() {
   db.exec(`
@@ -301,9 +302,29 @@ function initSchema() {
     "ALTER TABLE settings ADD COLUMN notify_scope TEXT DEFAULT 'pending_only'",
     'DROP TABLE IF EXISTS airbank_tokens',
     'ALTER TABLE users ADD COLUMN verify_expires INTEGER',
+    'ALTER TABLE category_rules ADD COLUMN amount_max_abs REAL',
+    'ALTER TABLE category_rules ADD COLUMN amount_min_abs REAL',
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* sloupec/index již existuje nebo nelze aplikovat */ }
+  }
+
+  // Seed textových pravidel do category_rules pro uživatele, kteří ještě žádná nemají
+  // (idempotentní — běží jen pro uživatele s prázdnou sadou pravidel).
+  const usersWithoutRules = db.prepare(
+    'SELECT id FROM users WHERE id NOT IN (SELECT DISTINCT user_id FROM category_rules)'
+  ).all();
+  if (usersWithoutRules.length > 0) {
+    const catByName = db.prepare('SELECT id FROM categories WHERE user_id = ? AND name = ?');
+    const insRule = db.prepare(
+      'INSERT INTO category_rules (user_id, category_id, pattern, amount_max_abs, amount_min_abs) VALUES (?, ?, ?, ?, ?)'
+    );
+    for (const u of usersWithoutRules) {
+      for (const o of seedRules.textOverrides) {
+        const cat = catByName.get(u.id, o.category);
+        if (cat) insRule.run(u.id, cat.id, o.pattern, o.amount_max_abs ?? null, o.amount_min_abs ?? null);
+      }
+    }
   }
 }
 
