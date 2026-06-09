@@ -120,3 +120,5 @@ input, button, select, textarea { font: inherit; }
 .cat-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cat-sug { font-size: 10px; color: #a5b4fc; font-weight: 700; margin-left: auto; flex: none; }
 .review-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+.review-cardpick { margin-top: 10px; }
+.review-cardpick-q { font-size: 12px; color: var(--text2); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; margin-bottom: 8px; }

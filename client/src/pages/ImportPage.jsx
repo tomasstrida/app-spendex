@@ -198,15 +198,18 @@ function orderedCats(cats, suggestedId) {
 function EmailInbox() {
   const [items, setItems] = useState([]);
   const [cats, setCats] = useState([]);
+  const [people, setPeople] = useState([]);
   const [busy, setBusy] = useState(null);
 
   const load = useCallback(async () => {
-    const [ri, rc] = await Promise.all([
+    const [ri, rc, rp] = await Promise.all([
       fetch('/api/email-inbox'),
       fetch('/api/categories'),
+      fetch('/api/household/cards'),
     ]);
     if (ri.ok) setItems(await ri.json());
     if (rc.ok) setCats(await rc.json());
+    if (rp.ok) { const j = await rp.json(); setPeople(j.people || []); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -231,6 +234,19 @@ function EmailInbox() {
     } finally { setBusy(null); }
   }
 
+  async function assignCard(item, userId, last4) {
+    setBusy(item.id);
+    try {
+      const r = await fetch(`/api/household/cards/${last4}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assigned_user_id: userId }),
+      });
+      if (r.ok) await load();
+    } finally { setBusy(null); }
+  }
+
+  const awaiting = items.filter(i => i.status === 'awaiting_card');
   const pending = items.filter(i => i.status === 'pending');
   const unparsed = items.filter(i => i.status === 'unparsed');
 
@@ -244,6 +260,44 @@ function EmailInbox() {
           {items.length}
         </span>
       </h2>
+
+      {awaiting.map(item => {
+        let tx = {};
+        try { tx = item.parsed_json ? JSON.parse(item.parsed_json) : {}; } catch { /* poškozený JSON */ }
+        const last4 = tx.card_last4;
+        return (
+          <div key={item.id} className="card review-item">
+            <div className="review-head">
+              <div className="review-merch">{tx.description || '—'}</div>
+              <div className="review-amt">{formatCurrency(tx.amount)}</div>
+            </div>
+            <div className="review-sub">
+              <span>{tx.date} {tx.tx_time || ''}</span>
+              <span className="who">💳 neznámá ••{last4}</span>
+            </div>
+            <div className="review-cardpick">
+              <div className="review-cardpick-q">Čí je tato karta?</div>
+              <div className="review-grid">
+                {people.map(p => (
+                  <button key={p.user_id} className="cat-tile" disabled={busy === item.id}
+                    onClick={() => assignCard(item, p.user_id, last4)}>
+                    <span className="who-av" style={{ background: ownerColor(p.user_id) }}>
+                      {(p.name || p.email || '?').charAt(0).toUpperCase()}
+                    </span>
+                    <span className="cat-name">{p.name || p.email}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="review-actions">
+              <button className="btn btn-ghost btn-icon" disabled={busy === item.id}
+                onClick={() => remove(item)} title="Smazat">
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+        );
+      })}
 
       {pending.map(item => {
         let tx = {};
