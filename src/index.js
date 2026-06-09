@@ -66,6 +66,7 @@ app.use('/api/email-inbox', require('./routes/emailInbox'));
 app.use('/api/push', require('./routes/push'));
 app.use('/api/household', require('./routes/household'));
 app.use('/api/accounts', require('./routes/accounts'));
+app.use('/api/rules', require('./routes/rules'));
 
 // --- Frontend (production) ---
 const clientDist = path.join(__dirname, '../client/dist');
