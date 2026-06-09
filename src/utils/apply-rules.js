@@ -17,7 +17,7 @@ function applyRules(tx, account, rules) {
   // L3 – text override (popis + note, case-insensitive substring).
   // Volitelné amount_max_abs / amount_min_abs zužují match podle absolutní částky
   // (užitečné pro „benzinky < 200 Kč = občerstvení, ne PHM" apod.).
-  const hay = `${tx.description || ''} ${tx.note || ''}`.toLowerCase();
+  const hay = `${tx.description || ''} ${tx.note || ''} ${tx.place || ''}`.toLowerCase();
   const absAmount = Math.abs(tx.amount);
   for (const o of rules.textOverrides) {
     if (!hay.includes(o.pattern.toLowerCase())) continue;
