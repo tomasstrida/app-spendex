@@ -4,77 +4,116 @@ const { buildExternalId } = require('../utils/externalId');
 const applyRules = require('../utils/apply-rules');
 const seedRules = require('../../scripts/seed/rules');
 
-/**
- * Zpracuje jeden notifikační e-mail. Čistá vůči HTTP — dostává už dekódovaný text.
- * Kontrola From hlavičky (whitelist airbank.cz) probíhá ve webhook routeru, ne zde.
- * @param {import('better-sqlite3').Database} db
- * @param {{userEmail: string, text: string}} input
- * @returns {{status: 'imported'|'pending'|'unparsed'|'duplicate'|'ignored', external_id?: string}}
- */
+const TX_INSERT = `INSERT OR IGNORE INTO transactions
+    (user_id, category_id, amount, currency, date, description, note, source, external_id,
+     tx_time, tx_type, counterparty_account, entered_by, place, account_id, ab_category)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'airbank-email', ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+function insertTx(db, userId, tx, categoryId, extId) {
+  return db.prepare(TX_INSERT).run(
+    userId, categoryId || null, tx.amount, tx.currency, tx.date, tx.description, tx.note || '',
+    extId || null, tx.tx_time || null, tx.tx_type || null,
+    tx.counterparty_account || null, tx.entered_by || null, tx.place || null,
+    tx.account_id != null ? tx.account_id : null, tx.ab_category || null);
+}
+
+// Rozhodne kategorii. account = řádek accounts ({id, account_number}) nebo null.
+function categorize(db, userId, tx, account) {
+  const catName = applyRules(tx, account ? { account_number: account.account_number } : null, seedRules);
+  const row = db.prepare('SELECT id FROM categories WHERE user_id = ? AND name = ?').get(userId, catName);
+  const categoryId = row ? row.id : null;
+  const confident = catName !== seedRules.fallbackCategory && categoryId != null;
+  return { catName, categoryId, confident };
+}
+
+// Uloží transakci (jisté) nebo do review fronty (nejisté). Vrací result vč. notifyUserId.
+function classifyAndStore(db, userId, tx, account, extId, notifyUserId, text) {
+  const accId = account ? account.id : null;
+  const { catName, categoryId, confident } = categorize(db, userId, tx, account);
+  if (confident) {
+    insertTx(db, userId, { ...tx, account_id: accId }, categoryId, extId);
+    return {
+      status: 'imported', external_id: extId, userId, notifyUserId,
+      notify: { amount: tx.amount, currency: tx.currency, merchant: tx.place || tx.description || null, categoryName: catName },
+    };
+  }
+  db.prepare(`INSERT INTO email_inbox (user_id, received_at, raw_text, parsed_json, external_id, suggested_category_id, status)
+              VALUES (?, datetime('now'), ?, ?, ?, ?, 'pending')`)
+    .run(userId, text || '', JSON.stringify({ ...tx, account_id: accId }), extId || null, categoryId);
+  return {
+    status: 'pending', external_id: extId, userId, notifyUserId,
+    notify: { amount: tx.amount, currency: tx.currency, merchant: tx.place || tx.description || null, categoryName: null },
+  };
+}
+
 function ingestEmail(db, { userEmail, text }) {
-  // Whitelist je vrstva 2: e-mail musí patřit existujícímu uživateli (dle login e-mailu).
   const user = db.prepare('SELECT id FROM users WHERE lower(email) = lower(?)').get(userEmail || '');
   if (!user) return { status: 'ignored' };
   const userId = user.id;
 
   const tx = parseEmailNotification(text);
-
-  // Nerozpoznáno → unparsed, ulož raw (žádná ztráta dat)
   if (!tx) {
     db.prepare(`INSERT INTO email_inbox (user_id, received_at, raw_text, parsed_json, external_id, suggested_category_id, status)
                 VALUES (?, datetime('now'), ?, NULL, NULL, NULL, 'unparsed')`).run(userId, text || '');
     return { status: 'unparsed' };
   }
 
-  // Párování zdrojového účtu (číslo bez /kódbanky)
   const account = tx.source_account
-    ? db.prepare('SELECT id, account_number FROM accounts WHERE user_id = ? AND account_number = ?')
-        .get(userId, tx.source_account)
+    ? db.prepare('SELECT id, account_number FROM accounts WHERE user_id = ? AND account_number = ?').get(userId, tx.source_account)
     : null;
 
   const extId = buildExternalId(tx.external_id, tx.source_account);
-
-  // Dedup proti transactions i čekajícím pending položkám
   if (extId) {
-    const inTx = db.prepare('SELECT 1 FROM transactions WHERE user_id = ? AND external_id = ?').get(userId, extId);
-    if (inTx) return { status: 'duplicate', external_id: extId };
-    const inPending = db.prepare("SELECT 1 FROM email_inbox WHERE user_id = ? AND external_id = ? AND status = 'pending'").get(userId, extId);
-    if (inPending) return { status: 'duplicate', external_id: extId };
+    if (db.prepare('SELECT 1 FROM transactions WHERE user_id = ? AND external_id = ?').get(userId, extId))
+      return { status: 'duplicate', external_id: extId };
+    if (db.prepare("SELECT 1 FROM email_inbox WHERE user_id = ? AND external_id = ? AND status IN ('pending','awaiting_card')").get(userId, extId))
+      return { status: 'duplicate', external_id: extId };
   }
 
-  // Kategorizace: applyRules vrací jméno (L0>L3>L1>L2>fallback). ab_category z e-mailu
-  // chybí, takže L2 nikdy nezabere. seedRules bez user-override (e-mail nemá UI mapping).
-  const catName = applyRules(tx, account ? { account_number: account.account_number } : null, seedRules);
-  const catIdByName = Object.fromEntries(
-    db.prepare('SELECT id, name FROM categories WHERE user_id = ?').all(userId).map(r => [r.name, r.id])
-  );
-  const categoryId = catIdByName[catName] || null;
-  const confident = catName !== seedRules.fallbackCategory && categoryId != null;
-
-  if (confident) {
-    db.prepare(`INSERT OR IGNORE INTO transactions
-        (user_id, category_id, amount, currency, date, description, note, source, external_id,
-         tx_time, tx_type, counterparty_account, entered_by, place, account_id, ab_category)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'airbank-email', ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(userId, categoryId, tx.amount, tx.currency, tx.date, tx.description, tx.note || '',
-           extId || null, tx.tx_time || null, tx.tx_type || null,
-           tx.counterparty_account || null, tx.entered_by || null, tx.place || null,
-           account ? account.id : null, tx.ab_category || null);
-    return {
-      status: 'imported', external_id: extId, userId,
-      notify: { amount: tx.amount, currency: tx.currency, merchant: tx.place || tx.description || null, categoryName: catName },
-    };
+  // Routing podle karty
+  let notifyUserId = userId; // fallback: vlastník dat
+  if (tx.card_last4) {
+    let card = db.prepare('SELECT assigned_user_id FROM cards WHERE data_owner_id = ? AND last4 = ?').get(userId, tx.card_last4);
+    if (!card) {
+      const hasMembers = db.prepare('SELECT 1 FROM household_members WHERE data_owner_id = ? LIMIT 1').get(userId);
+      const assignTo = hasMembers ? null : userId; // solo → auto-přiřaď vlastníkovi
+      db.prepare('INSERT OR IGNORE INTO cards (data_owner_id, last4, assigned_user_id) VALUES (?, ?, ?)').run(userId, tx.card_last4, assignTo);
+      card = { assigned_user_id: assignTo };
+    }
+    if (card.assigned_user_id == null) {
+      // Neznámá / nepřiřazená karta → drž transakci
+      db.prepare(`INSERT INTO email_inbox (user_id, received_at, raw_text, parsed_json, external_id, suggested_category_id, status)
+                  VALUES (?, datetime('now'), ?, ?, ?, NULL, 'awaiting_card')`)
+        .run(userId, text || '', JSON.stringify({ ...tx, account_id: account ? account.id : null }), extId || null);
+      return { status: 'awaiting_card', external_id: extId, userId };
+    }
+    notifyUserId = card.assigned_user_id;
   }
 
-  // fallback / kategorie chybí → review fronta
-  db.prepare(`INSERT INTO email_inbox (user_id, received_at, raw_text, parsed_json, external_id, suggested_category_id, status)
-              VALUES (?, datetime('now'), ?, ?, ?, ?, 'pending')`)
-    .run(userId, text || '', JSON.stringify({ ...tx, account_id: account ? account.id : null }),
-         extId || null, categoryId);
-  return {
-    status: 'pending', external_id: extId, userId,
-    notify: { amount: tx.amount, currency: tx.currency, merchant: tx.place || tx.description || null, categoryName: null },
-  };
+  return classifyAndStore(db, userId, tx, account, extId, notifyUserId, text);
 }
 
-module.exports = { ingestEmail };
+// Uvolní zadržené platby pro nově přiřazenou kartu. Vrací počet zpracovaných.
+function releaseHeldCard(db, dataOwnerId, last4) {
+  const rows = db.prepare("SELECT * FROM email_inbox WHERE user_id = ? AND status = 'awaiting_card'").all(dataOwnerId);
+  let released = 0;
+  for (const row of rows) {
+    if (!row.parsed_json) continue;
+    const tx = JSON.parse(row.parsed_json);
+    if (String(tx.card_last4) !== String(last4)) continue;
+    const account = tx.account_id != null
+      ? db.prepare('SELECT id, account_number FROM accounts WHERE id = ?').get(tx.account_id)
+      : null;
+    const { categoryId, confident } = categorize(db, dataOwnerId, tx, account);
+    if (confident) {
+      insertTx(db, dataOwnerId, tx, categoryId, row.external_id);
+      db.prepare("UPDATE email_inbox SET status = 'imported' WHERE id = ?").run(row.id);
+    } else {
+      db.prepare("UPDATE email_inbox SET status = 'pending', suggested_category_id = ? WHERE id = ?").run(categoryId, row.id);
+    }
+    released++;
+  }
+  return released;
+}
+
+module.exports = { ingestEmail, releaseHeldCard, categorize };

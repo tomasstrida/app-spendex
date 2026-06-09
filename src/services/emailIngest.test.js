@@ -33,6 +33,12 @@ Odchozí úhrada na účet Tomáš Střída číslo 1679014138/3030
 Datum zaúčtování: 07.06.2026
 Kód transakce: 160610143222`;
 
+const CARD_TX = `zůstatek na účtu Společný číslo 1679014023/3030 se snížil o částku 482,00 CZK. Dostupný zůstatek k 08.06.2026 v 21:15 je 3 678,16 CZK.
+Platba kartou (nezaúčtováno) v HAMR - BRANIK,RESTAURA, PRAHA 4, 000
+Karta: 516844******6062
+Datum provedení: 08.06.2026
+Kód transakce: 26918903543`;
+
 test('interní převod (protiúčet = vlastní) → rovnou do transactions jako Převody', () => {
   const { db, tmp } = freshDb();
   seed(db);
@@ -133,4 +139,59 @@ test('ingestEmail vrací userId a notify payload (pending i imported)', () => {
   assert.ok(r.notify, 'notify payload chybí');
   assert.equal(typeof r.notify.amount, 'number');
   assert.ok('merchant' in r.notify);
+});
+
+test('neznámá karta v domácnosti se členem → awaiting_card, žádná transakce, karta nepřiřazená, bez notify', () => {
+  const { db, tmp } = freshDb();
+  seed(db);
+  db.prepare("INSERT INTO users (id, email) VALUES (2, 'martin@example.com')").run();
+  db.prepare("INSERT INTO household_members (data_owner_id, user_id) VALUES (1, 2)").run();
+  const { ingestEmail } = require('./emailIngest');
+  const r = ingestEmail(db, { userEmail: 'tom@example.com', text: CARD_TX });
+  const txCount = db.prepare("SELECT COUNT(*) c FROM transactions").get();
+  const inbox = db.prepare("SELECT * FROM email_inbox WHERE user_id = 1").get();
+  const card = db.prepare("SELECT * FROM cards WHERE data_owner_id = 1 AND last4 = '6062'").get();
+  cleanup(db, tmp);
+  assert.equal(r.status, 'awaiting_card');
+  assert.equal(txCount.c, 0);
+  assert.equal(inbox.status, 'awaiting_card');
+  assert.ok(inbox.parsed_json.includes('6062'));
+  assert.equal(card.assigned_user_id, null);
+  assert.equal(r.notify, undefined);
+});
+
+test('přiřazená karta člena → import + notifyUserId = člen', () => {
+  const { db, tmp } = freshDb();
+  seed(db);
+  db.prepare("INSERT INTO users (id, email) VALUES (2, 'martin@example.com')").run();
+  db.prepare("INSERT INTO household_members (data_owner_id, user_id) VALUES (1, 2)").run();
+  db.prepare("INSERT INTO categories (id, user_id, name) VALUES (7, 1, 'Restaurace')").run();
+  db.prepare("INSERT INTO cards (data_owner_id, last4, assigned_user_id) VALUES (1, '6062', 2)").run();
+  const seedRules = require('../../scripts/seed/rules');
+  seedRules.textOverrides.push({ pattern: 'HAMR', category: 'Restaurace' });
+  const { ingestEmail } = require('./emailIngest');
+  const r = ingestEmail(db, { userEmail: 'tom@example.com', text: CARD_TX });
+  seedRules.textOverrides.pop();
+  const tx = db.prepare("SELECT * FROM transactions WHERE user_id = 1").get();
+  cleanup(db, tmp);
+  assert.equal(r.status, 'imported');
+  assert.equal(r.notifyUserId, 2);
+  assert.equal(tx.category_id, 7);
+  assert.equal(tx.place, 'HAMR - BRANIK,RESTAURA, PRAHA 4');
+});
+
+test('solo uživatel (bez členů) → karta auto-přiřazená vlastníkovi, import, notify vlastník', () => {
+  const { db, tmp } = freshDb();
+  seed(db);
+  db.prepare("INSERT INTO categories (id, user_id, name) VALUES (7, 1, 'Restaurace')").run();
+  const seedRules = require('../../scripts/seed/rules');
+  seedRules.textOverrides.push({ pattern: 'HAMR', category: 'Restaurace' });
+  const { ingestEmail } = require('./emailIngest');
+  const r = ingestEmail(db, { userEmail: 'tom@example.com', text: CARD_TX });
+  seedRules.textOverrides.pop();
+  const card = db.prepare("SELECT * FROM cards WHERE data_owner_id = 1 AND last4 = '6062'").get();
+  cleanup(db, tmp);
+  assert.equal(r.status, 'imported');
+  assert.equal(r.notifyUserId, 1);
+  assert.equal(card.assigned_user_id, 1);
 });
