@@ -770,7 +770,8 @@ function renderCell(key, tx, categories) {
     case 'tx_time':
       return <span className="text-muted" style={{ fontSize: 12 }}>{tx.tx_time || '—'}</span>;
     case 'description':
-      return <span className="tx-desc">{tx.description || <span className="text-muted">—</span>}</span>;
+      // E-mailové kartové platby mají obchodníka jen v `place` → fallback, ať není řádek prázdný
+      return <span className="tx-desc">{tx.description || tx.place || <span className="text-muted">—</span>}</span>;
     case 'tx_type':
       return <span className="text-muted" style={{ fontSize: 12 }}>{tx.tx_type || '—'}</span>;
     case 'category_name':

@@ -73,6 +73,11 @@ function parseEmailNotification(text) {
     if (digits.length >= 4) card_last4 = digits.slice(-4);
   }
 
+  // Kartová platba nemá řádek "úhrada na účet … číslo" → `description` zůstává prázdné
+  // a obchodník je jen v `place`. Použij ho jako popis, ať je vidět ve výchozím sloupci
+  // "Popis", ve vyhledávání i pro textová category_rules (match_patterns matchují description).
+  if (!description && place) description = place;
+
   // Zpráva pro plátce/příjemce → note
   const msgM = body.match(/Zpráva pro (?:plátce|p[rř]íjemce):\s*(.+)/i);
   const note = msgM ? msgM[1].trim() : '';

@@ -79,6 +79,8 @@ test('platba kartou: vytáhne místo, poslední 4 karty, typ a datum provedení'
   assert.equal(tx.amount, -482);
   assert.equal(tx.direction, 'Odchozí');
   assert.equal(tx.place, 'HAMR - BRANIK,RESTAURA, PRAHA 4');
+  // kartová platba nemá řádek "úhrada na účet" → description fallbackuje na place (obchodníka)
+  assert.equal(tx.description, 'HAMR - BRANIK,RESTAURA, PRAHA 4');
   assert.equal(tx.card_last4, '6062');
   assert.equal(tx.tx_type, 'Platba kartou');
   assert.equal(tx.date, '2026-06-08');
