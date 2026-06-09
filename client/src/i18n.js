@@ -70,6 +70,12 @@ const cs = {
     household_leave: 'Odejít z domácnosti',
     household_join_bad: 'Neplatný kód.',
     household_joined: 'Připojeno ✅',
+    cards_title: 'Platební karty',
+    cards_hint: 'Přiřaď každou kartu členovi domácnosti — notifikace o platbě pak dostane jen ten, kdo platil.',
+    cards_unassigned: 'Nepřiřazená',
+    cards_assign_placeholder: 'Přiřadit členovi…',
+    cards_waiting: 'platby čekají na přiřazení',
+    cards_none: 'Zatím žádné karty (objeví se po první platbě kartou).',
   },
   common: {
     logout: 'Odhlásit se',

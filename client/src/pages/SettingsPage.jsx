@@ -90,6 +90,7 @@ export default function SettingsPage() {
   const [household, setHousehold] = useState(null);
   const [joinCode, setJoinCode] = useState('');
   const [hhMsg, setHhMsg] = useState('');
+  const [cards, setCards] = useState({ cards: [], people: [] });
 
   useEffect(() => {
     Promise.all([
@@ -117,6 +118,21 @@ export default function SettingsPage() {
     if (r.ok) setHousehold(await r.json());
   }
   useEffect(() => { loadHousehold(); }, []);
+
+  async function loadCards() {
+    const r = await fetch('/api/household/cards', { credentials: 'include' });
+    if (r.ok) setCards(await r.json());
+  }
+  useEffect(() => { loadCards(); }, []);
+
+  async function assignCard(last4, userId) {
+    await fetch(`/api/household/cards/${last4}`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assigned_user_id: userId || null }),
+    });
+    loadCards();
+  }
 
   async function createInvite() {
     await fetch('/api/household/invite', { method: 'POST', credentials: 'include' });
@@ -372,6 +388,36 @@ export default function SettingsPage() {
           )}
 
           {hhMsg && <p className="form-hint" style={{ marginTop: 8 }}>{hhMsg}</p>}
+
+          <div style={{ marginTop: 20 }}>
+            <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{t.settings.cards_title}</p>
+            <p className="form-hint" style={{ marginBottom: 8 }}>{t.settings.cards_hint}</p>
+            {cards.cards.length === 0 ? (
+              <p className="form-hint">{t.settings.cards_none}</p>
+            ) : (
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {cards.cards.map(c => (
+                  <li key={c.last4} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>•••• {c.last4}</span>
+                    <select
+                      className="input"
+                      value={c.assigned_user_id || ''}
+                      onChange={(e) => assignCard(c.last4, e.target.value ? parseInt(e.target.value) : null)}
+                      style={{ fontSize: 13, maxWidth: 200 }}
+                    >
+                      <option value="">{t.settings.cards_assign_placeholder}</option>
+                      {cards.people.map(p => (
+                        <option key={p.user_id} value={p.user_id}>{p.name || p.email}</option>
+                      ))}
+                    </select>
+                    {c.waiting > 0 && (
+                      <span style={{ color: '#c0392b', fontSize: 12 }}>{c.waiting} {t.settings.cards_waiting}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
     </Layout>
