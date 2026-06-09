@@ -141,7 +141,7 @@ test('ingestEmail vrací userId a notify payload (pending i imported)', () => {
   assert.ok('merchant' in r.notify);
 });
 
-test('neznámá karta v domácnosti se členem → awaiting_card, žádná transakce, karta nepřiřazená, bez notify', () => {
+test('neznámá karta v domácnosti se členem → awaiting_card, žádná transakce, karta nepřiřazená + broadcast notifikace', () => {
   const { db, tmp } = freshDb();
   seed(db);
   db.prepare("INSERT INTO users (id, email) VALUES (2, 'martin@example.com')").run();

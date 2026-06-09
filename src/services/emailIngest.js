@@ -87,8 +87,11 @@ function ingestEmail(db, { userEmail, text }) {
         .run(userId, text || '', JSON.stringify({ ...tx, account_id: account ? account.id : null }), extId || null);
       return {
         status: 'awaiting_card', external_id: extId, userId,
-        notify: { amount: tx.amount, currency: tx.currency,
-                  merchant: tx.place || tx.description || null, unknownCard: true, last4: tx.card_last4 },
+        notify: {
+          amount: tx.amount, currency: tx.currency,
+          merchant: tx.place || tx.description || null,
+          unknownCard: true, last4: tx.card_last4,
+        },
         broadcast: true,
       };
     }
