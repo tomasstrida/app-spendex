@@ -21,6 +21,17 @@ function appFor(uid){
 }
 async function listen(app){ const s=await new Promise(r=>{const x=app.listen(0,()=>r(x));}); return {server:s, base:`http://127.0.0.1:${s.address().port}`}; }
 
+test('GET / vrací i awaiting_card položky', async () => {
+  const { db, tmp } = setup();
+  db.prepare("INSERT INTO email_inbox (user_id, parsed_json, status) VALUES (1, ?, 'awaiting_card')")
+    .run(JSON.stringify({ description: 'HAMR', amount: -482, card_last4: '6062' }));
+  const l = await listen(appFor(1));
+  const rows = await (await fetch(`${l.base}/api/email-inbox`)).json();
+  l.server.close(); cleanup(db, tmp);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].status, 'awaiting_card');
+});
+
 test('GET / doplní card_owner_name/id pro kartu; null bez karty', async () => {
   const { db, tmp } = setup();
   db.prepare("INSERT INTO cards (data_owner_id, last4, assigned_user_id) VALUES (1, '6062', 2)").run();

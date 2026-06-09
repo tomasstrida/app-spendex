@@ -19,7 +19,7 @@ router.get('/', requireAuth, (req, res) => {
     LEFT JOIN cards cd ON cd.data_owner_id = i.user_id
                       AND cd.last4 = json_extract(i.parsed_json, '$.card_last4')
     LEFT JOIN users cu ON cu.id = cd.assigned_user_id
-    WHERE i.user_id = ? AND i.status IN ('pending', 'unparsed')
+    WHERE i.user_id = ? AND i.status IN ('pending', 'unparsed', 'awaiting_card')
     ORDER BY i.created_at DESC, i.id DESC
   `).all(req.dataUserId);
   res.json(rows);
