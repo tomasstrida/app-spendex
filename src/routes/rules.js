@@ -10,7 +10,7 @@ function ownsCategory(userId, categoryId) {
 
 // Volitelná částka: '' / undefined / null → null; jinak kladné číslo nebo {ok:false}
 function parseAmount(v) {
-  if (v === undefined || v === null || v === '') return { ok: true, value: null };
+  if (v === undefined || v === null || String(v).trim() === '') return { ok: true, value: null };
   const n = Number(v);
   if (!Number.isFinite(n) || n < 0) return { ok: false };
   return { ok: true, value: n };
@@ -38,6 +38,8 @@ router.post('/', requireAuth, (req, res) => {
   const max = parseAmount(req.body.amount_max_abs);
   const min = parseAmount(req.body.amount_min_abs);
   if (!max.ok || !min.ok) return res.status(400).json({ error: 'Neplatná částka.' });
+  if (max.value != null && min.value != null && min.value > max.value)
+    return res.status(400).json({ error: 'Minimální částka nesmí být větší než maximální.' });
   const info = db.prepare(
     'INSERT INTO category_rules (user_id, category_id, pattern, amount_max_abs, amount_min_abs) VALUES (?, ?, ?, ?, ?)'
   ).run(req.dataUserId, categoryId, pattern, max.value, min.value);
@@ -54,9 +56,11 @@ router.patch('/:id', requireAuth, (req, res) => {
   const categoryId = req.body.category_id != null ? parseInt(req.body.category_id) : existing.category_id;
   if (!pattern || !categoryId) return res.status(400).json({ error: 'Vyplň text a kategorii.' });
   if (!ownsCategory(req.dataUserId, categoryId)) return res.status(400).json({ error: 'Neplatná kategorie.' });
-  const max = parseAmount(req.body.amount_max_abs);
-  const min = parseAmount(req.body.amount_min_abs);
+  const max = 'amount_max_abs' in req.body ? parseAmount(req.body.amount_max_abs) : { ok: true, value: existing.amount_max_abs };
+  const min = 'amount_min_abs' in req.body ? parseAmount(req.body.amount_min_abs) : { ok: true, value: existing.amount_min_abs };
   if (!max.ok || !min.ok) return res.status(400).json({ error: 'Neplatná částka.' });
+  if (max.value != null && min.value != null && min.value > max.value)
+    return res.status(400).json({ error: 'Minimální částka nesmí být větší než maximální.' });
   db.prepare('UPDATE category_rules SET pattern = ?, category_id = ?, amount_max_abs = ?, amount_min_abs = ? WHERE id = ?')
     .run(pattern, categoryId, max.value, min.value, existing.id);
   res.json(db.prepare('SELECT * FROM category_rules WHERE id = ?').get(existing.id));

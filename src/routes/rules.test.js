@@ -59,3 +59,30 @@ test('rules: prázdný pattern odmítnut', async () => {
   assert.equal(res.status, 400);
   server.close();
 });
+
+test('rules PATCH: částku nepošlu → zachová se (partial update)', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  // create rule with amount_max_abs=200
+  let res = await fetch(`${base}/api/rules`, { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ pattern:'SHELL', category_id:10, amount_max_abs:200 }) });
+  const created = await res.json();
+  assert.equal(created.amount_max_abs, 200);
+  // PATCH only the pattern — amount must survive
+  res = await fetch(`${base}/api/rules/${created.id}`, { method:'PATCH', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ pattern:'SHELL CZ' }) });
+  assert.equal(res.status, 200);
+  const patched = await res.json();
+  assert.equal(patched.pattern, 'SHELL CZ');
+  assert.equal(patched.amount_max_abs, 200); // preserved
+  server.close();
+});
+
+test('rules: min > max odmítnuto', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const res = await fetch(`${base}/api/rules`, { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ pattern:'X', category_id:10, amount_min_abs:500, amount_max_abs:100 }) });
+  assert.equal(res.status, 400);
+  server.close();
+});
