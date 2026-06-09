@@ -146,9 +146,10 @@ Endpointy v `src/routes/household.js`:
 - `GET /api/household/cards` → seznam karet + počet `awaiting_card` na kartu.
 - `PATCH /api/household/cards/:last4` → přiřadit/přejmenovat + uvolnit zadržené.
 
-Autorizace: jen vlastník domácnosti (role `owner`/`solo`) spravuje karty;
-člen má read-only (vidí, čí je která karta). Konzistentní s tím, že karty patří
-do dat vlastníka.
+Autorizace: karty spravuje **kterýkoli člen domácnosti** (vlastník i člen) —
+přiřazení i přejmenování. Karty patří do dat vlastníka (`data_owner_id`), takže
+endpoint nejdřív přes `roleOf(req.user.id)` zjistí `ownerId` domácnosti volajícího
+a operuje nad kartami toho `data_owner_id`. Tím člen (Martin) přiřadí svou kartu sám.
 
 i18n: nové klíče `cards_title`, `cards_unassigned`, `cards_assign`,
 `cards_waiting_count` apod. do `client/src/i18n.js`.
