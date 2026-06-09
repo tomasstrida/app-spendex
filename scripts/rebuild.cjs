@@ -107,8 +107,8 @@ try {
   // 8. SEED pravidla do DB (L2 → airbank_category_mappings, L3 → category_rules)
   const insMap = db.prepare('INSERT INTO airbank_category_mappings (user_id, ab_category, category_id) VALUES (?, ?, ?)');
   for (const [ab, cat] of Object.entries(rules.abCategoryMap)) insMap.run(USER_ID, ab, needCat(cat));
-  const insRule = db.prepare('INSERT INTO category_rules (user_id, category_id, pattern) VALUES (?, ?, ?)');
-  for (const o of rules.textOverrides) insRule.run(USER_ID, needCat(o.category), o.pattern);
+  const insRule = db.prepare('INSERT INTO category_rules (user_id, category_id, pattern, amount_max_abs, amount_min_abs) VALUES (?, ?, ?, ?, ?)');
+  for (const o of rules.textOverrides) insRule.run(USER_ID, needCat(o.category), o.pattern, o.amount_max_abs ?? null, o.amount_min_abs ?? null);
 
   // 9. IMPORT transakcí
   const insTx = db.prepare(`
