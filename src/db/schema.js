@@ -304,6 +304,8 @@ function initSchema() {
     'ALTER TABLE users ADD COLUMN verify_expires INTEGER',
     'ALTER TABLE category_rules ADD COLUMN amount_max_abs REAL',
     'ALTER TABLE category_rules ADD COLUMN amount_min_abs REAL',
+    // Vlastní ikona kategorie (název souboru na volume cat-icons/, NULL = bez ikony)
+    'ALTER TABLE categories ADD COLUMN icon_image TEXT',
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* sloupec/index již existuje nebo nelze aplikovat */ }

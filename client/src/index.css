@@ -119,6 +119,22 @@ input, button, select, textarea { font: inherit; }
 .cat-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
 .cat-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cat-sug { font-size: 10px; color: #a5b4fc; font-weight: 700; margin-left: auto; flex: none; }
+
+/* Ikonový picker kategorií v review frontě – kompaktní mřížka bez scrollu */
+.review-icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+                gap: 8px; margin-top: 10px; }
+.cat-icon-tile { position: relative; aspect-ratio: 1 / 1; padding: 0; overflow: hidden;
+                 background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius);
+                 cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.cat-icon-tile:disabled { opacity: .5; cursor: default; }
+.cat-icon-tile.suggested { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(99,102,241,.45) inset; }
+.cat-icon-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cat-icon-tile .cat-icon-ph { width: 100%; height: 100%; border-radius: 0; }
+.cat-icon-tile.suggested::after { content: ''; position: absolute; top: 4px; right: 4px;
+                 width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.cat-icon-ph { display: flex; align-items: center; justify-content: center;
+               color: #fff; font-weight: 700; font-size: 20px; }
+
 .review-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
 .review-cardpick { margin-top: 10px; }
 .review-cardpick-q { font-size: 12px; color: var(--text2); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; margin-bottom: 8px; }

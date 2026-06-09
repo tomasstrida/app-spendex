@@ -687,6 +687,22 @@ a.report-budget-card:hover { background: var(--bg2); text-decoration: none; }
   color: var(--text);
 }
 
+/* Upload ikony kategorie */
+.cat-icon-up { position: relative; flex: none; line-height: 0; }
+.cat-icon-thumb {
+  width: 32px; height: 32px; padding: 0; border-radius: 8px; overflow: hidden;
+  border: 1px solid var(--border); background: var(--bg3); cursor: pointer; display: block;
+}
+.cat-icon-thumb:disabled { opacity: .5; cursor: default; }
+.cat-icon-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cat-icon-up .cat-icon-ph { width: 32px; height: 32px; font-size: 15px; border-radius: 0; }
+.cat-icon-rm {
+  position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; padding: 0;
+  border-radius: 50%; border: none; background: var(--bg); color: var(--text2);
+  font-size: 13px; line-height: 14px; cursor: pointer;
+}
+.cat-icon-rm:hover { color: var(--text); }
+
 .category-row-actions {
   display: flex;
   gap: 4px;

@@ -319,19 +319,18 @@ function EmailInbox() {
                 </span>
               )}
             </div>
-            <div className="review-tiles">
-              <div className="review-grid">
-                {orderedCats(cats, item.suggested_category_id).map(c => (
-                  <button key={c.id}
-                    className={`cat-tile${c.id === item.suggested_category_id ? ' suggested' : ''}`}
-                    disabled={busy === item.id}
-                    onClick={() => approve(item, c.id)}>
-                    <span className="cat-dot" style={{ background: c.color }} />
-                    <span className="cat-name">{c.name}</span>
-                    {c.id === item.suggested_category_id && <span className="cat-sug">NAVRŽENO</span>}
-                  </button>
-                ))}
-              </div>
+            <div className="review-icons">
+              {orderedCats(cats, item.suggested_category_id).map(c => (
+                <button key={c.id}
+                  className={`cat-icon-tile${c.id === item.suggested_category_id ? ' suggested' : ''}`}
+                  disabled={busy === item.id}
+                  title={c.name}
+                  onClick={() => approve(item, c.id)}>
+                  {c.icon_image
+                    ? <img src={`/api/categories/${c.id}/icon?v=${encodeURIComponent(c.icon_image)}`} alt={c.name} />
+                    : <span className="cat-icon-ph" style={{ background: c.color }}>{(c.name || '?').charAt(0).toUpperCase()}</span>}
+                </button>
+              ))}
             </div>
             <div className="review-actions">
               <button className="btn btn-ghost btn-icon" disabled={busy === item.id}

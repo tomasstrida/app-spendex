@@ -9,3 +9,6 @@ client/dist/
 
 # Visual companion (brainstorming)
 .superpowers/
+
+# Lokální nahrané ikony kategorií (na prod jsou na volume)
+cat-icons/
