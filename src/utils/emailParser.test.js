@@ -60,3 +60,34 @@ test('bez kódu transakce → null (unparsed)', () => {
 test('bez částky → null', () => {
   assert.equal(parseEmailNotification('Kód transakce: 123\nžádná částka tu není'), null);
 });
+
+const CARD = `Dobrý den,
+
+zůstatek na účtu Společný číslo 1679014023/3030 se snížil o částku 482,00 CZK. Dostupný zůstatek k 08.06.2026 v 21:15 je 3 678,16 CZK.
+
+Pro úplnost uvádíme detaily této úhrady:
+
+Platba kartou (nezaúčtováno) v HAMR - BRANIK,RESTAURA, PRAHA 4, 000
+Částka: 482,00 CZK
+Karta: 516844******6062
+Datum provedení: 08.06.2026
+Kód transakce: 26918903543`;
+
+test('platba kartou: vytáhne místo, poslední 4 karty, typ a datum provedení', () => {
+  const tx = parseEmailNotification(CARD);
+  assert.equal(tx.external_id, '26918903543');
+  assert.equal(tx.amount, -482);
+  assert.equal(tx.direction, 'Odchozí');
+  assert.equal(tx.place, 'HAMR - BRANIK,RESTAURA, PRAHA 4');
+  assert.equal(tx.card_last4, '6062');
+  assert.equal(tx.tx_type, 'Platba kartou');
+  assert.equal(tx.date, '2026-06-08');
+  assert.equal(tx.source_account, '1679014023');
+  assert.equal(tx.counterparty_account, null);
+});
+
+test('převod nemá kartu ani místo', () => {
+  const tx = parseEmailNotification(OUTGOING);
+  assert.equal(tx.place, null);
+  assert.equal(tx.card_last4, null);
+});

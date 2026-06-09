@@ -58,13 +58,29 @@ function parseEmailNotification(text) {
     counterparty_account = cpM[2];
   }
 
+  // Platba kartou: "Platba kartou (nezaúčtováno) v <MÍSTO>" → place (ořež koncový terminálový kód ", 000")
+  let place = null;
+  let card_last4 = null;
+  let tx_type = null;
+  const cardLineM = body.match(/Platba kartou(?:\s*\([^)]*\))?\s+v\s+(.+)/i);
+  if (cardLineM) {
+    place = cardLineM[1].trim().replace(/,\s*\d{1,3}\s*$/, '').trim();
+    tx_type = 'Platba kartou';
+  }
+  const cardNumM = body.match(/Karta:\s*([\d*]+)/i);
+  if (cardNumM) {
+    const digits = cardNumM[1].replace(/[^\d]/g, '');
+    if (digits.length >= 4) card_last4 = digits.slice(-4);
+  }
+
   // Zpráva pro plátce/příjemce → note
   const msgM = body.match(/Zpráva pro (?:plátce|p[rř]íjemce):\s*(.+)/i);
   const note = msgM ? msgM[1].trim() : '';
 
-  // Datum: primárně "Datum zaúčtování", fallback z hlavičky "k 07.06.2026 v ..."
+  // Datum: primárně "Datum zaúčtování", fallback "Datum provedení" (kartové platby), fallback z hlavičky "k 07.06.2026 v ..."
   const date =
     parseCzDate((body.match(/Datum zaú[cč]tování:\s*([\d.]+)/i) || [])[1]) ||
+    parseCzDate((body.match(/Datum provedení:\s*([\d.]+)/i) || [])[1]) ||
     parseCzDate((body.match(/k\s+([\d.]+)\s+v\s+\d{2}:\d{2}/i) || [])[1]);
 
   // Čas: "v 17:47"
@@ -81,10 +97,11 @@ function parseEmailNotification(text) {
     direction,
     external_id,
     tx_time,
-    tx_type: null,
+    tx_type,
     counterparty_account,
     entered_by: null,
-    place: null,
+    place,
+    card_last4,
     source_account,
   };
 }
