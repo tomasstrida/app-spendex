@@ -8,6 +8,7 @@ const { parseAirBankCSV } = require('../utils/csvParser');
 const { buildExternalId } = require('../utils/externalId');
 const applyRules = require('../utils/apply-rules');
 const seedRules = require('../../scripts/seed/rules');
+const loadUserRules = require('../utils/load-user-rules');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
@@ -125,6 +126,7 @@ router.post('/confirm', requireAuth, writeLimiter, (req, res) => {
   }
   const effectiveRules = {
     ...seedRules,
+    textOverrides: loadUserRules(db, req.dataUserId),
     abCategoryMap: { ...seedRules.abCategoryMap, ...userMapName },
   };
   const catIdByName = Object.fromEntries(
