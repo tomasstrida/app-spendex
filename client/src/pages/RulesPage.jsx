@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Pencil, Trash2, Check, X } from 'lucide-react';
 import Layout from '../components/Layout';
 
@@ -11,6 +11,8 @@ export default function RulesPage() {
   const [editId, setEditId] = useState(null);
   const [adv, setAdv] = useState(false);
   const [err, setErr] = useState('');
+  const formRef = useRef(null);
+  const patternRef = useRef(null);
 
   const load = useCallback(async () => {
     try {
@@ -59,6 +61,12 @@ export default function RulesPage() {
     });
     setAdv(r.amount_max_abs != null || r.amount_min_abs != null);
     setErr('');
+    // Formulář je nad dlouhým seznamem — bez scrollu/focusu vypadá editace
+    // jako „nic se nestalo". Scrollni k němu a zaměř pole.
+    requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      patternRef.current?.focus();
+    });
   }
 
   async function remove(id) {
@@ -82,11 +90,25 @@ export default function RulesPage() {
 
       {err && <div className="alert alert-error" style={{ marginBottom: 12, maxWidth: 900 }}>{err}</div>}
 
-      <div className="card" style={{ marginBottom: 16, maxWidth: 900 }}>
+      <div
+        ref={formRef}
+        className="card"
+        style={{
+          marginBottom: 16,
+          maxWidth: 900,
+          ...(editId ? { boxShadow: '0 0 0 2px var(--primary, #6366f1)' } : {}),
+        }}
+      >
+        {editId && (
+          <div className="text-muted" style={{ fontSize: 12, marginBottom: 8, fontWeight: 600 }}>
+            Upravuješ pravidlo
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div className="form-group" style={{ flex: 2, minWidth: 200, margin: 0 }}>
             <label className="form-label">Text v platbě</label>
             <input
+              ref={patternRef}
               className="input"
               value={form.pattern}
               placeholder="např. ZIZKAVARNA"
@@ -167,7 +189,13 @@ export default function RulesPage() {
             </thead>
             <tbody>
               {rules.map(r => (
-                <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
+                <tr
+                  key={r.id}
+                  style={{
+                    borderTop: '1px solid var(--border)',
+                    background: editId === r.id ? 'var(--surface2, rgba(99,102,241,0.08))' : 'transparent',
+                  }}
+                >
                   <td style={{ padding: '8px 12px', fontWeight: 500 }}>{r.pattern}</td>
                   <td style={{ padding: '8px 12px' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
