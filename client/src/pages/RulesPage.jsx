@@ -1,8 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Pencil, Trash2, Check, X } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Plus, Pencil, Trash2, Check, X, Search } from 'lucide-react';
 import Layout from '../components/Layout';
 
 const EMPTY = { pattern: '', category_id: '', amount_max_abs: '', amount_min_abs: '' };
+
+// Necitlivé na velikost písmen i diakritiku (konvence appky – viz unaccent_lower).
+const norm = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 export default function RulesPage() {
   const [rules, setRules] = useState([]);
@@ -11,8 +14,15 @@ export default function RulesPage() {
   const [editId, setEditId] = useState(null);
   const [adv, setAdv] = useState(false);
   const [err, setErr] = useState('');
+  const [query, setQuery] = useState('');
   const formRef = useRef(null);
   const patternRef = useRef(null);
+
+  const filtered = useMemo(() => {
+    const q = norm(query.trim());
+    if (!q) return rules;
+    return rules.filter(r => norm(r.pattern).includes(q) || norm(r.category_name).includes(q));
+  }, [rules, query]);
 
   const load = useCallback(async () => {
     try {
@@ -174,9 +184,29 @@ export default function RulesPage() {
         )}
       </div>
 
+      {rules.length > 0 && (
+        <div style={{ position: 'relative', maxWidth: 900, marginBottom: 12 }}>
+          <Search
+            size={15}
+            style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text2)' }}
+          />
+          <input
+            className="input"
+            value={query}
+            placeholder="Hledat pravidlo nebo kategorii…"
+            onChange={e => setQuery(e.target.value)}
+            style={{ paddingLeft: 32 }}
+          />
+        </div>
+      )}
+
       <div className="card" style={{ padding: 0, overflow: 'hidden', maxWidth: 900 }}>
         {rules.length === 0 ? (
           <div className="text-muted" style={{ padding: '12px 16px', fontSize: 13 }}>Zatím žádná pravidla.</div>
+        ) : filtered.length === 0 ? (
+          <div className="text-muted" style={{ padding: '12px 16px', fontSize: 13 }}>
+            Žádné pravidlo neodpovídá „{query}".
+          </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
@@ -188,7 +218,7 @@ export default function RulesPage() {
               </tr>
             </thead>
             <tbody>
-              {rules.map(r => (
+              {filtered.map(r => (
                 <tr
                   key={r.id}
                   style={{
