@@ -3,6 +3,7 @@ const cs = {
     dashboard: 'Měsíční rozpočty',
     transactions: 'Transakce',
     categories: 'Kategorie',
+    rules: 'Pravidla',
     budgets: 'Rozpočty',
     report: 'Schůzka',
     annualBudgets: 'Roční budgety',
