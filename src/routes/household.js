@@ -72,4 +72,55 @@ router.delete('/members/:userId', requireAuth, writeLimiter, (req, res) => {
   res.json({ ok: true });
 });
 
+const { releaseHeldCard } = require('../services/emailIngest');
+
+// Lidé domácnosti = vlastník + členové (pro dropdown přiřazení karty)
+function householdPeople(ownerId) {
+  const owner = db.prepare('SELECT id AS user_id, name, email FROM users WHERE id = ?').get(ownerId);
+  const members = db.prepare(`
+    SELECT hm.user_id, u.name, u.email
+    FROM household_members hm JOIN users u ON u.id = hm.user_id
+    WHERE hm.data_owner_id = ?
+  `).all(ownerId);
+  return [owner, ...members].filter(Boolean);
+}
+
+// GET /api/household/cards — karty + lidé + počet zadržených plateb na kartu
+router.get('/cards', requireAuth, (req, res) => {
+  const { ownerId } = roleOf(req.user.id);
+  const cards = db.prepare(`
+    SELECT c.last4, c.assigned_user_id, c.label, u.name AS assigned_name,
+      (SELECT COUNT(*) FROM email_inbox i
+         WHERE i.user_id = c.data_owner_id AND i.status = 'awaiting_card'
+           AND json_extract(i.parsed_json, '$.card_last4') = c.last4) AS waiting
+    FROM cards c
+    LEFT JOIN users u ON u.id = c.assigned_user_id
+    WHERE c.data_owner_id = ?
+    ORDER BY (c.assigned_user_id IS NOT NULL), c.last4
+  `).all(ownerId);
+  res.json({ cards, people: householdPeople(ownerId) });
+});
+
+// PATCH /api/household/cards/:last4 — přiřaď/přejmenuj kartu + uvolni zadržené platby
+router.patch('/cards/:last4', requireAuth, writeLimiter, (req, res) => {
+  const { ownerId } = roleOf(req.user.id);
+  const last4 = String(req.params.last4).replace(/[^\d]/g, '').slice(-4);
+  const { assigned_user_id = null, label } = req.body || {};
+  const card = db.prepare('SELECT 1 FROM cards WHERE data_owner_id = ? AND last4 = ?').get(ownerId, last4);
+  if (!card) return res.status(404).json({ error: 'Karta nenalezena.' });
+
+  let assignTo = null;
+  if (assigned_user_id != null) {
+    assignTo = parseInt(assigned_user_id, 10);
+    const ok = householdPeople(ownerId).some(p => p.user_id === assignTo);
+    if (!ok) return res.status(400).json({ error: 'Uživatel není v domácnosti.' });
+  }
+  db.prepare('UPDATE cards SET assigned_user_id = ?, label = COALESCE(?, label) WHERE data_owner_id = ? AND last4 = ?')
+    .run(assignTo, label != null ? String(label).slice(0, 60) : null, ownerId, last4);
+
+  let released = 0;
+  if (assignTo != null) released = releaseHeldCard(db, ownerId, last4);
+  res.json({ ok: true, released });
+});
+
 module.exports = router;

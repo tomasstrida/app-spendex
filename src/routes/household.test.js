@@ -21,6 +21,7 @@ function appFor(uid){
 }
 async function listen(app){ const s=await new Promise(r=>{const x=app.listen(0,()=>r(x));}); return {server:s, base:`http://127.0.0.1:${s.address().port}`}; }
 function jpost(base, p, body){ return fetch(`${base}${p}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body||{})}); }
+function jpatch(base, p, body){ return fetch(`${base}${p}`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify(body||{})}); }
 
 test('invite → join → membership vznikne a kód se spotřebuje', async () => {
   const { db, tmp } = setup();
@@ -98,6 +99,48 @@ test('owner odebere člena; cizí/neexistující → 404', async () => {
   assert.equal(ok.status, 200);
   assert.equal(gone, undefined);
   assert.equal(no.status, 404);
+});
+
+test('GET /cards vrací karty + lidi domácnosti; PATCH přiřadí kartu (může i člen)', async () => {
+  const { db, tmp } = setup();
+  db.prepare("INSERT INTO household_members (data_owner_id, user_id) VALUES (1, 2)").run();
+  db.prepare("INSERT INTO cards (data_owner_id, last4) VALUES (1, '6062')").run();
+  // člen (uid=2) přiřadí kartu sobě
+  let l = await listen(appFor(2));
+  const before = await (await fetch(`${l.base}/api/household/cards`)).json();
+  const patch = await jpatch(l.base, '/api/household/cards/6062', { assigned_user_id: 2, label: 'Martin Visa' });
+  l.server.close();
+  const card = db.prepare("SELECT * FROM cards WHERE data_owner_id = 1 AND last4 = '6062'").get();
+  cleanup(db, tmp);
+  assert.ok(before.people.some(p => p.user_id === 1) && before.people.some(p => p.user_id === 2));
+  assert.equal(before.cards.length, 1);
+  assert.equal(patch.status, 200);
+  assert.equal(card.assigned_user_id, 2);
+  assert.equal(card.label, 'Martin Visa');
+});
+
+test('PATCH /cards uvolní zadržené platby (awaiting_card → imported/pending)', async () => {
+  const { db, tmp } = setup();
+  db.prepare("INSERT INTO household_members (data_owner_id, user_id) VALUES (1, 2)").run();
+  db.prepare("INSERT INTO categories (id, user_id, name) VALUES (7, 1, 'Restaurace')").run();
+  db.prepare("INSERT INTO cards (data_owner_id, last4) VALUES (1, '6062')").run();
+  const seedRules = require('../../scripts/seed/rules');
+  seedRules.textOverrides.push({ pattern: 'HAMR', category: 'Restaurace' });
+  try {
+    const parsed = JSON.stringify({ amount: -482, currency: 'CZK', date: '2026-06-08', description: '', note: '', place: 'HAMR - BRANIK', card_last4: '6062', account_id: null, tx_type: 'Platba kartou' });
+    db.prepare("INSERT INTO email_inbox (user_id, raw_text, parsed_json, external_id, status) VALUES (1, '', ?, '26918903543-1679014023', 'awaiting_card')").run(parsed);
+    const l = await listen(appFor(1));
+    const patch = await jpatch(l.base, '/api/household/cards/6062', { assigned_user_id: 2 });
+    l.server.close();
+    const tx = db.prepare("SELECT * FROM transactions WHERE user_id = 1").get();
+    const inbox = db.prepare("SELECT status FROM email_inbox WHERE external_id = '26918903543-1679014023'").get();
+    assert.equal(patch.status, 200);
+    assert.equal(tx.category_id, 7);
+    assert.equal(inbox.status, 'imported');
+  } finally {
+    seedRules.textOverrides.pop();
+    cleanup(db, tmp);
+  }
 });
 
 test('GET / vrací role solo/owner/member', async () => {
