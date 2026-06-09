@@ -3,6 +3,7 @@ const { parseEmailNotification } = require('../utils/emailParser');
 const { buildExternalId } = require('../utils/externalId');
 const applyRules = require('../utils/apply-rules');
 const seedRules = require('../../scripts/seed/rules');
+const loadUserRules = require('../utils/load-user-rules');
 
 const TX_INSERT = `INSERT OR IGNORE INTO transactions
     (user_id, category_id, amount, currency, date, description, note, source, external_id,
@@ -19,7 +20,8 @@ function insertTx(db, userId, tx, categoryId, extId) {
 
 // Rozhodne kategorii. account = řádek accounts ({id, account_number}) nebo null.
 function categorize(db, userId, tx, account) {
-  const catName = applyRules(tx, account ? { account_number: account.account_number } : null, seedRules);
+  const rules = { ...seedRules, textOverrides: loadUserRules(db, userId) };
+  const catName = applyRules(tx, account ? { account_number: account.account_number } : null, rules);
   const row = db.prepare('SELECT id FROM categories WHERE user_id = ? AND name = ?').get(userId, catName);
   const categoryId = row ? row.id : null;
   const confident = catName !== seedRules.fallbackCategory && categoryId != null;

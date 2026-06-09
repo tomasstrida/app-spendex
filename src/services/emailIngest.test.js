@@ -169,66 +169,71 @@ test('přiřazená karta člena → import + notifyUserId = člen', () => {
   db.prepare("INSERT INTO household_members (data_owner_id, user_id) VALUES (1, 2)").run();
   db.prepare("INSERT INTO categories (id, user_id, name) VALUES (7, 1, 'Restaurace')").run();
   db.prepare("INSERT INTO cards (data_owner_id, last4, assigned_user_id) VALUES (1, '6062', 2)").run();
-  const seedRules = require('../../scripts/seed/rules');
-  seedRules.textOverrides.push({ pattern: 'HAMR', category: 'Restaurace' });
-  try {
-    const { ingestEmail } = require('./emailIngest');
-    const r = ingestEmail(db, { userEmail: 'tom@example.com', text: CARD_TX });
-    const tx = db.prepare("SELECT * FROM transactions WHERE user_id = 1").get();
-    cleanup(db, tmp);
-    assert.equal(r.status, 'imported');
-    assert.equal(r.notifyUserId, 2);
-    assert.equal(tx.category_id, 7);
-    assert.equal(tx.place, 'HAMR - BRANIK,RESTAURA, PRAHA 4');
-  } finally {
-    seedRules.textOverrides.pop();
-  }
+  db.prepare("INSERT INTO category_rules (user_id, category_id, pattern) VALUES (1, 7, 'HAMR')").run();
+  const { ingestEmail } = require('./emailIngest');
+  const r = ingestEmail(db, { userEmail: 'tom@example.com', text: CARD_TX });
+  const tx = db.prepare("SELECT * FROM transactions WHERE user_id = 1").get();
+  cleanup(db, tmp);
+  assert.equal(r.status, 'imported');
+  assert.equal(r.notifyUserId, 2);
+  assert.equal(tx.category_id, 7);
+  assert.equal(tx.place, 'HAMR - BRANIK,RESTAURA, PRAHA 4');
 });
 
 test('solo uživatel (bez členů) → karta auto-přiřazená vlastníkovi, import, notify vlastník', () => {
   const { db, tmp } = freshDb();
   seed(db);
   db.prepare("INSERT INTO categories (id, user_id, name) VALUES (7, 1, 'Restaurace')").run();
-  const seedRules = require('../../scripts/seed/rules');
-  seedRules.textOverrides.push({ pattern: 'HAMR', category: 'Restaurace' });
-  try {
-    const { ingestEmail } = require('./emailIngest');
-    const r = ingestEmail(db, { userEmail: 'tom@example.com', text: CARD_TX });
-    const card = db.prepare("SELECT * FROM cards WHERE data_owner_id = 1 AND last4 = '6062'").get();
-    cleanup(db, tmp);
-    assert.equal(r.status, 'imported');
-    assert.equal(r.notifyUserId, 1);
-    assert.equal(card.assigned_user_id, 1);
-  } finally {
-    seedRules.textOverrides.pop();
-  }
+  db.prepare("INSERT INTO category_rules (user_id, category_id, pattern) VALUES (1, 7, 'HAMR')").run();
+  const { ingestEmail } = require('./emailIngest');
+  const r = ingestEmail(db, { userEmail: 'tom@example.com', text: CARD_TX });
+  const card = db.prepare("SELECT * FROM cards WHERE data_owner_id = 1 AND last4 = '6062'").get();
+  cleanup(db, tmp);
+  assert.equal(r.status, 'imported');
+  assert.equal(r.notifyUserId, 1);
+  assert.equal(card.assigned_user_id, 1);
 });
 
 test('releaseHeldCard: jistá kategorie → import transakce + řádek imported, idempotentní', () => {
   const { db, tmp } = freshDb();
   seed(db);
   db.prepare("INSERT INTO categories (id, user_id, name) VALUES (7, 1, 'Restaurace')").run();
+  db.prepare("INSERT INTO category_rules (user_id, category_id, pattern) VALUES (1, 7, 'HAMR')").run();
   const parsed = JSON.stringify({ amount: -482, currency: 'CZK', date: '2026-06-08', description: '', note: '', place: 'HAMR - BRANIK', card_last4: '6062', account_id: 10, tx_type: 'Platba kartou' });
   db.prepare("INSERT INTO email_inbox (user_id, raw_text, parsed_json, external_id, status) VALUES (1, '', ?, '26918903543-1679014023', 'awaiting_card')").run(parsed);
-  const seedRules = require('../../scripts/seed/rules');
-  seedRules.textOverrides.push({ pattern: 'HAMR', category: 'Restaurace' });
-  try {
-    const { releaseHeldCard } = require('./emailIngest');
-    const n1 = releaseHeldCard(db, 1, '6062');
-    const n2 = releaseHeldCard(db, 1, '6062'); // druhý běh už nic
-    const tx = db.prepare("SELECT * FROM transactions WHERE user_id = 1").get();
-    const txCount = db.prepare("SELECT COUNT(*) c FROM transactions").get();
-    const inbox = db.prepare("SELECT status FROM email_inbox WHERE external_id = '26918903543-1679014023'").get();
-    assert.equal(n1, 1);
-    assert.equal(n2, 0);
-    assert.equal(txCount.c, 1);
-    assert.equal(tx.category_id, 7);
-    assert.equal(tx.place, 'HAMR - BRANIK');
-    assert.equal(inbox.status, 'imported');
-  } finally {
-    seedRules.textOverrides.pop();
-    cleanup(db, tmp);
-  }
+  const { releaseHeldCard } = require('./emailIngest');
+  const n1 = releaseHeldCard(db, 1, '6062');
+  const n2 = releaseHeldCard(db, 1, '6062'); // druhý běh už nic
+  const tx = db.prepare("SELECT * FROM transactions WHERE user_id = 1").get();
+  const txCount = db.prepare("SELECT COUNT(*) c FROM transactions").get();
+  const inbox = db.prepare("SELECT status FROM email_inbox WHERE external_id = '26918903543-1679014023'").get();
+  cleanup(db, tmp);
+  assert.equal(n1, 1);
+  assert.equal(n2, 0);
+  assert.equal(txCount.c, 1);
+  assert.equal(tx.category_id, 7);
+  assert.equal(tx.place, 'HAMR - BRANIK');
+  assert.equal(inbox.status, 'imported');
+});
+
+test('DB textové pravidlo (category_rules) kategorizuje platbu kartou → imported se správnou kategorií', () => {
+  const { db, tmp } = freshDb();
+  seed(db);
+  // Solo uživatel (žádný household_members) → karta se auto-přiřadí vlastníkovi
+  const catResult = db.prepare("INSERT INTO categories (user_id, name) VALUES (1, 'Restaurace a kávičky')").run();
+  const categoryId = catResult.lastInsertRowid;
+  db.prepare("INSERT INTO category_rules (user_id, category_id, pattern) VALUES (1, ?, 'ZIZKAVARNA')").run(categoryId);
+  const text = `zůstatek na účtu Společný číslo 1679014023/3030 se snížil o částku 89,00 CZK. Dostupný zůstatek k 09.06.2026 v 10:30 je 3 000,00 CZK.
+Platba kartou (nezaúčtováno) v ZIZKAVARNA, PRAHA, 10
+Karta: 516844******6062
+Datum provedení: 09.06.2026
+Kód transakce: 99887766554`;
+  const { ingestEmail } = require('./emailIngest');
+  const r = ingestEmail(db, { userEmail: 'tom@example.com', text });
+  const tx = db.prepare("SELECT * FROM transactions WHERE user_id = 1").get();
+  cleanup(db, tmp);
+  assert.equal(r.status, 'imported');
+  assert.equal(tx.category_id, categoryId, 'DB pravidlo ZIZKAVARNA musí přiřadit kategorii Restaurace a kávičky');
 });
 
 test('releaseHeldCard: nejistá kategorie → řádek pending se suggested_category_id (fallback)', () => {
