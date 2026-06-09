@@ -186,11 +186,19 @@ function AccountSelector({ accounts, selectedId, detectedIds, onSelect, onCreate
   );
 }
 
+const AV_COLORS = ['#6366f1', '#a855f7', '#3b82f6', '#f97316', '#14b8a6', '#ec4899'];
+function ownerColor(id) { return AV_COLORS[(id || 0) % AV_COLORS.length]; }
+function orderedCats(cats, suggestedId) {
+  if (!suggestedId) return cats;
+  const s = cats.find(c => c.id === suggestedId);
+  if (!s) return cats;
+  return [s, ...cats.filter(c => c.id !== suggestedId)];
+}
+
 function EmailInbox() {
   const [items, setItems] = useState([]);
   const [cats, setCats] = useState([]);
   const [busy, setBusy] = useState(null);
-  const [selectedCats, setSelectedCats] = useState({});
 
   const load = useCallback(async () => {
     const [ri, rc] = await Promise.all([
@@ -239,30 +247,44 @@ function EmailInbox() {
 
       {pending.map(item => {
         let tx = {};
-        try { tx = item.parsed_json ? JSON.parse(item.parsed_json) : {}; } catch { /* poškozený JSON v parsed_json */ }
+        try { tx = item.parsed_json ? JSON.parse(item.parsed_json) : {}; } catch { /* poškozený JSON */ }
         return (
-          <div key={item.id} className="card" style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <div style={{ flex: '1 1 200px', minWidth: 0 }}>
-              <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tx.description || '—'}</div>
-              <div className="text-muted" style={{ fontSize: 12 }}>{tx.date} {tx.tx_time || ''}</div>
+          <div key={item.id} className="card review-item">
+            <div className="review-head">
+              <div className="review-merch">{tx.description || '—'}</div>
+              <div className="review-amt">{formatCurrency(tx.amount)}</div>
             </div>
-            <div style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{formatCurrency(tx.amount)}</div>
-            <select
-              value={selectedCats[item.id] ?? (item.suggested_category_id || '')}
-              onChange={e => setSelectedCats(prev => ({ ...prev, [item.id]: e.target.value }))}
-              style={{ flex: '0 1 180px' }}
-            >
-              <option value="">— kategorie —</option>
-              {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            <button className="btn btn-primary btn-sm" disabled={busy === item.id}
-              onClick={() => approve(item, selectedCats[item.id] ?? item.suggested_category_id ?? '')}>
-              <Check size={14} /> Zařadit
-            </button>
-            <button className="btn btn-ghost btn-icon" disabled={busy === item.id}
-              onClick={() => remove(item)} title="Smazat">
-              <Trash2 size={14} />
-            </button>
+            <div className="review-sub">
+              <span>{tx.date} {tx.tx_time || ''}</span>
+              {item.card_owner_name && (
+                <span className="who">
+                  <span className="who-av" style={{ background: ownerColor(item.card_owner_id) }}>
+                    {item.card_owner_name.charAt(0).toUpperCase()}
+                  </span>
+                  {item.card_owner_name}
+                </span>
+              )}
+            </div>
+            <div className="review-tiles">
+              <div className="review-grid">
+                {orderedCats(cats, item.suggested_category_id).map(c => (
+                  <button key={c.id}
+                    className={`cat-tile${c.id === item.suggested_category_id ? ' suggested' : ''}`}
+                    disabled={busy === item.id}
+                    onClick={() => approve(item, c.id)}>
+                    <span className="cat-dot" style={{ background: c.color }} />
+                    <span className="cat-name">{c.name}</span>
+                    {c.id === item.suggested_category_id && <span className="cat-sug">NAVRŽENO</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="review-actions">
+              <button className="btn btn-ghost btn-icon" disabled={busy === item.id}
+                onClick={() => remove(item)} title="Smazat">
+                <Trash2 size={14} />
+              </button>
+            </div>
           </div>
         );
       })}
