@@ -120,20 +120,36 @@ input, button, select, textarea { font: inherit; }
 .cat-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cat-sug { font-size: 10px; color: #a5b4fc; font-weight: 700; margin-left: auto; flex: none; }
 
+/* Ikona kategorie = glyf v barevném kruhu (sdílená komponenta CategoryIcon) */
+.cat-glyph { display: inline-flex; align-items: center; justify-content: center;
+             border-radius: 50%; flex: none; }
+
 /* Ikonový picker kategorií v review frontě – kompaktní mřížka bez scrollu */
-.review-icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+.review-icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
                 gap: 8px; margin-top: 10px; }
-.cat-icon-tile { position: relative; aspect-ratio: 1 / 1; padding: 0; overflow: hidden;
-                 background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius);
-                 cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.cat-icon-tile { position: relative; padding: 8px 4px; background: var(--bg3);
+                 border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer;
+                 display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .cat-icon-tile:disabled { opacity: .5; cursor: default; }
 .cat-icon-tile.suggested { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(99,102,241,.45) inset; }
-.cat-icon-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.cat-icon-tile .cat-icon-ph { width: 100%; height: 100%; border-radius: 0; }
-.cat-icon-tile.suggested::after { content: ''; position: absolute; top: 4px; right: 4px;
-                 width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
-.cat-icon-ph { display: flex; align-items: center; justify-content: center;
-               color: #fff; font-weight: 700; font-size: 20px; }
+.cat-icon-tile.suggested::after { content: ''; position: absolute; top: 5px; right: 5px;
+                 width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.cat-icon-label { font-size: 11px; line-height: 1.2; color: var(--text2); text-align: center;
+                  width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Modal výběru ikony kategorie */
+.icon-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 50;
+                      display: flex; align-items: center; justify-content: center; padding: 16px; }
+.icon-modal { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+              width: 100%; max-width: 420px; max-height: 85vh; display: flex; flex-direction: column; padding: 16px; }
+.icon-modal-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.icon-modal-colors { margin-bottom: 12px; }
+.icon-modal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+                   gap: 6px; overflow-y: auto; padding: 2px; }
+.icon-cell { aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center;
+             background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+.icon-cell.selected { box-shadow: 0 0 0 2px rgba(99,102,241,.4); }
+.icon-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 
 .review-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
 .review-cardpick { margin-top: 10px; }

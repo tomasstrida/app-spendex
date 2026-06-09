@@ -1,7 +1,7 @@
 # Ikonový picker kategorií v review frontě
 
 **Datum:** 2026-06-09
-**Stav:** návrh ke schválení
+**Stav:** REVIDOVÁNO — upload nahrazen katalogem (viz Revize na konci)
 
 ## Cíl
 
@@ -71,3 +71,23 @@ kompaktní zalamovanou mřížku (na desktopu = 3 řady).
 - Picker v Transakcích a v card-owner výběru.
 - Sdílení ikon mezi členy domácnosti (každý si nahraje k vlastním kategoriím).
 - Server-side resize (řeší klient přes canvas).
+
+## Revize (2026-06-09) — upload → katalog ikon
+
+Po prvním nasazení byl per-kategorie **upload souboru** vyhodnocen jako
+nepřehledný. Nahrazeno **katalogem vektorových ikon**:
+
+- Katalog = kurátorovaný set ~48 lucide ikon (`client/src/categoryIcons.jsx`,
+  `CATALOG` + komponenta `CategoryIcon` = glyf v barevném kruhu).
+- Ikona kategorie se ukládá do **stávajícího** sloupce `categories.icon`
+  (lucide klíč), barva do `categories.color` — žádné soubory, žádné servírování.
+- Kategorie: klik na ikonu → **modal** s mřížkou katalogu + výběr barvy →
+  `PATCH /api/categories/:id { icon, color }`.
+- Review fronta: `CategoryIcon` v dlaždici + malý popisek (mnoho kategorií
+  startuje s default ikonou `tag`, popisek drží mřížku použitelnou).
+- Sdílení v domácnosti funguje automaticky (jedna sada kategorií = jeden
+  data owner).
+
+**Zrušeno z první verze:** upload endpointy `POST/GET/DELETE /:id/icon`,
+`src/utils/catIcons.js` + test, klientský canvas resize. Sloupec
+`categories.icon_image` zůstává v DB jako dormantní (nepoužívá se).

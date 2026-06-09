@@ -1,10 +1,8 @@
 const express = require('express');
-const fs = require('fs');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
-const { ensureDir, iconPath, decodeImage } = require('../utils/catIcons');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
@@ -110,51 +108,8 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
 router.delete('/:id', requireAuth, writeLimiter, (req, res) => {
   const cat = db.prepare('SELECT * FROM categories WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
   if (!cat) return res.status(404).json({ error: 'Kategorie nenalezena.' });
-  if (cat.icon_image) { try { fs.unlinkSync(iconPath(cat.icon_image)); } catch { /* soubor chybí */ } }
   db.prepare('DELETE FROM categories WHERE id = ?').run(cat.id);
   res.json({ ok: true });
-});
-
-function ownCat(req) {
-  return db.prepare('SELECT * FROM categories WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
-}
-
-// POST /api/categories/:id/icon  – nahrání vlastní ikony (base64 data URL)
-router.post('/:id/icon', requireAuth, writeLimiter, (req, res) => {
-  const cat = ownCat(req);
-  if (!cat) return res.status(404).json({ error: 'Kategorie nenalezena.' });
-  const img = decodeImage(req.body.image);
-  if (!img) return res.status(400).json({ error: 'Neplatný obrázek (jen JPEG/PNG).' });
-  if (img.buffer.length > 200 * 1024) return res.status(400).json({ error: 'Ikona je příliš velká (max 200 KB).' });
-
-  ensureDir();
-  const filename = `${cat.id}-${Date.now()}.${img.ext}`;
-  fs.writeFileSync(iconPath(filename), img.buffer);
-  if (cat.icon_image && cat.icon_image !== filename) {
-    try { fs.unlinkSync(iconPath(cat.icon_image)); } catch { /* předchozí soubor chybí */ }
-  }
-  db.prepare('UPDATE categories SET icon_image = ? WHERE id = ?').run(filename, cat.id);
-  res.json(db.prepare('SELECT * FROM categories WHERE id = ?').get(cat.id));
-});
-
-// DELETE /api/categories/:id/icon  – odebrání vlastní ikony
-router.delete('/:id/icon', requireAuth, writeLimiter, (req, res) => {
-  const cat = ownCat(req);
-  if (!cat) return res.status(404).json({ error: 'Kategorie nenalezena.' });
-  if (cat.icon_image) { try { fs.unlinkSync(iconPath(cat.icon_image)); } catch { /* soubor chybí */ } }
-  db.prepare('UPDATE categories SET icon_image = NULL WHERE id = ?').run(cat.id);
-  res.json(db.prepare('SELECT * FROM categories WHERE id = ?').get(cat.id));
-});
-
-// GET /api/categories/:id/icon  – servíruje ikonu z volume
-router.get('/:id/icon', requireAuth, (req, res) => {
-  const cat = ownCat(req);
-  if (!cat || !cat.icon_image) return res.status(404).end();
-  const p = iconPath(cat.icon_image);
-  if (!fs.existsSync(p)) return res.status(404).end();
-  res.set('Cache-Control', 'private, max-age=31536000, immutable');
-  res.type(cat.icon_image.endsWith('.png') ? 'image/png' : 'image/jpeg');
-  res.send(fs.readFileSync(p));
 });
 
 module.exports = router;

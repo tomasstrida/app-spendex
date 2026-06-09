@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Upload, Check, AlertCircle, Plus, Pencil, Trash2, X, Download, Inbox, Mail } from 'lucide-react';
 import Layout from '../components/Layout';
 import { formatCurrency } from '../i18n';
+import { CategoryIcon } from '../categoryIcons';
 
 const STEP = { UPLOAD: 'upload', MAPPING: 'mapping', DONE: 'done' };
 
@@ -326,9 +327,8 @@ function EmailInbox() {
                   disabled={busy === item.id}
                   title={c.name}
                   onClick={() => approve(item, c.id)}>
-                  {c.icon_image
-                    ? <img src={`/api/categories/${c.id}/icon?v=${encodeURIComponent(c.icon_image)}`} alt={c.name} />
-                    : <span className="cat-icon-ph" style={{ background: c.color }}>{(c.name || '?').charAt(0).toUpperCase()}</span>}
+                  <CategoryIcon icon={c.icon} color={c.color} size={22} />
+                  <span className="cat-icon-label">{c.name}</span>
                 </button>
               ))}
             </div>

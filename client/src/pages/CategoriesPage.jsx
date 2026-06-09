@@ -1,73 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Pencil, Trash2, X, Check } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t } from '../i18n';
-
-// Zmenší vybraný obrázek na čtvercovou ikonu (center-crop cover) → JPEG data URL.
-// Drží ikonu malou a čtvercovou bez ohledu na zdroj; server jen validuje a uloží.
-function fileToIcon(file, size = 128) {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const canvas = document.createElement('canvas');
-      canvas.width = size;
-      canvas.height = size;
-      const ctx = canvas.getContext('2d');
-      const scale = Math.max(size / img.width, size / img.height);
-      const w = img.width * scale, h = img.height * scale;
-      ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
-      resolve(canvas.toDataURL('image/jpeg', 0.85));
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('load')); };
-    img.src = url;
-  });
-}
-
-function IconUpload({ cat, onUpdated }) {
-  const inputRef = useRef(null);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-
-  async function onPick(e) {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    setBusy(true); setErr('');
-    try {
-      const image = await fileToIcon(file);
-      const r = await fetch(`/api/categories/${cat.id}/icon`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image }),
-      });
-      const d = await r.json();
-      if (!r.ok) { setErr(d.error || 'Chyba.'); return; }
-      onUpdated(d);
-    } catch { setErr('Nepodařilo se zpracovat obrázek.'); }
-    finally { setBusy(false); }
-  }
-
-  async function remove(e) {
-    e.stopPropagation();
-    const r = await fetch(`/api/categories/${cat.id}/icon`, { method: 'DELETE' });
-    if (r.ok) onUpdated(await r.json());
-  }
-
-  return (
-    <span className="cat-icon-up" title={err || 'Nahrát ikonu'}>
-      <button type="button" className="cat-icon-thumb" disabled={busy}
-        onClick={() => inputRef.current?.click()}>
-        {cat.icon_image
-          ? <img src={`/api/categories/${cat.id}/icon?v=${encodeURIComponent(cat.icon_image)}`} alt="" />
-          : <span className="cat-icon-ph" style={{ background: cat.color }}>{(cat.name || '?').charAt(0).toUpperCase()}</span>}
-      </button>
-      {cat.icon_image && <button type="button" className="cat-icon-rm" onClick={remove} title="Odebrat ikonu">×</button>}
-      <input ref={inputRef} type="file" accept="image/jpeg,image/png" style={{ display: 'none' }} onChange={onPick} />
-    </span>
-  );
-}
+import { CATALOG, CategoryIcon } from '../categoryIcons';
 
 const COLORS = [
   '#6366f1','#8b5cf6','#a855f7','#ec4899','#ef4444',
@@ -88,6 +23,72 @@ function ColorPicker({ value, onChange }) {
         />
       ))}
     </div>
+  );
+}
+
+function IconPicker({ cat, onUpdated }) {
+  const [open, setOpen] = useState(false);
+  const [icon, setIcon] = useState(cat.icon || 'Tag');
+  const [color, setColor] = useState(cat.color || COLORS[0]);
+  const [saving, setSaving] = useState(false);
+
+  function start() {
+    setIcon(cat.icon && cat.icon !== 'tag' ? cat.icon : 'Tag');
+    setColor(cat.color || COLORS[0]);
+    setOpen(true);
+  }
+
+  async function save() {
+    setSaving(true);
+    const r = await fetch(`/api/categories/${cat.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ icon, color }),
+    });
+    setSaving(false);
+    if (r.ok) { onUpdated(await r.json()); setOpen(false); }
+  }
+
+  return (
+    <>
+      <button type="button" className="cat-icon-btn" onClick={start} title="Vybrat ikonu">
+        <CategoryIcon icon={cat.icon} color={cat.color} size={15} />
+      </button>
+      {open && (
+        <div className="icon-modal-overlay" onClick={() => setOpen(false)}>
+          <div className="icon-modal" onClick={e => e.stopPropagation()}>
+            <div className="icon-modal-head">
+              <CategoryIcon icon={icon} color={color} size={18} />
+              <strong style={{ flex: 1 }}>{cat.name}</strong>
+              <button className="btn btn-ghost btn-icon" onClick={() => setOpen(false)}><X size={16} /></button>
+            </div>
+            <div className="color-picker icon-modal-colors">
+              {COLORS.map(c => (
+                <button key={c} type="button"
+                  className={`color-swatch${color === c ? ' selected' : ''}`}
+                  style={{ background: c }} onClick={() => setColor(c)} />
+              ))}
+            </div>
+            <div className="icon-modal-grid">
+              {CATALOG.map(({ key, label, Icon }) => (
+                <button key={key} type="button" title={label}
+                  className={`icon-cell${icon === key ? ' selected' : ''}`}
+                  style={icon === key ? { background: color, borderColor: color } : undefined}
+                  onClick={() => setIcon(key)}>
+                  <Icon size={20} color={icon === key ? '#fff' : 'var(--text)'} />
+                </button>
+              ))}
+            </div>
+            <div className="icon-modal-actions">
+              <button className="btn btn-ghost" onClick={() => setOpen(false)}>Zrušit</button>
+              <button className="btn btn-primary" onClick={save} disabled={saving}>
+                <Check size={15} /> {saving ? '…' : 'Uložit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -262,7 +263,7 @@ export default function CategoriesPage() {
     ) : (
       <div key={cat.id} className="category-row">
         <div className="category-row-info">
-          <IconUpload cat={cat} onUpdated={updateCat} />
+          <IconPicker cat={cat} onUpdated={updateCat} />
           <span className="category-row-name">{cat.name}</span>
           <span className={`cat-type-badge cat-type-badge--${cat.type || 1}`}>
             {TYPE_OPTIONS.find(o => o.value === (cat.type || 1))?.label}
