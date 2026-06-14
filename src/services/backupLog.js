@@ -35,4 +35,30 @@ function hasRecentSuccess(db, maxAgeHours) {
   return Boolean(row);
 }
 
-module.exports = { recordBackup, hasRecentSuccess };
+/**
+ * Posledních N záznamů z backup_log, nejnovější první.
+ * @param {import('better-sqlite3').Database} db
+ * @param {number} limit
+ * @returns {Array<{status:string, object_key:string|null, size_bytes:number|null, pruned_count:number|null, error:string|null, created_at:string}>}
+ */
+function listRecent(db, limit = 20) {
+  const n = Number.isFinite(Number(limit)) && Number(limit) > 0 ? Math.min(Number(limit), 100) : 20;
+  return db.prepare(
+    `SELECT status, object_key, size_bytes, pruned_count, error, created_at
+     FROM backup_log ORDER BY created_at DESC LIMIT ?`
+  ).all(n);
+}
+
+/**
+ * Čas posledního úspěšného zálohování (UTC string) nebo null.
+ * @param {import('better-sqlite3').Database} db
+ * @returns {string|null}
+ */
+function lastSuccessAt(db) {
+  const row = db.prepare(
+    `SELECT created_at FROM backup_log WHERE status = 'success' ORDER BY created_at DESC LIMIT 1`
+  ).get();
+  return row ? row.created_at : null;
+}
+
+module.exports = { recordBackup, hasRecentSuccess, listRecent, lastSuccessAt };

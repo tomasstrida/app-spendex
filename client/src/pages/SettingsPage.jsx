@@ -77,6 +77,78 @@ function MappingsSection({ categories }) {
   );
 }
 
+function fmtUtc(s) {
+  if (!s) return '';
+  const d = new Date(`${s.replace(' ', 'T')}Z`);
+  return d.toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function fmtSize(bytes) {
+  if (bytes == null) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} kB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function BackupSection() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/backup/log', { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="text-muted" style={{ fontSize: 13 }}>{t.settings.backup_loading}</div>;
+  if (!data) return <div className="text-muted" style={{ fontSize: 13 }}>{t.common.error}</div>;
+
+  let banner;
+  if (!data.configured) {
+    banner = <div className="form-hint" style={{ marginBottom: 16 }}>⚪ {t.settings.backup_unconfigured}</div>;
+  } else if (data.healthy === true) {
+    banner = <div className="alert alert-success" style={{ fontSize: 13, marginBottom: 16 }}>
+      ✅ {t.settings.backup_healthy.replace('{when}', fmtUtc(data.last_success_at))}
+    </div>;
+  } else {
+    banner = <div className="alert alert-error" style={{ fontSize: 13, marginBottom: 16 }}>
+      ⚠️ {data.last_success_at
+        ? t.settings.backup_stale.replace('{h}', data.max_age_hours).replace('{when}', fmtUtc(data.last_success_at))
+        : t.settings.backup_none}
+    </div>;
+  }
+
+  return (
+    <div>
+      {banner}
+      {data.entries.length > 0 && (
+        <div className="mapping-table">
+          <div className="mapping-header" style={{ gridTemplateColumns: '1.4fr 0.8fr 0.9fr 1fr' }}>
+            <span>{t.settings.backup_col_when}</span>
+            <span>{t.settings.backup_col_status}</span>
+            <span>{t.settings.backup_col_size}</span>
+            <span>{t.settings.backup_col_pruned}</span>
+          </div>
+          {data.entries.map((e, i) => (
+            <div key={i} className="mapping-row" style={{ gridTemplateColumns: '1.4fr 0.8fr 0.9fr 1fr', alignItems: 'start' }}>
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtUtc(e.created_at)}</span>
+              <span style={{ color: e.status === 'success' ? '#2e7d32' : '#c0392b', fontWeight: 500 }}>
+                {e.status === 'success' ? t.settings.backup_status_success : t.settings.backup_status_failure}
+                {e.status === 'failure' && e.error && (
+                  <span style={{ display: 'block', color: '#c0392b', fontWeight: 400, fontSize: 12 }}>{e.error}</span>
+                )}
+              </span>
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtSize(e.size_bytes)}</span>
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{e.pruned_count ?? '—'}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const [billingDay, setBillingDay] = useState('');
   const [preview, setPreview] = useState(null);
@@ -418,6 +490,11 @@ export default function SettingsPage() {
               </ul>
             )}
           </div>
+        </div>
+
+        <div className="card">
+          <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>{t.settings.backup_title}</h2>
+          <BackupSection />
         </div>
       </div>
     </Layout>

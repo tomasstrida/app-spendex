@@ -70,3 +70,28 @@ test('hasRecentSuccess: false když je jen failure řádek', () => {
   cleanup(db, tmp);
   assert.equal(ok, false);
 });
+
+test('listRecent vrací záznamy nejnovější první a respektuje limit', () => {
+  const { db, tmp } = freshDb();
+  const { recordBackup, listRecent } = require('./backupLog');
+  db.prepare("INSERT INTO backup_log (status, object_key, created_at) VALUES ('success', 'old', datetime('now', '-2 days'))").run();
+  recordBackup(db, { status: 'success', res: { key: 'new', sizeBytes: 5, prunedCount: 1 } });
+  const all = listRecent(db, 20);
+  const limited = listRecent(db, 1);
+  cleanup(db, tmp);
+  assert.equal(all.length, 2);
+  assert.equal(all[0].object_key, 'new'); // nejnovější první
+  assert.equal(limited.length, 1);
+  assert.equal(limited[0].object_key, 'new');
+});
+
+test('lastSuccessAt ignoruje failure a vrací poslední success', () => {
+  const { db, tmp } = freshDb();
+  const { recordBackup, lastSuccessAt } = require('./backupLog');
+  assert.equal(lastSuccessAt(db), null);
+  recordBackup(db, { status: 'success', res: { key: 'k', sizeBytes: 1, prunedCount: 0 } });
+  recordBackup(db, { status: 'failure', err: new Error('later fail') });
+  const last = lastSuccessAt(db);
+  cleanup(db, tmp);
+  assert.ok(last); // existuje úspěch i přes pozdější selhání
+});
