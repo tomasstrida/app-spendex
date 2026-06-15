@@ -466,6 +466,17 @@
   font-size: 12px;
 }
 
+/* Souhrnný řádek všech provozních budgetů */
+.budget-summary {
+  margin-top: 8px;
+  padding-top: 20px;
+  border: none;
+  border-top: 2px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+.budget-summary .budget-item-name { font-size: 15px; }
+
 /* ── Report / Schůzka ── */
 .report-layout {
   display: flex;

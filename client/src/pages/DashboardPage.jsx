@@ -7,7 +7,7 @@ import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
 
 // ── Teploměr Typ 1 ────────────────────────────────────────────────────────────
 
-function Thermometer({ spent, amount, periodStart, periodEnd, color }) {
+function Thermometer({ spent, amount, periodStart, periodEnd, color, showProjection = true }) {
   const spentPct = amount > 0 ? Math.min((spent / amount) * 100, 100) : 0;
   const over = spent > amount;
   const today = new Date();
@@ -26,7 +26,7 @@ function Thermometer({ spent, amount, periodStart, periodEnd, color }) {
         <div className={`budget-bar-fill${over ? ' over' : ''}`} style={{ width: `${spentPct}%`, background: fillColor }} />
         {dayPct > 0 && dayPct < 100 && <div className="budget-bar-day-marker" style={{ left: `${dayPct}%` }} />}
       </div>
-      {!periodOver && projection > 0 && projection > amount && (
+      {showProjection && !periodOver && projection > 0 && projection > amount && (
         <div className="budget-projection">
           projekce: <strong>{formatCurrency(projection)}</strong>
           <span className="text-danger"> (+{formatCurrency(projection - amount)})</span>
@@ -62,6 +62,54 @@ function BudgetBar({ budget, period, periodStart, periodEnd }) {
           : <span className="text-muted">{formatCurrency(remaining)} {t.dashboard.remaining}</span>}
         <span className="text-muted">{Math.round(pct)} %</span>
       </div>
+    </div>
+  );
+}
+
+// ── Souhrn všech provozních budgetů ─────────────────────────────────────────────
+
+function BudgetSummary({ budgets, periodStart, periodEnd }) {
+  const totalSpent = budgets.reduce((s, b) => s + b.spent, 0);
+  const totalAmount = budgets.reduce((s, b) => s + b.amount, 0);
+  if (totalAmount <= 0) return null;
+
+  const over = totalSpent > totalAmount;
+  const remaining = totalAmount - totalSpent;
+  const pct = (totalSpent / totalAmount) * 100;
+
+  const today = new Date();
+  const start = new Date(periodStart + 'T00:00:00');
+  const end = new Date(periodEnd + 'T00:00:00');
+  const periodOver = today > end;
+  const totalDays = Math.round((end - start) / 86400000) + 1;
+  const daysPassed = Math.max(0, Math.min(Math.round((today - start) / 86400000), totalDays));
+  const projection = daysPassed > 0 ? Math.round((totalSpent / daysPassed) * totalDays) : 0;
+  const projOver = projection - totalAmount;
+
+  return (
+    <div className="budget-item budget-summary">
+      <div className="budget-item-header">
+        <div className="budget-item-name"><strong>Celkem za období</strong></div>
+        <div className="budget-item-amounts">
+          <span className={over ? 'text-danger' : ''}>{formatCurrency(totalSpent)}</span>
+          <span className="text-muted"> / {formatCurrency(totalAmount)}</span>
+        </div>
+      </div>
+      <Thermometer spent={totalSpent} amount={totalAmount} periodStart={periodStart} periodEnd={periodEnd} showProjection={false} />
+      <div className="budget-item-footer">
+        {over
+          ? <span className="text-danger">{formatCurrency(Math.abs(remaining))} {t.dashboard.over}</span>
+          : <span className="text-muted">{formatCurrency(remaining)} {t.dashboard.remaining}</span>}
+        <span className="text-muted">{Math.round(pct)} %</span>
+      </div>
+      {!periodOver && projection > 0 && (
+        <div className="budget-projection">
+          projekce: <strong>{formatCurrency(projection)}</strong>
+          {projOver > 0
+            ? <span className="text-danger"> (+{formatCurrency(projOver)})</span>
+            : <span className="text-muted"> ({formatCurrency(projOver)})</span>}
+        </div>
+      )}
     </div>
   );
 }
@@ -166,6 +214,7 @@ export default function DashboardPage() {
                   <BudgetBar key={b.category_id} budget={b} period={period}
                     periodStart={periodStart} periodEnd={periodEnd} />
                 ))}
+                <BudgetSummary budgets={budgets} periodStart={periodStart} periodEnd={periodEnd} />
               </div>
             )}
           </section>
