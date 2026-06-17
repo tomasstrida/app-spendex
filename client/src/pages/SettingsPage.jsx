@@ -226,6 +226,36 @@ function AllowlistSection() {
   );
 }
 
+function UsersSection() {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/admin/users', { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { setUsers(d.users || []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="text-muted" style={{ fontSize: 13 }}>Načítám…</div>;
+
+  return (
+    <div>
+      <p className="form-hint" style={{ marginBottom: 12 }}>
+        Registrovaní uživatelé aplikace ({users.length}).
+      </p>
+      <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {users.map(u => (
+          <li key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+            <span>{u.email}</span>
+            {!!u.is_admin && <span style={{ fontSize: 11, color: '#6366f1', fontWeight: 600 }}>admin</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const [billingDay, setBillingDay] = useState('');
   const { user } = useAuth();
@@ -579,6 +609,13 @@ export default function SettingsPage() {
           <div className="card">
             <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Přístup do aplikace</h2>
             <AllowlistSection />
+          </div>
+        )}
+
+        {user?.is_admin && (
+          <div className="card">
+            <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Uživatelé aplikace</h2>
+            <UsersSection />
           </div>
         )}
       </div>

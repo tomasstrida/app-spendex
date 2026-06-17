@@ -20,6 +20,14 @@ router.get('/allowlist', requireAdmin, (req, res) => {
   res.json({ entries });
 });
 
+// GET /api/admin/users — seznam všech registrovaných uživatelů (jen e-maily)
+router.get('/users', requireAdmin, (req, res) => {
+  const users = db.prepare(
+    'SELECT id, email, is_admin, created_at FROM users ORDER BY created_at ASC, id ASC'
+  ).all();
+  res.json({ users });
+});
+
 // POST /api/admin/allowlist { email } — přidá e-mail na allowlist
 router.post('/allowlist', requireAdmin, writeLimiter, (req, res) => {
   const email = normalizeEmail(req.body?.email);
