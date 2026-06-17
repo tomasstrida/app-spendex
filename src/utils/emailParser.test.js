@@ -53,6 +53,21 @@ Kód transakce: 160614737162`;
   assert.equal(tx.note, '15 back');
 });
 
+// Inkaso/SIPO: číslo účtu s předčíslím "19-2235210247/0800" (T-Mobile).
+// Regrese: bez podpory předčíslí zůstala protistrana i description prázdné a fixní
+// platba se nikdy nespárovala (matchuje se jen přes description LIKE).
+test('odchozí úhrada na účet s předčíslím: vytáhne protistranu i protiúčet', () => {
+  const tx = parseEmailNotification(`zůstatek na účtu Společný číslo 1679014023/3030 se snížil o částku 2 581,96 CZK. Dostupný zůstatek k 15.06.2026 v 14:26 je 1 000,00 CZK.
+
+Odchozí úhrada na účet T-Mobile Czech Republic a.s. číslo 19-2235210247/0800
+Částka: 2 581,96 CZK
+Datum zaúčtování: 15.06.2026
+Zpráva pro příjemce: T-Mobile
+Kód transakce: 160610999999`);
+  assert.equal(tx.description, 'T-Mobile Czech Republic a.s.');
+  assert.equal(tx.counterparty_account, '19-2235210247/0800');
+});
+
 test('bez kódu transakce → null (unparsed)', () => {
   assert.equal(parseEmailNotification('nějaký marketingový e-mail bez transakce'), null);
 });
