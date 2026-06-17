@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Trash2, ChevronDown } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatPeriod } from '../i18n';
 import { pushSupported, isStandalone, enablePush, disablePush, currentSubscription, sendTestPush } from '../push';
@@ -226,6 +226,31 @@ function AllowlistSection() {
   );
 }
 
+function CollapsibleCard({ title, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="card">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        style={{
+          background: 'none', border: 'none', padding: 0, margin: 0, cursor: 'pointer',
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          textAlign: 'left', color: 'inherit',
+        }}
+      >
+        <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>{title}</h2>
+        <ChevronDown
+          size={18}
+          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s', opacity: 0.6, flexShrink: 0 }}
+        />
+      </button>
+      {open && <div style={{ marginTop: 16 }}>{children}</div>}
+    </div>
+  );
+}
+
 function UsersSection() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -413,8 +438,7 @@ export default function SettingsPage() {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 560 }}>
-        <div className="card">
-          <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 20 }}>{t.settings.billingDay}</h2>
+        <CollapsibleCard title={t.settings.billingDay} defaultOpen>
           <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div className="form-group">
               <p className="form-hint" style={{ marginBottom: 8 }}>{t.settings.billingDayHint}</p>
@@ -445,15 +469,13 @@ export default function SettingsPage() {
               </button>
             </div>
           </form>
-        </div>
+        </CollapsibleCard>
 
-        <div className="card">
-          <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Mapování kategorií Air Bank</h2>
+        <CollapsibleCard title="Mapování kategorií Air Bank">
           <MappingsSection categories={categories} />
-        </div>
+        </CollapsibleCard>
 
-        <div className="card">
-          <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>{t.settings.notifications_title}</h2>
+        <CollapsibleCard title={t.settings.notifications_title}>
 
           {pushState === 'unsupported' && !isStandalone() && /iPhone|iPad|iPod/.test(navigator.userAgent) && (
             <p className="form-hint" style={{ marginBottom: 12 }}>{t.settings.notifications_ios_hint}</p>
@@ -500,10 +522,9 @@ export default function SettingsPage() {
               </select>
             </label>
           </div>
-        </div>
+        </CollapsibleCard>
 
-        <div className="card">
-          <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>{t.settings.household_title}</h2>
+        <CollapsibleCard title={t.settings.household_title}>
 
           {household && household.role === 'member' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -598,25 +619,22 @@ export default function SettingsPage() {
               </ul>
             )}
           </div>
-        </div>
+        </CollapsibleCard>
 
-        <div className="card">
-          <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>{t.settings.backup_title}</h2>
+        <CollapsibleCard title={t.settings.backup_title}>
           <BackupSection />
-        </div>
+        </CollapsibleCard>
 
         {user?.is_admin && (
-          <div className="card">
-            <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Přístup do aplikace</h2>
+          <CollapsibleCard title="Přístup do aplikace">
             <AllowlistSection />
-          </div>
+          </CollapsibleCard>
         )}
 
         {user?.is_admin && (
-          <div className="card">
-            <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Uživatelé aplikace</h2>
+          <CollapsibleCard title="Uživatelé aplikace">
             <UsersSection />
-          </div>
+          </CollapsibleCard>
         )}
       </div>
     </Layout>
