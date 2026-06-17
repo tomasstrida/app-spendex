@@ -7,4 +7,12 @@ function requireAuth(req, res, next) {
   next();
 }
 
-module.exports = { requireAuth };
+function requireAdmin(req, res, next) {
+  if (!req.isAuthenticated()) return res.status(401).json({ error: 'Unauthorized' });
+  const db = require('../db/connection');
+  const u = db.prepare('SELECT is_admin FROM users WHERE id = ?').get(req.user.id);
+  if (!u || !u.is_admin) return res.status(403).json({ error: 'Forbidden' });
+  next();
+}
+
+module.exports = { requireAuth, requireAdmin };

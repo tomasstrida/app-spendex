@@ -24,6 +24,7 @@ export default function LoginPage() {
   const [params] = useSearchParams();
 
   const googleError = params.get('error') === 'google';
+  const notAllowed = params.get('error') === 'not_allowed';
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -60,6 +61,9 @@ export default function LoginPage() {
 
         {googleError && (
           <div className="alert alert-error">Přihlášení přes Google se nezdařilo.</div>
+        )}
+        {notAllowed && (
+          <div className="alert alert-error">Tento účet nemá povolený přístup do aplikace.</div>
         )}
 
         <a href="/auth/google" className="btn btn-ghost btn-google">

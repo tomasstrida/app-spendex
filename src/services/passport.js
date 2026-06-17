@@ -3,6 +3,7 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const LocalStrategy = require('passport-local').Strategy;
 const bcrypt = require('bcrypt');
 const db = require('../db/connection');
+const { isEmailAllowed } = require('../utils/allowlist');
 
 passport.serializeUser((user, done) => done(null, user.id));
 
@@ -50,6 +51,11 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
           db.prepare('UPDATE users SET google_id = ?, email_verified = 1 WHERE id = ?').run(googleId, user.id);
         }
         return done(null, user);
+      }
+
+      // Nový účet → jen pro povolené e-maily (allowlist / admin).
+      if (!isEmailAllowed(db, email)) {
+        return done(null, false, { message: 'Tento účet nemá povolený přístup do aplikace.' });
       }
 
       const result = db.prepare(

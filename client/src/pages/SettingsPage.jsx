@@ -3,6 +3,7 @@ import { Trash2 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatPeriod } from '../i18n';
 import { pushSupported, isStandalone, enablePush, disablePush, currentSubscription, sendTestPush } from '../push';
+import { useAuth } from '../App';
 
 function MappingsSection({ categories }) {
   const [mappings, setMappings] = useState([]);
@@ -149,8 +150,85 @@ function BackupSection() {
   );
 }
 
+function AllowlistSection() {
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState('');
+  const [msg, setMsg] = useState('');
+
+  function load() {
+    fetch('/api/admin/allowlist', { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { setEntries(d.entries || []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }
+  useEffect(() => { load(); }, []);
+
+  async function add(e) {
+    e.preventDefault();
+    setMsg('');
+    const r = await fetch('/api/admin/allowlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email }),
+    });
+    const d = await r.json();
+    if (!r.ok) { setMsg(d.error || 'Chyba.'); return; }
+    setEmail('');
+    load();
+  }
+
+  async function remove(id) {
+    setMsg('');
+    const r = await fetch(`/api/admin/allowlist/${id}`, { method: 'DELETE', credentials: 'include' });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); setMsg(d.error || 'Chyba.'); return; }
+    load();
+  }
+
+  if (loading) return <div className="text-muted" style={{ fontSize: 13 }}>Načítám…</div>;
+
+  return (
+    <div>
+      <p className="form-hint" style={{ marginBottom: 12 }}>
+        Přihlásit se a založit účet mohou jen e-maily z tohoto seznamu. Stávající účty zůstávají
+        přihlášené bez ohledu na seznam. Administrátoři mají přístup vždy.
+      </p>
+      {entries.length > 0 && (
+        <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {entries.map(e => (
+            <li key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+              <span>{e.email}</span>
+              {e.is_admin ? (
+                <span style={{ fontSize: 11, color: '#6366f1', fontWeight: 600 }}>admin</span>
+              ) : (
+                <button className="btn btn-secondary btn-icon" onClick={() => remove(e.id)} title="Odebrat">
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <form onSubmit={add} style={{ display: 'flex', gap: 8 }}>
+        <input
+          className="input"
+          type="email"
+          value={email}
+          onChange={ev => setEmail(ev.target.value)}
+          placeholder="email@příklad.cz"
+          style={{ fontSize: 13, maxWidth: 240 }}
+        />
+        <button className="btn btn-primary" type="submit" disabled={!email}>Přidat</button>
+      </form>
+      {msg && <p className="form-hint" style={{ marginTop: 8 }}>{msg}</p>}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const [billingDay, setBillingDay] = useState('');
+  const { user } = useAuth();
   const [preview, setPreview] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -496,6 +574,13 @@ export default function SettingsPage() {
           <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>{t.settings.backup_title}</h2>
           <BackupSection />
         </div>
+
+        {user?.is_admin && (
+          <div className="card">
+            <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Přístup do aplikace</h2>
+            <AllowlistSection />
+          </div>
+        )}
       </div>
     </Layout>
   );

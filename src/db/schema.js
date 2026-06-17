@@ -306,9 +306,44 @@ function initSchema() {
     'ALTER TABLE category_rules ADD COLUMN amount_min_abs REAL',
     // Vlastní ikona kategorie (název souboru na volume cat-icons/, NULL = bez ikony)
     'ALTER TABLE categories ADD COLUMN icon_image TEXT',
+    // Přístup do aplikace: admin flag + allowlist povolených e-mailů (řízeno v Nastavení)
+    'ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0',
+    `CREATE TABLE IF NOT EXISTS allowed_emails (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT UNIQUE COLLATE NOCASE NOT NULL,
+      added_by INTEGER,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
   ];
   for (const sql of migrations) {
-    try { db.exec(sql); } catch { /* sloupec/index již existuje nebo nelze aplikovat */ }
+    try { db.exec(sql); } catch { /* sloupec/index/tabulka již existuje nebo nelze aplikovat */ }
+  }
+
+  // --- Přístup do aplikace: bootstrap adminů + allowlist ---
+  // 1) Adminy autoritativně určuje ENV ADMIN_EMAILS (aditivně — nikoho nedegraduje).
+  const adminEnv = String(process.env.ADMIN_EMAILS || '')
+    .split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+  if (adminEnv.length > 0) {
+    const placeholders = adminEnv.map(() => '?').join(',');
+    db.prepare(`UPDATE users SET is_admin = 1 WHERE lower(email) IN (${placeholders})`).run(...adminEnv);
+  }
+  // 2) Fallback: pokud po seedu není ŽÁDNÝ admin, ale uživatelé existují (stávající
+  //    domácnost), označ všechny stávající uživatele jako adminy. Tím se Tom+Martin
+  //    stanou adminy bez nutnosti znát jejich e-maily; noví auto-provisioning uživatelé
+  //    už adminy nebudou (is_admin DEFAULT 0).
+  const adminCount = db.prepare('SELECT COUNT(*) AS c FROM users WHERE is_admin = 1').get().c;
+  const userCount = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
+  if (adminCount === 0 && userCount > 0) {
+    db.prepare('UPDATE users SET is_admin = 1').run();
+  }
+  // 3) Seed allowlistu: jednorázově (když je prázdná) nasyp e-maily všech stávajících
+  //    uživatelů, ať současná domácnost zůstane povolená a admin UI ji vidí.
+  const allowCount = db.prepare('SELECT COUNT(*) AS c FROM allowed_emails').get().c;
+  if (allowCount === 0) {
+    const ins = db.prepare('INSERT OR IGNORE INTO allowed_emails (email) VALUES (?)');
+    for (const u of db.prepare('SELECT email FROM users').all()) {
+      if (u.email) ins.run(u.email);
+    }
   }
 
   // Seed textových pravidel do category_rules pro uživatele, kteří ještě žádná nemají

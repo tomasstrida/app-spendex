@@ -6,6 +6,7 @@ const rateLimit = require('express-rate-limit');
 const db = require('../db/connection');
 const passport = require('../services/passport');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/email');
+const { isEmailAllowed } = require('../utils/allowlist');
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });
 const emailLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 5 });
@@ -13,10 +14,17 @@ const emailLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 5 });
 // --- Google OAuth ---
 if (process.env.GOOGLE_CLIENT_ID) {
   router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-  router.get('/google/callback',
-    passport.authenticate('google', { failureRedirect: '/login?error=google' }),
-    (req, res) => res.redirect('/')
-  );
+  router.get('/google/callback', (req, res, next) => {
+    passport.authenticate('google', (err, user, info) => {
+      if (err) return next(err);
+      if (!user) {
+        // info.message nastavuje strategie u nepovoleného e-mailu (allowlist)
+        const reason = info && /povolen/i.test(info.message || '') ? 'not_allowed' : 'google';
+        return res.redirect('/login?error=' + reason);
+      }
+      req.login(user, (e) => (e ? next(e) : res.redirect('/')));
+    })(req, res, next);
+  });
 }
 
 // --- Registrace ---
@@ -28,6 +36,10 @@ router.post('/register', authLimiter, emailLimiter, async (req, res) => {
   try {
     const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
     if (existing) return res.status(409).json({ error: 'Tento e-mail je již registrován.' });
+
+    if (!isEmailAllowed(db, email)) {
+      return res.status(403).json({ error: 'Tento e-mail nemá povolený přístup do aplikace.' });
+    }
 
     const hash = await bcrypt.hash(password, 12);
     const token = uuidv4();
@@ -98,7 +110,7 @@ router.post('/logout', (req, res) => {
 router.get('/me', (req, res) => {
   if (!req.isAuthenticated()) return res.status(401).json({ error: 'Unauthorized' });
   const { id, email, name } = req.user;
-  res.json({ id, email, name });
+  res.json({ id, email, name, is_admin: !!req.user.is_admin });
 });
 
 module.exports = router;
