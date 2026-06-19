@@ -404,8 +404,11 @@ export default function ReportPage() {
                         {new Date(tr.date + 'T00:00:00').toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' })}
                       </span>
                       <span className="savings-transfer-desc">
-                        {onSavings > 0 ? '→ ' : '← '}
+                        {/* Šipka vždy „→", pozice = směr toku: před názvem = peníze
+                            jdou NA spořicí, za názvem = jdou ZE spořicího. */}
+                        {onSavings > 0 && '→ '}
                         {tr.description || <span className="text-muted">—</span>}
+                        {onSavings <= 0 && ' →'}
                         {tr.is_regular && <span className="savings-transfer-badge">pravidelný</span>}
                       </span>
                       <span className={`savings-transfer-amount ${onSavings > 0 ? 'tx-amount-in' : 'tx-amount-out'}`}>
