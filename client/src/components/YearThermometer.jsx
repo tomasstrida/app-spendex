@@ -1,8 +1,9 @@
 import { formatCurrency } from '../i18n';
+import { budgetFillColor } from '../utils/budgetColor';
 
 // Teploměr ročního čerpání: rtuť = utraceno / roční rozpočet,
 // svislá čárka = aktuální pozice v roce podle dnešního dne.
-export default function YearThermometer({ spent, amount, year, color }) {
+export default function YearThermometer({ spent, amount, year }) {
   if (!(amount > 0)) return null;
   const today = new Date();
   const start = new Date(`${year}-01-01T00:00:00`);
@@ -14,7 +15,7 @@ export default function YearThermometer({ spent, amount, year, color }) {
   const daysPassed = Math.max(0, Math.min(Math.round((today - start) / 86400000), totalDays));
   const dayPct     = Math.min((daysPassed / totalDays) * 100, 100);
   const projection = daysPassed > 0 ? Math.round((spent / daysPassed) * totalDays) : 0;
-  const fillColor  = over ? undefined : (spentPct > dayPct ? '#f97316' : (color || '#6366f1'));
+  const fillColor  = budgetFillColor({ spent, amount, daysPassed, totalDays });
   return (
     <div>
       <div className="budget-bar-track" style={{ position: 'relative' }}>

@@ -165,7 +165,7 @@ export default function AnnualBudgetsPage() {
                           <span className="report-budget-status" />
                         </Link>
                         {budget > 0 && (
-                          <YearThermometer spent={spent} amount={budget} year={year} color={c.color} />
+                          <YearThermometer spent={spent} amount={budget} year={year} />
                         )}
                         <button type="button" className="btn btn-ghost"
                           style={{ fontSize: 12, marginTop: 4, padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: 6 }}

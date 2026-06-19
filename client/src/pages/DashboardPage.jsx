@@ -4,10 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
+import { budgetFillColor } from '../utils/budgetColor';
 
 // ── Teploměr Typ 1 ────────────────────────────────────────────────────────────
 
-function Thermometer({ spent, amount, periodStart, periodEnd, color, showProjection = true }) {
+function Thermometer({ spent, amount, periodStart, periodEnd, showProjection = true }) {
   const spentPct = amount > 0 ? Math.min((spent / amount) * 100, 100) : 0;
   const over = spent > amount;
   const today = new Date();
@@ -18,7 +19,7 @@ function Thermometer({ spent, amount, periodStart, periodEnd, color, showProject
   const daysPassed = Math.max(0, Math.min(Math.round((today - start) / 86400000), totalDays));
   const dayPct = Math.min((daysPassed / totalDays) * 100, 100);
   const projection = daysPassed > 0 ? Math.round((spent / daysPassed) * totalDays) : 0;
-  const fillColor = over ? undefined : (spentPct > dayPct ? '#f97316' : (color || '#6366f1'));
+  const fillColor = budgetFillColor({ spent, amount, daysPassed, totalDays });
 
   return (
     <div>
@@ -55,7 +56,7 @@ function BudgetBar({ budget, period, periodStart, periodEnd }) {
           <span className="text-muted"> / {formatCurrency(budget.amount)}</span>
         </div>
       </div>
-      <Thermometer spent={budget.spent} amount={budget.amount} periodStart={periodStart} periodEnd={periodEnd} color={budget.category_color} />
+      <Thermometer spent={budget.spent} amount={budget.amount} periodStart={periodStart} periodEnd={periodEnd} />
       <div className="budget-item-footer">
         {over
           ? <span className="text-danger">{formatCurrency(Math.abs(remaining))} {t.dashboard.over}</span>
