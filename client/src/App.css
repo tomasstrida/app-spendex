@@ -143,6 +143,10 @@
 .sidebar-group + .sidebar-group {
   margin-top: 18px;
 }
+/* Konfiguraci přilepit dolů — uživatelské přehledy nahoře, konfigurace dole */
+.sidebar-group.sidebar-group-bottom {
+  margin-top: auto;
+}
 
 .sidebar-section-label {
   font-size: 11px;

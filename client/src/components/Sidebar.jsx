@@ -29,6 +29,7 @@ const navGroups = [
   },
   {
     label: t.nav.sectionConfig,
+    bottom: true,
     items: [
       { to: '/categories', icon: Tag,        label: t.nav.categories },
       { to: '/rules',      icon: ListFilter, label: t.nav.rules },
@@ -66,7 +67,7 @@ export default function Sidebar({ open = false, onClose }) {
 
       <nav className="sidebar-nav">
         {navGroups.map(group => (
-          <div key={group.label} className="sidebar-group">
+          <div key={group.label} className={`sidebar-group${group.bottom ? ' sidebar-group-bottom' : ''}`}>
             <div className="sidebar-section-label">{group.label}</div>
             {group.items.map(({ to, icon: Icon, label, end }) => (
               <NavLink
