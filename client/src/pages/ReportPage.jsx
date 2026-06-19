@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { usePeriod } from '../contexts/PeriodContext';
+import { usePeriodKeys } from '../hooks/usePeriodKeys';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Check, X } from 'lucide-react';
 import Layout from '../components/Layout';
@@ -196,6 +197,7 @@ function IncomeSourceForm({ initial, onSave, onCancel }) {
 
 export default function ReportPage() {
   const { period, setPeriod, currentPeriod, resetToCurrent } = usePeriod();
+  usePeriodKeys();
   const [periodStart, setPeriodStart] = useState(null);
   const [periodEnd, setPeriodEnd] = useState(null);
   const [incomeSources, setIncomeSources] = useState([]);

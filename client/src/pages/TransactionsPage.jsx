@@ -1,9 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Pencil, Trash2, Check, X, Columns3, Search } from 'lucide-react';
 import Layout from '../components/Layout';
 import { formatCurrency, formatPeriod, addPeriods, t } from '../i18n';
 import { usePeriod } from '../contexts/PeriodContext';
+import { usePeriodKeys } from '../hooks/usePeriodKeys';
+import { buildAccountNameMap, accountNameFor } from '../utils/accountName';
 
 const ALL_COLS = [
   { key: 'date',                 label: 'Datum',           default: true,  always: true },
@@ -58,6 +60,8 @@ export default function TransactionsPage() {
   const [periodEnd, setPeriodEnd] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const accountNameMap = useMemo(() => buildAccountNameMap(accounts), [accounts]);
   const [filterCats, setFilterCats] = useState(() => {
     // Akceptujeme oboje: category_ids=1,2,none (multi) i category_id=1 (single).
     const multi = searchParams.get('category_ids');
@@ -77,6 +81,7 @@ export default function TransactionsPage() {
   const [spendingOnly, setSpendingOnly] = useState(searchParams.get('spending_only') === '1');
   const [loading, setLoading] = useState(true);
   const [customMode, setCustomMode] = useState(!!(urlFrom && urlTo));
+  usePeriodKeys({ enabled: !customMode });
   const [customFrom, setCustomFrom] = useState(urlFrom || '');
   const [customTo, setCustomTo] = useState(urlTo || '');
   const [editId, setEditId] = useState(null);
@@ -97,12 +102,14 @@ export default function TransactionsPage() {
     Promise.all([
       fetch('/api/settings').then(r => r.json()),
       fetch('/api/categories').then(r => r.json()),
-    ]).then(([s, cats]) => {
+      fetch('/api/accounts').then(r => r.json()),
+    ]).then(([s, cats, accs]) => {
       setPeriodStart(s.period_start);
       setPeriodEnd(s.period_end);
       if (!urlFrom) setCustomFrom(s.period_start);
       if (!urlTo) setCustomTo(s.period_end);
       setCategories(cats);
+      setAccounts(Array.isArray(accs) ? accs : []);
     });
   }, []);
 
@@ -718,7 +725,7 @@ export default function TransactionsPage() {
                           )}
                         </span>
                       )
-                    ) : renderCell(c.key, tx, categories)}
+                    ) : renderCell(c.key, tx, categories, accountNameMap)}
                   </span>
                 ))}
                 <span className="tx-actions">
@@ -765,7 +772,7 @@ function colsToGrid(cols) {
   return `28px ${dataCols} 72px`;
 }
 
-function renderCell(key, tx, categories) {
+function renderCell(key, tx, categories, accountNameMap) {
   switch (key) {
     case 'date':
       return <span className="tx-date">{formatDate(tx.date)}</span>;
@@ -789,8 +796,15 @@ function renderCell(key, tx, categories) {
       return <span className="text-muted" style={{ fontSize: 12 }}>{tx.ab_category || '—'}</span>;
     case 'entered_by':
       return <span style={{ fontSize: 13 }}>{tx.entered_by || '—'}</span>;
-    case 'counterparty_account':
-      return <span className="text-muted" style={{ fontSize: 12 }}>{tx.counterparty_account || '—'}</span>;
+    case 'counterparty_account': {
+      const accName = accountNameFor(tx.counterparty_account, accountNameMap);
+      return (
+        <span className="text-muted" style={{ fontSize: 12 }}>
+          {tx.counterparty_account || '—'}
+          {accName && <> · <span style={{ color: 'var(--text)' }}>{accName}</span></>}
+        </span>
+      );
+    }
     case 'place':
       return <span style={{ fontSize: 13 }}>{tx.place || '—'}</span>;
     case 'note':

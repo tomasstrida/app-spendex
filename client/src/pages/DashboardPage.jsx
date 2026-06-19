@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { usePeriod } from '../contexts/PeriodContext';
+import { usePeriodKeys } from '../hooks/usePeriodKeys';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Layout from '../components/Layout';
@@ -120,6 +121,7 @@ function BudgetSummary({ budgets, periodStart, periodEnd }) {
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { period, setPeriod, currentPeriod, resetToCurrent } = usePeriod();
+  usePeriodKeys();
   const [periodStart, setPeriodStart] = useState(null);
   const [periodEnd, setPeriodEnd] = useState(null);
   const [data, setData] = useState(null);

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { usePeriod } from '../contexts/PeriodContext';
+import { usePeriodKeys } from '../hooks/usePeriodKeys';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, X, Check } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
@@ -401,6 +402,7 @@ function Type3Section({ categories, year }) {
 
 export default function BudgetsPage() {
   const { period, setPeriod, currentPeriod, resetToCurrent } = usePeriod();
+  usePeriodKeys();
   const [periodStart, setPeriodStart] = useState(null);
   const [periodEnd, setPeriodEnd] = useState(null);
   const [budgets, setBudgets] = useState([]);
