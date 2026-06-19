@@ -83,6 +83,7 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
   if (!cat) return res.status(404).json({ error: 'Kategorie nenalezena.' });
 
   const { name, color, icon, type, typical_price, frequency_months } = req.body;
+  const newType = type ?? cat.type ?? 1;
   try {
     db.prepare(`
       UPDATE categories
@@ -92,7 +93,7 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
       name ?? cat.name,
       color ?? cat.color,
       icon ?? cat.icon,
-      type ?? cat.type ?? 1,
+      newType,
       typical_price !== undefined ? (typical_price != null ? parseFloat(typical_price) : null) : cat.typical_price,
       frequency_months !== undefined ? (frequency_months != null ? parseInt(frequency_months) : null) : cat.frequency_months,
       cat.id
@@ -101,6 +102,14 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
     if (/UNIQUE/i.test(e.message)) return res.status(409).json({ error: 'Kategorie s tímto názvem už existuje.' });
     throw e;
   }
+
+  // Měsíční budgety (tabulka budgets) dávají smysl jen pro Typ 1 (měsíční).
+  // Při přepnutí na roční (2) nebo fond (3) by zůstaly jako mrtvé záznamy, které
+  // mate výpočty i zobrazení – proto je pro tuto kategorii odstraníme.
+  if (newType !== 1) {
+    db.prepare('DELETE FROM budgets WHERE user_id = ? AND category_id = ?').run(req.dataUserId, cat.id);
+  }
+
   res.json(db.prepare('SELECT * FROM categories WHERE id = ?').get(cat.id));
 });
 
