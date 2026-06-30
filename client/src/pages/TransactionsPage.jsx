@@ -55,6 +55,7 @@ export default function TransactionsPage() {
   const urlFrom = searchParams.get('from');
   const urlTo = searchParams.get('to');
   const urlPeriod = searchParams.get('period');
+  const highlightId = searchParams.get('highlight');
   const { period, setPeriod, currentPeriod, resetToCurrent } = usePeriod();
   const [periodStart, setPeriodStart] = useState(null);
   const [periodEnd, setPeriodEnd] = useState(null);
@@ -94,6 +95,8 @@ export default function TransactionsPage() {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const pickerRef = useRef();
+  // Ref pro hlídání, zda jsme již zvýraznění provedli (jednorázové po načtení)
+  const highlightedRef = useRef(false);
 
   useEffect(() => {
     // URL deep-link má přednost před contextem
@@ -188,6 +191,18 @@ export default function TransactionsPage() {
   }, [loadingMore, hasMore, transactions.length, customMode, customFrom, customTo, periodStart, periodEnd, buildFilterParams]);
 
   useEffect(() => { loadTransactions(); }, [loadTransactions]);
+
+  // Po načtení transakcí scroll na zvýrazněný řádek (z push notifikace ?highlight=<id>)
+  useEffect(() => {
+    if (!highlightId || highlightedRef.current || transactions.length === 0) return;
+    const el = document.querySelector(`[data-tx-id="${highlightId}"]`);
+    if (!el) return;
+    highlightedRef.current = true;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('deep-focus');
+    const t = setTimeout(() => el.classList.remove('deep-focus'), 2600);
+    return () => { clearTimeout(t); el.classList.remove('deep-focus'); };
+  }, [transactions, highlightId]);
 
   // Zavři picker kliknutím ven
   useEffect(() => {
@@ -680,6 +695,7 @@ export default function TransactionsPage() {
             ) : (
               <div
                 key={tx.id}
+                data-tx-id={tx.id}
                 className={`tx-row${selected.has(tx.id) ? ' tx-row-selected' : ''}`}
                 style={{ gridTemplateColumns: colsToGrid(cols) }}
               >
