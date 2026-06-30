@@ -1,5 +1,6 @@
 'use strict';
 const webpush = require('web-push');
+const { periodKeyForDate, getUserBillingDay } = require('../utils/period');
 
 function defaultClient() {
   const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = process.env;
@@ -38,6 +39,18 @@ function formatBody(notify) {
   return `⚠️ ${sum} • ${merchant} — potřebuje kategorii`;
 }
 
+// Sestaví deep-link URL + unikátní tag podle typu výsledku.
+function deepLink(db, result) {
+  if (result.status === 'imported' && result.transactionId && result.txDate) {
+    const key = periodKeyForDate(getUserBillingDay(db, result.userId), result.txDate);
+    return { url: `/transactions?period=${key}&highlight=${result.transactionId}`, tag: `spendex-tx-${result.transactionId}` };
+  }
+  if (result.inboxId) {
+    return { url: `/import?focus=${result.inboxId}`, tag: `spendex-${result.inboxId}` };
+  }
+  return { url: '/import', tag: 'spendex-payment' };
+}
+
 async function notifyForResult(db, result, client) {
   if (!result || !result.notify) return;
   if (result.status === 'awaiting_card' && result.broadcast) {
@@ -46,8 +59,9 @@ async function notifyForResult(db, result, client) {
     const members = db.prepare('SELECT user_id FROM household_members WHERE data_owner_id = ?')
       .all(owner).map(r => r.user_id);
     const targets = [...new Set([owner, ...members])];
+    const link = deepLink(db, result);
     for (const t of targets) {
-      await sendToUser(db, t, { title: 'SPENDEX', body: formatBody(result.notify), url: '/import' }, client);
+      await sendToUser(db, t, { title: 'SPENDEX', body: formatBody(result.notify), url: link.url, tag: link.tag }, client);
     }
     return;
   }
@@ -58,10 +72,12 @@ async function notifyForResult(db, result, client) {
   const scope = row?.notify_scope || 'pending_only';
   if (scope === 'off') return;
   if (result.status === 'imported' && scope !== 'all') return;
+  const link = deepLink(db, result);
   await sendToUser(db, target, {
     title: 'SPENDEX',
     body: formatBody(result.notify),
-    url: '/import',
+    url: link.url,
+    tag: link.tag,
   }, client);
 }
 

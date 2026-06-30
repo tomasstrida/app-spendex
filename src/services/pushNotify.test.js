@@ -132,3 +132,47 @@ test('formatBody: bez kategorie → "potřebuje kategorii", s kategorií → "�
   assert.ok(imported.includes('→ Potraviny'));
   assert.ok(imported.startsWith('✅'));
 });
+
+test('notifyForResult pending → url s focus a unikátní tag', async () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO settings (user_id, billing_day, notify_scope) VALUES (1, 1, 'pending_only')").run();
+  db.prepare("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (1, 'https://x/ep', 'k', 'a')").run();
+  const sent = [];
+  const fake = { sendNotification: async (_s, body) => { sent.push(JSON.parse(body)); return { statusCode: 201 }; } };
+  const { notifyForResult } = require('./pushNotify');
+  await notifyForResult(db, { status: 'pending', userId: 1, notifyUserId: 1, inboxId: 42, notify: { amount: -100, currency: 'CZK', merchant: 'X' } }, fake);
+  cleanup(db, tmp);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].url, '/import?focus=42');
+  assert.equal(sent[0].tag, 'spendex-42');
+});
+
+test('notifyForResult imported (scope all) → url na transakci se správným obdobím', async () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO settings (user_id, billing_day, notify_scope) VALUES (1, 1, 'all')").run();
+  db.prepare("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (1, 'https://x/ep', 'k', 'a')").run();
+  const sent = [];
+  const fake = { sendNotification: async (_s, body) => { sent.push(JSON.parse(body)); return { statusCode: 201 }; } };
+  const { notifyForResult } = require('./pushNotify');
+  await notifyForResult(db, { status: 'imported', userId: 1, notifyUserId: 1, transactionId: 128, txDate: '2026-06-07', notify: { amount: -100, currency: 'CZK', merchant: 'X', categoryName: 'Strava' } }, fake);
+  cleanup(db, tmp);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].url, '/transactions?period=2026-06&highlight=128');
+  assert.equal(sent[0].tag, 'spendex-tx-128');
+});
+
+test('notifyForResult awaiting_card broadcast → url s focus pro všechny v domácnosti', async () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1,'o@b.cz'),(2,'m@b.cz')").run();
+  db.prepare("INSERT INTO household_members (data_owner_id, user_id) VALUES (1, 2)").run();
+  db.prepare("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (1,'https://x/e1','k','a'),(2,'https://x/e2','k','a')").run();
+  const sent = [];
+  const fake = { sendNotification: async (_s, body) => { sent.push(JSON.parse(body)); return { statusCode: 201 }; } };
+  const { notifyForResult } = require('./pushNotify');
+  await notifyForResult(db, { status: 'awaiting_card', broadcast: true, userId: 1, inboxId: 7, notify: { amount: -482, currency: 'CZK', merchant: 'HAMR', unknownCard: true, last4: '6062' } }, fake);
+  cleanup(db, tmp);
+  assert.equal(sent.length, 2);
+  for (const p of sent) { assert.equal(p.url, '/import?focus=7'); assert.equal(p.tag, 'spendex-7'); }
+});
