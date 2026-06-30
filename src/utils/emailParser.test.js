@@ -130,3 +130,55 @@ test('převod nemá kartu ani místo', () => {
   assert.equal(tx.card_last4, null);
   assert.equal(tx.tx_type, null);
 });
+
+// Korekce karetní blokace: obchodník při placení zablokuje odhadní/zaokrouhlenou
+// částku, po zaúčtování se blokace sníží o rozdíl → zůstatek se "zvýší" (uvolnění).
+// Není to příjem, ale korekce už zaúčtovaného nákupu. Merchant je na řádku
+// "Snížení/Zvýšení částky blokace, <MERCHANT>, <místo>, 000" — bez vytažení do `place`
+// zůstával popis prázdný a položka vypadala jako záhadný příjem.
+const BLOCK_CORRECTION = `Dobrý den,
+
+zůstatek na účtu Společný číslo 1679014023/3030 se zvýšil o částku 148,20 CZK. Dostupný zůstatek k 29.06.2026 v 21:10 je 3 880,84 CZK.
+
+Pro úplnost uvádíme detaily této úhrady:
+
+Snížení částky blokace, GLOBUS VAM DEKUJE, Praha - Cakov, 000
+Částka: 148,20 CZK
+Datum změny částky blokace: 29.06.2026
+Kód transakce: 27278506243
+
+Vaše Air Bank`;
+
+test('korekce blokace: vytáhne obchodníka do place/popisu a označí typ', () => {
+  const tx = parseEmailNotification(BLOCK_CORRECTION);
+  assert.equal(tx.external_id, '27278506243');
+  assert.equal(tx.amount, 148.2);
+  assert.equal(tx.direction, 'Příchozí');
+  assert.equal(tx.place, 'GLOBUS VAM DEKUJE, Praha - Cakov');
+  assert.equal(tx.description, 'GLOBUS VAM DEKUJE, Praha - Cakov');
+  assert.equal(tx.tx_type, 'Korekce blokace');
+  assert.equal(tx.date, '2026-06-29');
+  assert.equal(tx.source_account, '1679014023');
+});
+
+// Varianta se zvýšením blokace (méně časté: dodatečné dočerpání, zůstatek se sníží)
+// a merchant s vnitřní čárkou v názvu (Rohlik) → celý merchant+místo do place.
+const BLOCK_CORRECTION_ROHLIK = `Dobrý den,
+
+zůstatek na účtu Společný číslo 1679014023/3030 se zvýšil o částku 64,98 CZK. Dostupný zůstatek k 11.06.2026 v 10:36 je 11 457,20 CZK.
+
+Pro úplnost uvádíme detaily této úhrady:
+
+Snížení částky blokace, DEKUJEME, ROHLIK.CZ, Prague 8, 000
+Částka: 64,98 CZK
+Datum změny částky blokace: 11.06.2026
+Kód transakce: 26960204523
+
+Vaše Air Bank`;
+
+test('korekce blokace: merchant s vnitřní čárkou se zachová celý', () => {
+  const tx = parseEmailNotification(BLOCK_CORRECTION_ROHLIK);
+  assert.equal(tx.place, 'DEKUJEME, ROHLIK.CZ, Prague 8');
+  assert.equal(tx.description, 'DEKUJEME, ROHLIK.CZ, Prague 8');
+  assert.equal(tx.tx_type, 'Korekce blokace');
+});

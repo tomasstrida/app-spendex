@@ -75,6 +75,19 @@ function parseEmailNotification(text) {
     if (digits.length >= 4) card_last4 = digits.slice(-4);
   }
 
+  // Korekce karetní blokace: "Snížení/Zvýšení částky blokace, <MERCHANT>, <místo>, 000".
+  // Obchodník zablokuje odhadní/zaokrouhlenou částku, po zaúčtování blokaci upraví →
+  // zůstatek se "zvýší" (uvolnění). NENÍ to příjem, ale korekce už zaúčtovaného nákupu.
+  // Vytáhneme obchodníka do `place` (stejně jako u kartové platby, ořež koncový ", 000"),
+  // aby měla položka srozumitelný popis a nevypadala jako záhadný příjem.
+  if (!place) {
+    const blockM = body.match(/(?:Sní[zž]ení|Zvý[sš]ení)\s+[cč]ástky\s+blokace,\s*(.+)/i);
+    if (blockM) {
+      place = blockM[1].trim().replace(/,\s*0+\s*$/, '').trim();
+      tx_type = 'Korekce blokace';
+    }
+  }
+
   // Zpráva pro plátce/příjemce → note
   const msgM = body.match(/Zpráva pro (?:plátce|p[rř]íjemce):\s*(.+)/i);
   const note = msgM ? msgM[1].trim() : '';
