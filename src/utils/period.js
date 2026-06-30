@@ -52,4 +52,20 @@ function getUserBillingDay(db, userId) {
   return row?.billing_day ?? 1;
 }
 
-module.exports = { getPeriodDates, currentPeriodKey, getUserBillingDay };
+/**
+ * Vrátí periodKey ("YYYY-MM") pro billing cyklus, do kterého spadá dané datum.
+ * Den >= billingDay patří do měsíce data; den < billingDay do předchozího měsíce.
+ * @param {number} billingDay - den v měsíci (1–31)
+ * @param {string} dateStr    - "YYYY-MM-DD"
+ * @returns {string} "YYYY-MM"
+ */
+function periodKeyForDate(billingDay, dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  if (day >= billingDay) {
+    return `${year}-${String(month).padStart(2, '0')}`;
+  }
+  const d = new Date(Date.UTC(year, month - 2, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+module.exports = { getPeriodDates, currentPeriodKey, getUserBillingDay, periodKeyForDate };
