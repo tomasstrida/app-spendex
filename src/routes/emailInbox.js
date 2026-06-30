@@ -7,8 +7,14 @@ const { requireAuth } = require('../middleware/auth');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
-// GET /api/email-inbox — čekající (pending) i nerozpoznané (unparsed) položky
+// GET /api/email-inbox — čekající (pending) i nerozpoznané (unparsed) položky.
+// Člen domácnosti (req.user.id !== req.dataUserId) vidí jen platby přiřazené jeho kartě
+// nebo položky čekající na přiřazení karty (awaiting_card). Owner/solo vidí vše.
 router.get('/', requireAuth, (req, res) => {
+  const isMember = req.user.id !== req.dataUserId;
+  const memberFilter = isMember
+    ? "AND (cd.assigned_user_id = @currentUser OR i.status = 'awaiting_card')"
+    : '';
   const rows = db.prepare(`
     SELECT i.id, i.received_at, i.raw_text, i.parsed_json, i.external_id,
            i.suggested_category_id, i.status, i.created_at,
@@ -19,16 +25,22 @@ router.get('/', requireAuth, (req, res) => {
     LEFT JOIN cards cd ON cd.data_owner_id = i.user_id
                       AND cd.last4 = json_extract(i.parsed_json, '$.card_last4')
     LEFT JOIN users cu ON cu.id = cd.assigned_user_id
-    WHERE i.user_id = ? AND i.status IN ('pending', 'unparsed', 'awaiting_card')
+    WHERE i.user_id = @owner AND i.status IN ('pending', 'unparsed', 'awaiting_card')
+      ${memberFilter}
     ORDER BY i.created_at DESC, i.id DESC
-  `).all(req.dataUserId);
+  `).all({ owner: req.dataUserId, currentUser: req.user.id });
   res.json(rows);
 });
 
 // GET /api/email-inbox/history — kompletní historie všech e-mailových položek (všechny stavy).
 // U zařazených (imported) dohledá skutečnou kategorii zařazené transakce přes external_id,
 // jinak (pending/unparsed/rejected) použije navrženou kategorii.
+// Člen domácnosti vidí jen položky přiřazené jeho kartě nebo awaiting_card (stejná logika jako GET /).
 router.get('/history', requireAuth, (req, res) => {
+  const isMember = req.user.id !== req.dataUserId;
+  const memberFilter = isMember
+    ? "AND (cd.assigned_user_id = @currentUser OR i.status = 'awaiting_card')"
+    : '';
   const rows = db.prepare(`
     SELECT i.id, i.received_at, i.parsed_json, i.external_id, i.status, i.created_at,
            COALESCE(tc.name, sc.name)  AS category_name,
@@ -39,9 +51,12 @@ router.get('/history', requireAuth, (req, res) => {
                             AND t.user_id = i.user_id
                             AND t.external_id = i.external_id
     LEFT JOIN categories tc ON tc.id = t.category_id
-    WHERE i.user_id = ?
+    LEFT JOIN cards cd ON cd.data_owner_id = i.user_id
+                      AND cd.last4 = json_extract(i.parsed_json, '$.card_last4')
+    WHERE i.user_id = @owner
+      ${memberFilter}
     ORDER BY i.created_at DESC, i.id DESC
-  `).all(req.dataUserId);
+  `).all({ owner: req.dataUserId, currentUser: req.user.id });
   res.json(rows);
 });
 
