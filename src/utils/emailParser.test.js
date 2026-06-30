@@ -103,6 +103,27 @@ test('platba kartou: vytáhne místo, poslední 4 karty, typ a datum provedení'
   assert.equal(tx.counterparty_account, null);
 });
 
+// Převod bez jména protistrany (žádný řádek "úhrada na účet … číslo"), jen "Zpráva pro
+// příjemce" → popis (description) zůstával prázdný a v review frontě i Popisu bylo "—".
+// Popis se má vzít ze zprávy (note), aby byl vidět, vyhledatelný a braly ho textová pravidla.
+const NOTE_ONLY = `Dobrý den,
+
+zůstatek na účtu Společný číslo 1679014023/3030 se snížil o částku 1 500,00 CZK. Dostupný zůstatek k 29.06.2026 v 16:58 je 1 000,00 CZK.
+
+Datum zaúčtování: 29.06.2026
+Zpráva pro příjemce: Locum indiv
+Kód transakce: 261234567
+
+Vaše Air Bank`;
+
+test('převod bez jména protistrany: popis se vezme ze zprávy (note)', () => {
+  const tx = parseEmailNotification(NOTE_ONLY);
+  assert.equal(tx.amount, -1500);
+  assert.equal(tx.place, null);
+  assert.equal(tx.note, 'Locum indiv');
+  assert.equal(tx.description, 'Locum indiv');
+});
+
 test('převod nemá kartu ani místo', () => {
   const tx = parseEmailNotification(OUTGOING);
   assert.equal(tx.place, null);

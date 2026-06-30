@@ -75,14 +75,16 @@ function parseEmailNotification(text) {
     if (digits.length >= 4) card_last4 = digits.slice(-4);
   }
 
-  // Kartová platba nemá řádek "úhrada na účet … číslo" → `description` zůstává prázdné
-  // a obchodník je jen v `place`. Použij ho jako popis, ať je vidět ve výchozím sloupci
-  // "Popis", ve vyhledávání i pro textová category_rules (match_patterns matchují description).
-  if (!description && place) description = place;
-
   // Zpráva pro plátce/příjemce → note
   const msgM = body.match(/Zpráva pro (?:plátce|p[rř]íjemce):\s*(.+)/i);
   const note = msgM ? msgM[1].trim() : '';
+
+  // `description` zůstává prázdné u: kartových plateb (řádek "úhrada na účet … číslo"
+  // chybí → obchodník je jen v `place`) a převodů bez jména protistrany (popisný údaj
+  // je jen ve `note` = "Zpráva pro příjemce"). Fallback na `place`, jinak `note`, ať je
+  // popis vidět ve výchozím sloupci "Popis", ve vyhledávání i pro textová category_rules
+  // (match_patterns matchují description).
+  if (!description) description = place || note || '';
 
   // Datum: primárně "Datum zaúčtování", fallback "Datum provedení" (kartové platby), fallback z hlavičky "k 07.06.2026 v ..."
   const date =
