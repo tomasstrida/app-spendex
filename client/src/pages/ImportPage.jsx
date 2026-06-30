@@ -286,13 +286,16 @@ function EmailInbox() {
         return (
           <div key={item.id} id={`inbox-${item.id}`} className="card review-item">
             <div className="review-head">
-              <div className="review-merch">{tx.description || tx.place || '—'}</div>
+              <div className="review-merch">{tx.description || tx.place || tx.note || '—'}</div>
               <div className="review-amt">{formatCurrency(tx.amount)}</div>
             </div>
             <div className="review-sub">
               <span>{tx.date} {tx.tx_time || ''}</span>
               <span className="who">💳 neznámá ••{last4}</span>
             </div>
+            {tx.note && (tx.description || tx.place) && (
+              <div className="review-note">📝 {tx.note}</div>
+            )}
             <div className="review-cardpick">
               <div className="review-cardpick-q">Čí je tato karta?</div>
               <div className="review-grid">
@@ -323,7 +326,7 @@ function EmailInbox() {
         return (
           <div key={item.id} id={`inbox-${item.id}`} className="card review-item">
             <div className="review-head">
-              <div className="review-merch">{tx.description || tx.place || '—'}</div>
+              <div className="review-merch">{tx.description || tx.place || tx.note || '—'}</div>
               <div className="review-amt">{formatCurrency(tx.amount)}</div>
             </div>
             <div className="review-sub">
@@ -337,6 +340,9 @@ function EmailInbox() {
                 </span>
               )}
             </div>
+            {tx.note && (tx.description || tx.place) && (
+              <div className="review-note">📝 {tx.note}</div>
+            )}
             <div className="review-icons">
               {orderedCats(cats, item.suggested_category_id).map(c => (
                 <button key={c.id}
