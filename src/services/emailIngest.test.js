@@ -251,3 +251,45 @@ test('releaseHeldCard: nejistá kategorie → řádek pending se suggested_categ
   assert.equal(inbox.status, 'pending');
   assert.equal(inbox.suggested_category_id, 6); // Ostatní (fallback)
 });
+
+test('result imported nese transactionId a txDate', () => {
+  const { db, tmp } = freshDb();
+  seed(db);
+  const { ingestEmail } = require('./emailIngest');
+  const r = ingestEmail(db, { userEmail: 'tom@example.com', text: INTERNAL });
+  assert.equal(r.status, 'imported');
+  assert.ok(Number.isInteger(r.transactionId) && r.transactionId > 0);
+  assert.equal(r.txDate, '2026-06-07');
+  const row = db.prepare('SELECT id FROM transactions WHERE id = ?').get(r.transactionId);
+  assert.ok(row);
+  cleanup(db, tmp);
+});
+
+test('result awaiting_card (neznámá karta v domácnosti) nese inboxId', () => {
+  const { db, tmp } = freshDb();
+  seed(db);
+  // domácnost: owner=1, member=2 → nová karta zůstane nepřiřazená
+  db.prepare("INSERT INTO users (id, email) VALUES (2, 'martin@example.com')").run();
+  db.prepare("INSERT INTO household_members (data_owner_id, user_id) VALUES (1, 2)").run();
+  const { ingestEmail } = require('./emailIngest');
+  const r = ingestEmail(db, { userEmail: 'tom@example.com', text: CARD_TX });
+  assert.equal(r.status, 'awaiting_card');
+  assert.ok(Number.isInteger(r.inboxId) && r.inboxId > 0);
+  const row = db.prepare("SELECT id FROM email_inbox WHERE id = ? AND status = 'awaiting_card'").get(r.inboxId);
+  assert.ok(row);
+  cleanup(db, tmp);
+});
+
+test('result pending nese inboxId', () => {
+  const { db, tmp } = freshDb();
+  seed(db);
+  // bez kategorie "Ostatní" fallback → ale necháme kartu přiřazenou ownerovi (solo),
+  // platba kartou bez jistého pravidla → pending
+  const { ingestEmail } = require('./emailIngest');
+  const r = ingestEmail(db, { userEmail: 'tom@example.com', text: CARD_TX });
+  assert.equal(r.status, 'pending');
+  assert.ok(Number.isInteger(r.inboxId) && r.inboxId > 0);
+  const row = db.prepare("SELECT id FROM email_inbox WHERE id = ? AND status = 'pending'").get(r.inboxId);
+  assert.ok(row);
+  cleanup(db, tmp);
+});

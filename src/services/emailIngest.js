@@ -33,17 +33,22 @@ function classifyAndStore(db, userId, tx, account, extId, notifyUserId, text) {
   const accId = account ? account.id : null;
   const { catName, categoryId, confident } = categorize(db, userId, tx, account);
   if (confident) {
-    insertTx(db, userId, { ...tx, account_id: accId }, categoryId, extId);
+    const r = insertTx(db, userId, { ...tx, account_id: accId }, categoryId, extId);
+    const transactionId = r.changes > 0
+      ? Number(r.lastInsertRowid)
+      : (db.prepare('SELECT id FROM transactions WHERE user_id = ? AND external_id = ?').get(userId, extId)?.id ?? null);
     return {
       status: 'imported', external_id: extId, userId, notifyUserId,
+      transactionId, txDate: tx.date,
       notify: { amount: tx.amount, currency: tx.currency, merchant: tx.place || tx.description || null, categoryName: catName },
     };
   }
-  db.prepare(`INSERT INTO email_inbox (user_id, received_at, raw_text, parsed_json, external_id, suggested_category_id, status)
+  const ins = db.prepare(`INSERT INTO email_inbox (user_id, received_at, raw_text, parsed_json, external_id, suggested_category_id, status)
               VALUES (?, datetime('now'), ?, ?, ?, ?, 'pending')`)
     .run(userId, text || '', JSON.stringify({ ...tx, account_id: accId }), extId || null, categoryId);
   return {
     status: 'pending', external_id: extId, userId, notifyUserId,
+    inboxId: Number(ins.lastInsertRowid),
     notify: { amount: tx.amount, currency: tx.currency, merchant: tx.place || tx.description || null, categoryName: null },
   };
 }
@@ -84,11 +89,12 @@ function ingestEmail(db, { userEmail, text }) {
     }
     if (card.assigned_user_id == null) {
       // Neznámá / nepřiřazená karta → drž transakci
-      db.prepare(`INSERT INTO email_inbox (user_id, received_at, raw_text, parsed_json, external_id, suggested_category_id, status)
+      const ins = db.prepare(`INSERT INTO email_inbox (user_id, received_at, raw_text, parsed_json, external_id, suggested_category_id, status)
                   VALUES (?, datetime('now'), ?, ?, ?, NULL, 'awaiting_card')`)
         .run(userId, text || '', JSON.stringify({ ...tx, account_id: account ? account.id : null }), extId || null);
       return {
         status: 'awaiting_card', external_id: extId, userId,
+        inboxId: Number(ins.lastInsertRowid),
         notify: {
           amount: tx.amount, currency: tx.currency,
           merchant: tx.place || tx.description || null,
