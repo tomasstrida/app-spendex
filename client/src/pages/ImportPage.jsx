@@ -229,7 +229,7 @@ function EmailInbox() {
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     el.classList.add('deep-focus');
     const t = setTimeout(() => el.classList.remove('deep-focus'), 2600);
-    return () => clearTimeout(t);
+    return () => { clearTimeout(t); el.classList.remove('deep-focus'); };
   }, [items, focusId]);
 
   async function approve(item, categoryId) {
