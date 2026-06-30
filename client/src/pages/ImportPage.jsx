@@ -4,6 +4,7 @@ import { Upload, Check, AlertCircle, Plus, Pencil, Trash2, X, Download, Inbox, M
 import Layout from '../components/Layout';
 import { formatCurrency } from '../i18n';
 import { CategoryIcon } from '../categoryIcons';
+import { fireConfetti, playPopSound } from '../utils/celebrate';
 
 const STEP = { UPLOAD: 'upload', MAPPING: 'mapping', DONE: 'done' };
 
@@ -202,6 +203,7 @@ function EmailInbox() {
   const [cats, setCats] = useState([]);
   const [people, setPeople] = useState([]);
   const [busy, setBusy] = useState(null);
+  const [celebratingId, setCelebratingId] = useState(null);
 
   const [searchParams] = useSearchParams();
   const focusId = searchParams.get('focus');
@@ -232,7 +234,7 @@ function EmailInbox() {
     return () => { clearTimeout(t); el.classList.remove('deep-focus'); };
   }, [items, focusId]);
 
-  async function approve(item, categoryId) {
+  async function approve(item, categoryId, originEl) {
     setBusy(item.id);
     try {
       const r = await fetch(`/api/email-inbox/${item.id}/approve`, {
@@ -240,7 +242,16 @@ function EmailInbox() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ category_id: categoryId || null }),
       });
-      if (r.ok) await load();
+      if (!r.ok) return;
+      // Oslavný feedback: konfety v barvě kategorie + pop, kartička odletí, pak refetch.
+      const cat = cats.find(c => c.id === categoryId);
+      const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      if (originEl) fireConfetti(originEl.getBoundingClientRect(), cat?.color);
+      playPopSound();
+      setCelebratingId(item.id);
+      await new Promise(res => setTimeout(res, reduced ? 0 : 450));
+      await load();
+      setCelebratingId(null);
     } finally { setBusy(null); }
   }
 
@@ -324,7 +335,8 @@ function EmailInbox() {
         let tx = {};
         try { tx = item.parsed_json ? JSON.parse(item.parsed_json) : {}; } catch { /* poškozený JSON */ }
         return (
-          <div key={item.id} id={`inbox-${item.id}`} className="card review-item">
+          <div key={item.id} id={`inbox-${item.id}`}
+            className={`card review-item${celebratingId === item.id ? ' celebrating' : ''}`}>
             <div className="review-head">
               <div className="review-merch">{tx.description || tx.place || tx.note || '—'}</div>
               <div className="review-amt">{formatCurrency(tx.amount)}</div>
@@ -349,7 +361,7 @@ function EmailInbox() {
                   className={`cat-icon-tile${c.id === item.suggested_category_id ? ' suggested' : ''}`}
                   disabled={busy === item.id}
                   title={c.name}
-                  onClick={() => approve(item, c.id)}>
+                  onClick={(e) => approve(item, c.id, e.currentTarget)}>
                   <CategoryIcon icon={c.icon} color={c.color} size={22} />
                   <span className="cat-icon-label">{c.name}</span>
                 </button>

@@ -3,6 +3,7 @@ import { Trash2, ChevronDown } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatPeriod } from '../i18n';
 import { pushSupported, isStandalone, enablePush, disablePush, currentSubscription, sendTestPush } from '../push';
+import { isCelebrationSoundEnabled, setCelebrationSoundEnabled, playPopSound } from '../utils/celebrate';
 import { useAuth } from '../App';
 
 function MappingsSection({ categories }) {
@@ -292,6 +293,7 @@ export default function SettingsPage() {
   const [notifyScope, setNotifyScope] = useState('pending_only');
   const [pushState, setPushState] = useState('unknown'); // 'on' | 'off' | 'denied' | 'unsupported'
   const [testMsg, setTestMsg] = useState('');
+  const [celebSound, setCelebSound] = useState(isCelebrationSoundEnabled());
   const [household, setHousehold] = useState(null);
   const [joinCode, setJoinCode] = useState('');
   const [hhMsg, setHhMsg] = useState('');
@@ -520,6 +522,22 @@ export default function SettingsPage() {
                 <option value="pending_only">{t.settings.notifications_scope_pending}</option>
                 <option value="all">{t.settings.notifications_scope_all}</option>
               </select>
+            </label>
+          </div>
+
+          <div className="form-group" style={{ marginTop: 12 }}>
+            <label style={{ fontSize: 13, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={celebSound}
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  setCelebSound(on);
+                  setCelebrationSoundEnabled(on);
+                  if (on) playPopSound(); // ukázka zvuku při zapnutí (klik = user gesture)
+                }}
+              />
+              {t.settings.celebration_sound_label}
             </label>
           </div>
         </CollapsibleCard>

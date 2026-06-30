@@ -55,6 +55,7 @@ const cs = {
     notifications_scope_off: 'Vypnuto',
     notifications_scope_pending: 'Jen nezařazené platby',
     notifications_scope_all: 'Všechny platby',
+    celebration_sound_label: 'Zvuk při zařazení platby (na tomto zařízení)',
     notifications_test: 'Poslat testovací notifikaci',
     notifications_test_sent: 'Odesláno na {n} zařízení',
     notifications_test_none: 'Nemáš zaregistrované žádné zařízení.',
