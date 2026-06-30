@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Upload, Check, AlertCircle, Plus, Pencil, Trash2, X, Download, Inbox, Mail } from 'lucide-react';
 import Layout from '../components/Layout';
 import { formatCurrency } from '../i18n';
@@ -202,6 +203,10 @@ function EmailInbox() {
   const [people, setPeople] = useState([]);
   const [busy, setBusy] = useState(null);
 
+  const [searchParams] = useSearchParams();
+  const focusId = searchParams.get('focus');
+  const focusedRef = useRef(false);
+
   const load = useCallback(async () => {
     const [ri, rc, rp] = await Promise.all([
       fetch('/api/email-inbox'),
@@ -214,6 +219,18 @@ function EmailInbox() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Scroll a zvýraznění položky při deep-link ?focus=<id> z push notifikace
+  useEffect(() => {
+    if (!focusId || focusedRef.current || items.length === 0) return;
+    const el = document.getElementById(`inbox-${focusId}`);
+    if (!el) return;
+    focusedRef.current = true;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('deep-focus');
+    const t = setTimeout(() => el.classList.remove('deep-focus'), 2600);
+    return () => clearTimeout(t);
+  }, [items, focusId]);
 
   async function approve(item, categoryId) {
     setBusy(item.id);
@@ -267,7 +284,7 @@ function EmailInbox() {
         try { tx = item.parsed_json ? JSON.parse(item.parsed_json) : {}; } catch { /* poškozený JSON */ }
         const last4 = tx.card_last4;
         return (
-          <div key={item.id} className="card review-item">
+          <div key={item.id} id={`inbox-${item.id}`} className="card review-item">
             <div className="review-head">
               <div className="review-merch">{tx.description || tx.place || '—'}</div>
               <div className="review-amt">{formatCurrency(tx.amount)}</div>
@@ -304,7 +321,7 @@ function EmailInbox() {
         let tx = {};
         try { tx = item.parsed_json ? JSON.parse(item.parsed_json) : {}; } catch { /* poškozený JSON */ }
         return (
-          <div key={item.id} className="card review-item">
+          <div key={item.id} id={`inbox-${item.id}`} className="card review-item">
             <div className="review-head">
               <div className="review-merch">{tx.description || tx.place || '—'}</div>
               <div className="review-amt">{formatCurrency(tx.amount)}</div>
