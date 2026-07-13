@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
 import { budgetFillColor } from '../utils/budgetColor';
+import { sumExpensiveTotal } from '../utils/expensiveTotal.js';
 
 // ── Teploměr Typ 1 ────────────────────────────────────────────────────────────
 
@@ -272,6 +273,10 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   ))}
+                  <div className="report-budget-row" style={{ borderTop: '1px solid var(--border)', marginTop: 6, paddingTop: 6, fontWeight: 600 }}>
+                    <span className="report-budget-name">Celkem za období</span>
+                    <span className="report-budget-spent">{formatCurrency(sumExpensiveTotal(expensiveItems))}</span>
+                  </div>
                 </div>
               )}
             </section>
