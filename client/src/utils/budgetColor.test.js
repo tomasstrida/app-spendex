@@ -31,3 +31,15 @@ test('vyčerpaný budget uprostřed období → oranžová (hrozí)', () => {
 test('začátek období (0 dní) s utrácením → oranžová', () => {
   assert.equal(budgetFillColor({ spent: 10, amount: 100, daysPassed: 0, totalDays: 30 }), BUDGET_ORANGE);
 });
+
+test('přečerpáno přesně o 10 % → oranžová (hranice je > 0.10)', () => {
+  assert.equal(budgetFillColor({ spent: 110, amount: 100, daysPassed: 30, totalDays: 30 }), BUDGET_ORANGE);
+});
+
+test('přečerpáno pod 10 % → oranžová', () => {
+  assert.equal(budgetFillColor({ spent: 105, amount: 100, daysPassed: 30, totalDays: 30 }), BUDGET_ORANGE);
+});
+
+test('přečerpáno nad 10 % → červená', () => {
+  assert.equal(budgetFillColor({ spent: 111, amount: 100, daysPassed: 30, totalDays: 30 }), BUDGET_RED);
+});
