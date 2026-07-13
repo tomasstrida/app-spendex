@@ -102,7 +102,6 @@ const cs = {
   },
   months: ['Leden','Únor','Březen','Duben','Květen','Červen',
            'Červenec','Srpen','Září','Říjen','Listopad','Prosinec'],
-  monthsShort: ['led','úno','bře','dub','kvě','čvn','čvc','srp','zář','říj','lis','pro'],
 };
 
 export const t = cs;
@@ -121,14 +120,14 @@ export function formatPeriod(start, end) {
   const e = new Date(end + 'T00:00:00');
   const sDay = s.getDate();
   const eDay = e.getDate();
-  const sMonth = cs.monthsShort[s.getMonth()];
-  const eMonth = cs.monthsShort[e.getMonth()];
+  const sMonth = s.getMonth() + 1;
+  const eMonth = e.getMonth() + 1;
   const sYear = s.getFullYear();
   const eYear = e.getFullYear();
   if (sYear === eYear) {
-    return `${sDay}. ${sMonth} – ${eDay}. ${eMonth} ${sYear}`;
+    return `${sDay}. ${sMonth}. – ${eDay}. ${eMonth}. ${sYear}`;
   }
-  return `${sDay}. ${sMonth} ${sYear} – ${eDay}. ${eMonth} ${eYear}`;
+  return `${sDay}. ${sMonth}. ${sYear} – ${eDay}. ${eMonth}. ${eYear}`;
 }
 
 export function addPeriods(periodKey, delta) {
