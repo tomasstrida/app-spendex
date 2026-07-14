@@ -180,6 +180,7 @@ const TYPE_OPTIONS = [
   { value: 1, label: 'Měsíční', desc: 'Pravidelný měsíční limit' },
   { value: 2, label: 'Roční / sezónní', desc: 'Nepravidelné výdaje s ročním limitem' },
   { value: 3, label: 'Drahé věci', desc: 'Jednorázové velké výdaje (brýle, telefon…)' },
+  { value: 4, label: 'Účetní', desc: 'Převody mezi účty, nezapočítává se do výdajů' },
 ];
 
 function CategoryForm({ initial, onSave, onCancel }) {
