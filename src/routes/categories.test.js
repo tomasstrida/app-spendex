@@ -61,3 +61,18 @@ test('PATCH type 1→3 (fond): rovněž smaže měsíční budgety', async () =>
   assert.equal(left, 0);
   server.close();
 });
+
+test('PATCH type 1→4 (účetní): smaže měsíční budgety', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO budgets (user_id, category_id, month, amount) VALUES (1,10,'default',2000),(1,10,'2026-06',3000)").run();
+
+  const res = await fetch(`${base}/api/categories/10`, { method:'PATCH', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ type: 4 }) });
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).type, 4);
+
+  const left = db.prepare("SELECT COUNT(*) c FROM budgets WHERE user_id=1 AND category_id=10").get().c;
+  assert.equal(left, 0, 'měsíční budgety měly být při přepnutí na účetní smazány');
+  server.close();
+});

@@ -23,6 +23,6 @@ module.exports = [
   { name: 'Drahé věci', type: 1 },
   { name: 'Ostatní', type: 1 },
   { name: 'Příjmy', type: 1 },
-  { name: 'Převody', type: 1 },
+  { name: 'Převody', type: 4 },
   { name: 'Pravidelné platby', type: 1 },
 ];
