@@ -1056,7 +1056,7 @@ a.report-budget-card:hover { background: var(--bg2); text-decoration: none; }
 
 .tx-edit-grid {
   display: grid;
-  grid-template-columns: 140px 1fr 180px 130px;
+  grid-template-columns: 140px 1fr 160px 160px 130px;
   gap: 12px;
   align-items: end;
 }

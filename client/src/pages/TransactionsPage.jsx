@@ -13,6 +13,7 @@ const ALL_COLS = [
   { key: 'description',          label: 'Popis',           default: true,  always: true },
   { key: 'tx_type',              label: 'Typ úhrady',      default: false },
   { key: 'category_name',        label: 'Kategorie',       default: true },
+  { key: 'subcategory_name',     label: 'Subkategorie',    default: false },
   { key: 'ab_category',          label: 'AirBank kat.',    default: true },
   { key: 'entered_by',           label: 'Kdo zadal',       default: false },
   { key: 'counterparty_account', label: 'Číslo účtu',      default: false },
@@ -87,7 +88,10 @@ export default function TransactionsPage() {
   const [customTo, setCustomTo] = useState(urlTo || '');
   const [editId, setEditId] = useState(null);
   const [editData, setEditData] = useState({});
+  const [editSubcats, setEditSubcats] = useState([]);
   const [catEditId, setCatEditId] = useState(null);
+  const [filterSubcatId, setFilterSubcatId] = useState(searchParams.get('subcategory_id') || '');
+  const [filterSubcatOptions, setFilterSubcatOptions] = useState([]);
   const [visibleCols, setVisibleCols] = useState(loadCols);
   const [colPickerOpen, setColPickerOpen] = useState(false);
   const [selected, setSelected] = useState(new Set());
@@ -128,6 +132,7 @@ export default function TransactionsPage() {
 
   const buildFilterParams = useCallback((params) => {
     if (filterCats.size > 0) params.set('category_ids', [...filterCats].join(','));
+    if (filterSubcatId !== '') params.set('subcategory_id', filterSubcatId);
     if (appliedAmountMin !== '') params.set('amount_min', appliedAmountMin);
     if (appliedAmountMax !== '') params.set('amount_max', appliedAmountMax);
     if (appliedSearch.trim() !== '') params.set('q', appliedSearch.trim());
@@ -137,7 +142,30 @@ export default function TransactionsPage() {
     if (spendingOnly) params.set('spending_only', '1');
     params.set('limit', String(PAGE_SIZE));
     return params;
-  }, [filterCats, appliedAmountMin, appliedAmountMax, appliedSearch, counterparty, direction, matchPatterns, spendingOnly]);
+  }, [filterCats, filterSubcatId, appliedAmountMin, appliedAmountMax, appliedSearch, counterparty, direction, matchPatterns, spendingOnly]);
+
+  // Filtr podle subkategorie dává smysl jen když je ve filtru vybraná právě
+  // jedna konkrétní kategorie (ne „bez kategorie", ne víc kategorií najednou).
+  // Options se dotáhnou pro tuto kategorii; při změně výběru kategorie se
+  // dřívější filterSubcatId zahodí (jinak by mohl zůstat neplatný subcat_id
+  // z jiné kategorie a filtr by tiše nevracel nic).
+  const singleFilterCategoryId = filterCats.size === 1 && [...filterCats][0] !== 'none' ? [...filterCats][0] : null;
+  useEffect(() => {
+    if (!singleFilterCategoryId) { setFilterSubcatOptions([]); setFilterSubcatId(''); return; }
+    let cancelled = false;
+    fetch(`/api/subcategories?category_id=${singleFilterCategoryId}`)
+      .then(r => (r.ok ? r.json() : []))
+      .then(list => {
+        if (cancelled) return;
+        const opts = Array.isArray(list) ? list : [];
+        setFilterSubcatOptions(opts);
+        // Zachovej dřívější výběr (vč. deep-linku z URL), jen když stále patří
+        // do nabídky aktuální kategorie — jinak by filtr tiše nevracel nic.
+        setFilterSubcatId(prev => (prev && opts.some(s => String(s.id) === prev)) ? prev : '');
+      })
+      .catch(() => { if (!cancelled) { setFilterSubcatOptions([]); setFilterSubcatId(''); } });
+    return () => { cancelled = true; };
+  }, [singleFilterCategoryId]);
 
   const loadTransactions = useCallback(() => {
     // Custom range (z URL nebo z UI přepínače) má přednost — fulltext + from/to se vždy kombinují
@@ -265,6 +293,7 @@ export default function TransactionsPage() {
 
   function clearAllFilters() {
     setFilterCats(new Set());
+    setFilterSubcatId('');
     setAmountMin('');
     setAmountMax('');
     setSearch('');
@@ -283,7 +312,11 @@ export default function TransactionsPage() {
   }
 
   async function saveCatQuick(tx, categoryId) {
-    const body = { category_id: categoryId ? parseInt(categoryId) : null };
+    // Quick-edit mění JEN kategorii — subcategory_id proto vždy resetujeme na null.
+    // Kritické: pokud by se poslalo jen category_id a tx měla subcategory_id staré
+    // kategorie, backend by validaci vlastnictví subkategorie proti NOVÉ kategorii
+    // vyhodnotil jako neplatnou a vrátil by 400 na celý PATCH (viz Task 5 review).
+    const body = { category_id: categoryId ? parseInt(categoryId) : null, subcategory_id: null };
     const r = await fetch(`/api/transactions/${tx.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -293,7 +326,7 @@ export default function TransactionsPage() {
       const updated = await r.json();
       const cat = categories.find(c => c.id === updated.category_id);
       setTransactions(prev => prev.map(t =>
-        t.id === updated.id ? { ...updated, category_name: cat?.name, category_color: cat?.color } : t
+        t.id === updated.id ? { ...updated, category_name: cat?.name, category_color: cat?.color, subcategory_name: null } : t
       ));
     }
     setCatEditId(null);
@@ -307,16 +340,34 @@ export default function TransactionsPage() {
       // ať ho uživatel při ručním zařazování vidí (a uložením se propíše do description)
       description: tx.description || tx.place || '',
       category_id: tx.category_id ? String(tx.category_id) : '',
+      subcategory_id: tx.subcategory_id ? String(tx.subcategory_id) : '',
       amount: String(Math.abs(tx.amount)),
       date: tx.date,
       note: tx.note || '',
     });
   }
 
+  // Subkategorie pro edit řádek závisí na aktuálně vybrané kategorii v editData.
+  // Tento efekt jen NAČÍTÁ options pro dropdown. Reset subcategory_id při ruční
+  // změně kategorie řeší synchronně onChange u selectu Kategorie (níže) —
+  // stejný vzor jako RulesPage — jinak by mezi změnou kategorie a doběhnutím
+  // fetch šlo uložit neplatnou (cizí) subcategory_id.
+  useEffect(() => {
+    const catId = editData.category_id;
+    if (!editId || !catId) { setEditSubcats([]); return; }
+    let cancelled = false;
+    fetch(`/api/subcategories?category_id=${catId}`)
+      .then(r => (r.ok ? r.json() : []))
+      .then(list => { if (!cancelled) setEditSubcats(Array.isArray(list) ? list : []); })
+      .catch(() => { if (!cancelled) setEditSubcats([]); });
+    return () => { cancelled = true; };
+  }, [editId, editData.category_id]);
+
   async function saveEdit(tx) {
     const body = {
       description: editData.description,
       category_id: editData.category_id ? parseInt(editData.category_id) : null,
+      subcategory_id: editData.subcategory_id ? parseInt(editData.subcategory_id) : null,
       amount: tx.amount < 0 ? -Math.abs(parseFloat(editData.amount)) : Math.abs(parseFloat(editData.amount)),
       date: editData.date,
       note: editData.note,
@@ -329,9 +380,12 @@ export default function TransactionsPage() {
     if (r.ok) {
       const updated = await r.json();
       const cat = categories.find(c => c.id === updated.category_id);
+      // PATCH response je syrový řádek (bez JOINu na subcategories) — subcategory_name
+      // dopočítáme z právě načtených options pro editovanou kategorii.
+      const subcat = editSubcats.find(s => s.id === updated.subcategory_id);
       setTransactions(prev => prev.map(t =>
         t.id === updated.id
-          ? { ...updated, category_name: cat?.name, category_color: cat?.color }
+          ? { ...updated, category_name: cat?.name, category_color: cat?.color, subcategory_name: subcat?.name ?? null }
           : t
       ));
       setEditId(null);
@@ -542,6 +596,26 @@ export default function TransactionsPage() {
             );
           })}
         </div>
+        {singleFilterCategoryId && filterSubcatOptions.length > 0 && (
+          <div className="tx-chip-groups">
+            <div className="tx-chip-row">
+              <span className="tx-chip-group-label">Subkategorie</span>
+              {filterSubcatOptions.map(s => {
+                const active = filterSubcatId === String(s.id);
+                return (
+                  <button
+                    type="button"
+                    key={s.id}
+                    className={`tx-chip${active ? ' tx-chip-active' : ''}`}
+                    onClick={() => setFilterSubcatId(active ? '' : String(s.id))}
+                  >
+                    {s.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <div className="tx-amount-filter">
           <span className="tx-filter-label">Částka:</span>
           <input
@@ -564,7 +638,7 @@ export default function TransactionsPage() {
             onChange={e => setAmountMax(e.target.value)}
           />
           <span className="text-muted" style={{ fontSize: 12 }}>Kč</span>
-          {(filterCats.size > 0 || amountMin !== '' || amountMax !== '' || search !== '' || counterparty !== '' || direction !== '' || matchPatterns !== '' || spendingOnly) && (
+          {(filterCats.size > 0 || filterSubcatId !== '' || amountMin !== '' || amountMax !== '' || search !== '' || counterparty !== '' || direction !== '' || matchPatterns !== '' || spendingOnly) && (
             <button
               type="button"
               className="btn btn-ghost tx-filter-clear"
@@ -653,11 +727,25 @@ export default function TransactionsPage() {
                     <select
                       className="input"
                       value={editData.category_id}
-                      onChange={e => setEditData(d => ({ ...d, category_id: e.target.value }))}
+                      onChange={e => setEditData(d => ({ ...d, category_id: e.target.value, subcategory_id: '' }))}
                     >
                       <option value="">— bez kategorie —</option>
                       {categories.map(c => (
                         <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: 11 }}>Subkategorie</label>
+                    <select
+                      className="input"
+                      value={editData.subcategory_id}
+                      disabled={editSubcats.length === 0}
+                      onChange={e => setEditData(d => ({ ...d, subcategory_id: e.target.value }))}
+                    >
+                      <option value="">— žádná —</option>
+                      {editSubcats.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
                       ))}
                     </select>
                   </div>
@@ -779,6 +867,7 @@ function colsToGrid(cols) {
     if (c.key === 'tx_time') return '52px';
     if (c.key === 'amount') return '110px';
     if (c.key === 'category_name') return '140px';
+    if (c.key === 'subcategory_name') return '140px';
     if (c.key === 'ab_category') return '130px';
     if (c.key === 'tx_type') return '130px';
     if (c.key === 'entered_by') return '120px';
@@ -808,6 +897,8 @@ function renderCell(key, tx, categories, accountNameMap) {
           {tx.category_name}
         </span>
       ) : <span className="text-muted" style={{ fontSize: 12 }}>—</span>;
+    case 'subcategory_name':
+      return <span className="text-muted" style={{ fontSize: 12 }}>{tx.subcategory_name || '—'}</span>;
     case 'ab_category':
       return <span className="text-muted" style={{ fontSize: 12 }}>{tx.ab_category || '—'}</span>;
     case 'entered_by':

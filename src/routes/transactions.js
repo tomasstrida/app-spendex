@@ -10,7 +10,7 @@ const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
 // GET /api/transactions?from=...&to=...&category_id=&category_ids=1,2,none&amount_min=&amount_max=&counterparty=&limit=&offset=
 router.get('/', requireAuth, (req, res) => {
-  const { from, to, category_id, category_ids, amount_min, amount_max, q, counterparty, direction, limit = 200, offset = 0 } = req.query;
+  const { from, to, category_id, category_ids, subcategory_id, amount_min, amount_max, q, counterparty, direction, limit = 200, offset = 0 } = req.query;
   let query = 'SELECT t.*, c.name as category_name, c.color as category_color, sc.name as subcategory_name FROM transactions t LEFT JOIN categories c ON t.category_id = c.id LEFT JOIN subcategories sc ON t.subcategory_id = sc.id AND sc.user_id = t.user_id WHERE t.user_id = ?';
   const params = [req.dataUserId];
 
@@ -81,6 +81,11 @@ router.get('/', requireAuth, (req, res) => {
   } else if (category_id) {
     query += ' AND t.category_id = ?';
     params.push(category_id);
+  }
+
+  if (subcategory_id !== undefined && String(subcategory_id).trim() !== '') {
+    const v = parseInt(subcategory_id, 10);
+    if (Number.isFinite(v)) { query += ' AND t.subcategory_id = ?'; params.push(v); }
   }
 
   if (amount_min !== undefined && amount_min !== '') {

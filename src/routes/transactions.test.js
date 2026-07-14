@@ -139,3 +139,18 @@ test('PATCH: tx s nekonzistentním subcategory_id (cizí user) editace jiného p
   assert.equal(patched.subcategory_id, foreignSubId);
   server.close();
 });
+
+test('GET: subcategory_id filtruje jen transakce dané subkategorie', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const subA = db.prepare("INSERT INTO subcategories (user_id, category_id, name) VALUES (1,5,'ChatGPT')").run().lastInsertRowid;
+  const subB = db.prepare("INSERT INTO subcategories (user_id, category_id, name) VALUES (1,5,'Netflix')").run().lastInsertRowid;
+  db.prepare("INSERT INTO transactions (user_id, category_id, subcategory_id, amount, date, description) VALUES (1,5,?,-500,'2026-07-01','OPENAI')").run(subA);
+  db.prepare("INSERT INTO transactions (user_id, category_id, subcategory_id, amount, date, description) VALUES (1,5,?,-200,'2026-07-02','NETFLIX')").run(subB);
+  db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description) VALUES (1,5,-100,'2026-07-03','JINA')").run();
+  const list = await (await fetch(`${base}/api/transactions?subcategory_id=${subA}`)).json();
+  const rows = list.transactions || list;
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].description, 'OPENAI');
+  server.close();
+});
