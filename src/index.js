@@ -53,6 +53,7 @@ app.get('/health', (req, res) => res.json({ status: 'ok', version: APP_VERSION }
 app.use('/auth', require('./routes/auth'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/categories', require('./routes/categories'));
+app.use('/api/subcategories', require('./routes/subcategories'));
 app.use('/api/budgets', require('./routes/budgets'));
 app.use('/api/annual-budgets', require('./routes/annual-budgets'));
 app.use('/api/budget-items', require('./routes/budget-items'));
