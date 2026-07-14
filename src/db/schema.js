@@ -317,6 +317,19 @@ function initSchema() {
       added_by INTEGER,
       created_at TEXT DEFAULT (datetime('now'))
     )`,
+    `CREATE TABLE IF NOT EXISTS subcategories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      category_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+    )`,
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_subcat_user_cat_name ON subcategories(user_id, category_id, name)',
+    'ALTER TABLE transactions ADD COLUMN subcategory_id INTEGER REFERENCES subcategories(id) ON DELETE SET NULL',
+    'ALTER TABLE category_rules ADD COLUMN subcategory_id INTEGER REFERENCES subcategories(id) ON DELETE SET NULL',
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* sloupec/index/tabulka již existuje nebo nelze aplikovat */ }

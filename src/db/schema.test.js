@@ -58,3 +58,25 @@ test('migrace: fixed_expenses má amount_min/max + frequency_months a dopočíta
   assert.equal(row.amount_max, 39900);   // 38000*1.05
   assert.equal(row.frequency_months, 1);
 });
+
+test('migrace: subcategories tabulka + subcategory_id FK sloupce existují', () => {
+  const tmp = path.join(os.tmpdir(), `spendex-subcat-${Date.now()}.db`);
+  process.env.DB_PATH = tmp;
+  delete require.cache[require.resolve('../db/connection')];
+  delete require.cache[require.resolve('../db/schema')];
+  const db = require('../db/connection');
+  const { initSchema } = require('../db/schema');
+  initSchema();
+  db.prepare("INSERT INTO users (id, email) VALUES (1,'a@b.cz')").run();
+  db.prepare("INSERT INTO categories (id, user_id, name) VALUES (5,1,'Licence')").run();
+  db.prepare("INSERT INTO subcategories (user_id, category_id, name) VALUES (1,5,'ChatGPT')").run();
+  const sub = db.prepare("SELECT id, name FROM subcategories WHERE name='ChatGPT'").get();
+  // FK sloupce na transactions a category_rules existují (INSERT nevyhodí chybu)
+  db.prepare("INSERT INTO transactions (user_id, amount, date, description, subcategory_id) VALUES (1,-100,'2026-07-01','OPENAI',?)").run(sub.id);
+  db.prepare("INSERT INTO category_rules (user_id, category_id, pattern, subcategory_id) VALUES (1,5,'OPENAI',?)").run(sub.id);
+  const tx = db.prepare("SELECT subcategory_id FROM transactions WHERE description='OPENAI'").get();
+  db.close();
+  fs.unlinkSync(tmp);
+  try { fs.unlinkSync(tmp + '-wal'); fs.unlinkSync(tmp + '-shm'); } catch { /* ok */ }
+  assert.equal(tx.subcategory_id, sub.id);
+});
