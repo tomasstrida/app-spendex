@@ -10,14 +10,13 @@ const mainAccount = '1679014138';      // Hlavní (transit, zdroj „dotace" pro
 const variableAccount = '1679014074';  // Nepravidelné (pool, ze kterého se platí roční výdaje)
 
 /**
- * Stav fixní platby za období.
- * @returns 'ok' | 'mismatch' | 'missing' | null  (null = bez stavu)
+ * Stav fixní platby: skutečná částka vůči akceptovanému rozmezí [min, max].
+ * @returns 'ok' | 'mismatch' | 'missing' | null  (null = rozmezí nedefinováno)
  */
-function paymentStatus(expected, actual, txCount) {
-  if (!(expected > 0)) return null;
+function paymentStatus(min, max, actual, txCount) {
   if (!txCount || txCount === 0) return 'missing';
-  const diffPct = (Math.abs(actual - expected) / expected) * 100;
-  return diffPct <= MATCH_TOLERANCE_PCT ? 'ok' : 'mismatch';
+  if (min == null || max == null) return null;
+  return (actual >= min && actual <= max) ? 'ok' : 'mismatch';
 }
 
 /**

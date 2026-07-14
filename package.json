@@ -1,6 +1,6 @@
 {
   "name": "spendex",
-  "version": "2.0.140",
+  "version": "2.0.141",
   "description": "Spendex – personal finance management app",
   "main": "src/index.js",
   "scripts": {

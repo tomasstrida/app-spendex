@@ -3,24 +3,32 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { paymentStatus, savingsNet, reserveBalance, MATCH_TOLERANCE_PCT } = require('./recurring');
 
-test('paymentStatus: žádná shoda → missing', () => {
-  assert.equal(paymentStatus(38126, 0, 0), 'missing');
+test('paymentStatus: žádná transakce → missing', () => {
+  assert.equal(paymentStatus(36000, 40000, 0, 0), 'missing');
 });
 
-test('paymentStatus: přesná shoda → ok', () => {
-  assert.equal(paymentStatus(38126, 38126, 1), 'ok');
+test('paymentStatus: uvnitř rozmezí → ok', () => {
+  assert.equal(paymentStatus(36000, 40000, 38000, 1), 'ok');
 });
 
-test('paymentStatus: do 5 % → ok (hranice přesně 5 %)', () => {
-  assert.equal(paymentStatus(1000, 1050, 1), 'ok');   // 5.0 %
+test('paymentStatus: přesně na dolní hranici → ok', () => {
+  assert.equal(paymentStatus(36000, 40000, 36000, 1), 'ok');
 });
 
-test('paymentStatus: těsně nad 5 % → mismatch', () => {
-  assert.equal(paymentStatus(1000, 1051, 1), 'mismatch'); // 5.1 %
+test('paymentStatus: přesně na horní hranici → ok', () => {
+  assert.equal(paymentStatus(36000, 40000, 40000, 1), 'ok');
 });
 
-test('paymentStatus: očekávaná ≤ 0 → null (žádný stav)', () => {
-  assert.equal(paymentStatus(0, 100, 1), null);
+test('paymentStatus: pod rozmezím → mismatch', () => {
+  assert.equal(paymentStatus(36000, 40000, 35999, 1), 'mismatch');
+});
+
+test('paymentStatus: nad rozmezím → mismatch', () => {
+  assert.equal(paymentStatus(36000, 40000, 40001, 1), 'mismatch');
+});
+
+test('paymentStatus: rozmezí nedefinováno → null', () => {
+  assert.equal(paymentStatus(null, null, 100, 1), null);
 });
 
 test('savingsNet: vklady − výběry', () => {
