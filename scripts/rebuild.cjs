@@ -125,7 +125,7 @@ try {
     const txs = parseAirBankCSV(fs.readFileSync(file, 'utf-8'));
     const accId = accByNum[a.account_number];
     for (const t of txs) {
-      const catName = applyRules(t, a, rules);
+      const { category: catName } = applyRules(t, a, rules);
       const cId = needCat(catName);
       // external_id rozlišený per účet kvůli UNIQUE(user_id, external_id) a interním převodům.
       // Pozn.: bez ref. čísla je NULL → SQLite NULL je v UNIQUE distinktní, takže taková
