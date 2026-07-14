@@ -470,6 +470,29 @@
   font-size: 12px;
 }
 
+/* Rozpad subkategorií pod teploměrem (Měsíční rozpočty) */
+.budget-subcat-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text2);
+  font-size: 11px;
+}
+.budget-subcat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.budget-subcat-row {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text2);
+}
+.budget-subcat-spent { font-weight: 500; }
+
 /* Souhrnný řádek všech provozních budgetů */
 .budget-summary {
   margin-top: 8px;
@@ -542,6 +565,35 @@ a.report-budget-card:hover { background: var(--bg2); text-decoration: none; }
 .report-budget-limit { min-width: 80px; }
 .report-budget-over { min-width: 80px; text-align: right; font-weight: 600; white-space: nowrap; }
 .report-budget-status { min-width: 24px; text-align: center; }
+
+/* Rozpad subkategorií pod řádkem kategorie (Měsíční výdaje) */
+.report-subcat-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-right: 6px;
+  cursor: pointer;
+  color: var(--text2);
+  font-size: 11px;
+  line-height: 1;
+}
+.report-subcat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 0 6px 26px;
+  font-size: 12px;
+}
+.report-subcat-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text2);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+a.report-subcat-row:hover { background: var(--bg2); }
+.report-subcat-spent { font-weight: 500; }
 
 /* Subtotal */
 .report-subtotal {

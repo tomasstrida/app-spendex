@@ -162,6 +162,7 @@ export default function ReportPage() {
   const [editIncome, setEditIncome] = useState(null);
   const [prefillIncome, setPrefillIncome] = useState(null); // pre-fill „Přidat" z auto-only řádku
   const [unaliasedExpanded, setUnaliasedExpanded] = useState(false);
+  const [expandedSubcats, setExpandedSubcats] = useState({}); // per-kategorie rozklik subkategorií
 
   useEffect(() => {
     if (!period) return;
@@ -202,7 +203,12 @@ export default function ReportPage() {
 
   // Výdaje dle typu kategorie (z by_category)
   const byCategory = stats?.by_category || [];
+  const bySubcategory = stats?.by_subcategory || [];
   const type3Spent = byCategory.filter(c => c.type === 3 && c.spent > 0);
+
+  function toggleSubcatExpand(categoryId) {
+    setExpandedSubcats(prev => ({ ...prev, [categoryId]: !prev[categoryId] }));
+  }
 
   const totalFixed   = fixedExpenses.reduce((s, f) => s + f.amount, 0);
   // Striktní whitelist: do bilance i sekce Příjmy vstupují jen ručně aliasované zdroje
@@ -549,31 +555,64 @@ export default function ReportPage() {
               <div className="report-budget-list">
                 {budgets.map(b => {
                   const st = budgetStatus(b.spent, b.amount);
+                  const subcats = b.category_id != null
+                    ? bySubcategory.filter(s => s.category_id === b.category_id)
+                    : [];
+                  const hasSubcats = subcats.length > 0;
+                  const isExpanded = hasSubcats && !!expandedSubcats[b.category_id];
                   const inner = (
                     <>
                       <span className="report-budget-dot" style={{ background: b.category_color || '#6366f1' }} />
-                      <span className="report-budget-name">{b.category_name}</span>
+                      <span className="report-budget-name">
+                        {hasSubcats && (
+                          <button
+                            type="button"
+                            className="report-subcat-toggle"
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSubcatExpand(b.category_id); }}
+                            title={isExpanded ? 'Skrýt rozpad subkategorií' : 'Zobrazit rozpad subkategorií'}
+                          >
+                            {isExpanded ? '▾' : '▸'}
+                          </button>
+                        )}
+                        {b.category_name}
+                      </span>
                       <span className={`report-budget-spent ${STATUS[st].cls}`}>{formatCurrency(b.spent)}</span>
                       <span className="text-muted report-budget-limit">/ {formatCurrency(b.amount)}</span>
                       <span className="report-budget-over text-danger">{b.spent > b.amount ? `+${formatCurrency(b.spent - b.amount)}` : ''}</span>
                       <span className="report-budget-status">{STATUS[st].icon}</span>
                     </>
                   );
-                  if (b.category_id == null) {
-                    return (
-                      <div key="report-budget-no-category" className="report-budget-row">{inner}</div>
+                  const row = b.category_id == null
+                    ? <div key="report-budget-no-category" className="report-budget-row">{inner}</div>
+                    : (
+                      <Link
+                        key={b.category_id}
+                        to={`/transactions?category_id=${b.category_id}` + (period ? `&period=${period}` : '')}
+                        className="report-budget-row"
+                        style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                      >
+                        {inner}
+                      </Link>
                     );
-                  }
-                  const to = `/transactions?category_id=${b.category_id}` + (period ? `&period=${period}` : '');
                   return (
-                    <Link
-                      key={b.category_id}
-                      to={to}
-                      className="report-budget-row"
-                      style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
-                    >
-                      {inner}
-                    </Link>
+                    <div key={`wrap-${b.category_id ?? 'no-category'}`}>
+                      {row}
+                      {isExpanded && (
+                        <div className="report-subcat-list">
+                          {subcats.map(s => (
+                            <Link
+                              key={s.subcategory_id}
+                              to={`/transactions?subcategory_id=${s.subcategory_id}` + (period ? `&period=${period}` : '')}
+                              className="report-subcat-row"
+                              style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                            >
+                              <span className="report-subcat-name">{s.name}</span>
+                              <span className="report-subcat-spent">{formatCurrency(s.spent)}</span>
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>

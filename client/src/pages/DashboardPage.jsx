@@ -39,11 +39,12 @@ function Thermometer({ spent, amount, periodStart, periodEnd, showProjection = t
   );
 }
 
-function BudgetBar({ budget, period, periodStart, periodEnd }) {
+function BudgetBar({ budget, period, periodStart, periodEnd, subcategories = [], expanded, onToggleExpand }) {
   const navigate = useNavigate();
   const over = budget.spent > budget.amount;
   const remaining = budget.amount - budget.spent;
   const pct = budget.amount > 0 ? (budget.spent / budget.amount) * 100 : 0;
+  const hasSubcategories = subcategories.length > 0;
 
   return (
     <div className="budget-item budget-item-clickable"
@@ -65,6 +66,28 @@ function BudgetBar({ budget, period, periodStart, periodEnd }) {
           : <span className="text-muted">{formatCurrency(remaining)} {t.dashboard.remaining}</span>}
         <span className="text-muted">{Math.round(pct)} %</span>
       </div>
+      {hasSubcategories && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            className="budget-subcat-toggle"
+            onClick={() => onToggleExpand(budget.category_id)}
+            title={expanded ? 'Skrýt rozpad subkategorií' : 'Zobrazit rozpad subkategorií'}
+          >
+            {expanded ? '▾' : '▸'} rozpad podle subkategorie
+          </button>
+          {expanded && (
+            <div className="budget-subcat-list">
+              {subcategories.map(s => (
+                <div key={s.subcategory_id} className="budget-subcat-row">
+                  <span className="budget-subcat-name">{s.name}</span>
+                  <span className="budget-subcat-spent">{formatCurrency(s.spent)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -131,6 +154,11 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [noteDraft, setNoteDraft] = useState('');
+  const [expandedSubcats, setExpandedSubcats] = useState({}); // per-kategorie rozklik subkategorií
+
+  function toggleSubcatExpand(categoryId) {
+    setExpandedSubcats(prev => ({ ...prev, [categoryId]: !prev[categoryId] }));
+  }
 
   function startNote(it) {
     setEditingNoteId(it.id);
@@ -173,6 +201,7 @@ export default function DashboardPage() {
 
   const type3Cats = categories.filter(c => c.type === 3);
   const expensiveItems = data?.expensive_items || [];
+  const bySubcategory = data?.by_subcategory || [];
 
   return (
     <Layout>
@@ -216,7 +245,10 @@ export default function DashboardPage() {
               <div className="budget-list">
                 {budgets.map(b => (
                   <BudgetBar key={b.category_id} budget={b} period={period}
-                    periodStart={periodStart} periodEnd={periodEnd} />
+                    periodStart={periodStart} periodEnd={periodEnd}
+                    subcategories={bySubcategory.filter(s => s.category_id === b.category_id)}
+                    expanded={!!expandedSubcats[b.category_id]}
+                    onToggleExpand={toggleSubcatExpand} />
                 ))}
                 <BudgetSummary budgets={budgets} periodStart={periodStart} periodEnd={periodEnd} />
               </div>
