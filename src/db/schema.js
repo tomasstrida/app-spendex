@@ -297,6 +297,9 @@ function initSchema() {
     // duplicity už existují – v tom případě je nutné je nejdřív vyčistit ručně.
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_user_name ON categories(user_id, name)',
     'ALTER TABLE fixed_expenses ADD COLUMN match_pattern TEXT',
+    'ALTER TABLE fixed_expenses ADD COLUMN amount_min REAL',
+    'ALTER TABLE fixed_expenses ADD COLUMN amount_max REAL',
+    'ALTER TABLE fixed_expenses ADD COLUMN frequency_months INTEGER DEFAULT 1',
     'ALTER TABLE income_sources ADD COLUMN match_counterparty_account TEXT',
     'ALTER TABLE income_sources ADD COLUMN account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL',
     "ALTER TABLE settings ADD COLUMN notify_scope TEXT DEFAULT 'pending_only'",
@@ -318,6 +321,14 @@ function initSchema() {
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* sloupec/index/tabulka již existuje nebo nelze aplikovat */ }
   }
+
+  // Data-migrace: fixním platbám bez rozmezí dopočítej min/max z dnešní 5% tolerance.
+  try {
+    db.exec(`UPDATE fixed_expenses
+             SET amount_min = ROUND(amount * 0.95, 2),
+                 amount_max = ROUND(amount * 1.05, 2)
+             WHERE amount_min IS NULL AND amount IS NOT NULL`);
+  } catch { /* sloupce ještě neexistují při první migraci pořadí – ignoruj */ }
 
   // --- Přístup do aplikace: bootstrap adminů + allowlist ---
   // 1) Adminy autoritativně určuje ENV ADMIN_EMAILS (aditivně — nikoho nedegraduje).
