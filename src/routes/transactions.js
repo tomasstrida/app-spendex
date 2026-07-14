@@ -167,7 +167,11 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
       subId = parsed;
     }
   }
-  if (subId != null) {
+  // Validaci vlastnictví subcategory_id spouštíme JEN když klient v požadavku
+  // skutečně mění subcategory_id nebo category_id. Jinak by editace jiného pole
+  // (např. note) na starší transakci s už nekonzistentním subcategory_id skončila
+  // 400 a řádek by se nedal editovat vůbec (viz re-review regrese).
+  if (subId != null && (subcategory_id !== undefined || category_id !== undefined)) {
     const effectiveCategoryId = category_id !== undefined ? parseInt(category_id) : tx.category_id;
     if (!ownsSubcategory(db, req.dataUserId, subId, effectiveCategoryId)) {
       return res.status(400).json({ error: 'Neplatná subkategorie pro tuto kategorii.' });

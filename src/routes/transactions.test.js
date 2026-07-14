@@ -122,3 +122,20 @@ test('GET: cizí subkategorie se stejným id (jiný user) se nepromítne (defens
   assert.equal(tx.subcategory_name, null);
   server.close();
 });
+
+test('PATCH: tx s nekonzistentním subcategory_id (cizí user) editace jiného pole projde (200), subcategory_id beze změny', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO users (id, email) VALUES (2,'other@x')").run();
+  db.prepare("INSERT INTO categories (id, user_id, name) VALUES (6,2,'Cizí')").run();
+  const foreignSubId = db.prepare("INSERT INTO subcategories (user_id, category_id, name) VALUES (2,6,'Cizí sub')").run().lastInsertRowid;
+  // Simulace prod bugu: tx patří userovi 1, ale subcategory_id ukazuje na subkategorii cizího usera.
+  // Request PATCHuje JEN note, bez subcategory_id/category_id v body → validace se nesmí spustit.
+  const txId = db.prepare("INSERT INTO transactions (user_id, category_id, subcategory_id, amount, date, description) VALUES (1,5,?,-100,'2026-07-03','X')").run(foreignSubId).lastInsertRowid;
+  const res = await fetch(`${base}/api/transactions/${txId}`, { method:'PATCH', headers:{'content-type':'application/json'}, body: JSON.stringify({ note: 'x' }) });
+  assert.equal(res.status, 200);
+  const patched = await res.json();
+  assert.equal(patched.note, 'x');
+  assert.equal(patched.subcategory_id, foreignSubId);
+  server.close();
+});
