@@ -29,3 +29,28 @@ test('by_subcategory sečte výdaje per subkategorie v období', async () => {
   assert.equal(row.spent, 500);
   server.close();
 });
+
+test('accounting: saldo účetní kategorie (type=4) přes VŠECHNY účty vč. ignored', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type) VALUES (7,1,'Převody',4)").run();
+  // účet role='ignored' NESMÍ být vyfiltrován (na rozdíl od SPENDING_FILTER)
+  const accId = db.prepare("INSERT INTO accounts (user_id, account_number, name, role) VALUES (1,'999','Spořicí','ignored')").run().lastInsertRowid;
+  db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description,account_id) VALUES (1,7,-5000,'2026-07-05','Převod na spoření',NULL),(1,7,5000,'2026-07-05','Převod ze spoření',?)").run(accId);
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-07`)).json();
+  const row = (stats.accounting || []).find(r => r.id === 7);
+  assert.ok(row, 'účetní kategorie musí být v accounting');
+  assert.equal(row.saldo, 0, 'saldo obou noh převodu = 0');
+  assert.equal(row.tx_count, 2);
+  server.close();
+});
+
+test('accounting: kategorie type 1/2/3 se v accounting neobjeví', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type) VALUES (8,1,'Jídlo',1),(9,1,'Licence',2)").run();
+  db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES (1,8,-300,'2026-07-05','Rohlik')").run();
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-07`)).json();
+  assert.equal((stats.accounting || []).length, 0);
+  server.close();
+});

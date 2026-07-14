@@ -50,6 +50,21 @@ router.get('/overview', requireAuth, (req, res) => {
     ORDER BY spent DESC
   `).all(req.dataUserId, start, end);
 
+  // Účetní kategorie (type=4): saldo napříč VŠEMI účty (bez SPENDING_FILTER),
+  // aby interní převody vyšly na nulu. Kladné=příliv, záporné=odliv, ~0=vyrovnané.
+  const accounting = db.prepare(`
+    SELECT c.id, c.name, c.color, c.icon,
+      COALESCE(SUM(t.amount), 0) AS saldo,
+      COUNT(t.id) AS tx_count
+    FROM categories c
+    LEFT JOIN transactions t ON t.category_id = c.id
+      AND t.user_id = ?
+      AND t.date >= ? AND t.date <= ?
+    WHERE c.user_id = ? AND c.type = 4
+    GROUP BY c.id
+    ORDER BY c.name ASC
+  `).all(req.dataUserId, start, end, req.dataUserId);
+
   // Posledních 12 období
   const trend = db.prepare(`
     SELECT strftime('%Y-%m', t.date) as month_key,
@@ -151,6 +166,7 @@ router.get('/overview', requireAuth, (req, res) => {
     reserve,
     variable_pool_funded: variablePoolDotace.amount,
     expensive_items: expensiveItems,
+    accounting,
   });
 });
 
