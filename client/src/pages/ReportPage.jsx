@@ -204,6 +204,7 @@ export default function ReportPage() {
   // Výdaje dle typu kategorie (z by_category)
   const byCategory = stats?.by_category || [];
   const bySubcategory = stats?.by_subcategory || [];
+  const accounting = stats?.accounting || [];
   const type3Spent = byCategory.filter(c => c.type === 3 && c.spent > 0);
 
   function toggleSubcatExpand(categoryId) {
@@ -646,6 +647,39 @@ export default function ReportPage() {
               );
             })()}
           </section>
+
+          {/* ── ÚČETNÍ (Typ 4) ── */}
+          {accounting.length > 0 && (
+            <section className="report-section">
+              <div className="report-section-header">
+                <h2 className="report-section-title">Účetní</h2>
+              </div>
+              <div className="report-budget-list">
+                {accounting.map(a => {
+                  const balanced = Math.round(a.saldo) === 0;
+                  return (
+                    <Link
+                      key={a.id}
+                      to={`/transactions?category_id=${a.id}` + (period ? `&period=${period}` : '')}
+                      className="report-bilance-row"
+                      style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                    >
+                      <span>
+                        <span className="budget-dot" style={{ background: a.color || '#6366f1' }} />
+                        {a.name}
+                      </span>
+                      <span
+                        className={balanced ? '' : 'text-danger'}
+                        title={balanced ? 'Vyrovnané saldo' : 'Nenulové saldo — zkontroluj chybějící nohu převodu'}
+                      >
+                        {formatCurrency(a.saldo)}{balanced ? '' : ' ⚠'}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           {/* ── DRAHÉ VĚCI (Typ 3) ── */}
           {type3Spent.length > 0 && (
