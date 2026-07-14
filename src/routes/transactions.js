@@ -10,7 +10,7 @@ const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 // GET /api/transactions?from=...&to=...&category_id=&category_ids=1,2,none&amount_min=&amount_max=&counterparty=&limit=&offset=
 router.get('/', requireAuth, (req, res) => {
   const { from, to, category_id, category_ids, amount_min, amount_max, q, counterparty, direction, limit = 200, offset = 0 } = req.query;
-  let query = 'SELECT t.*, c.name as category_name, c.color as category_color FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.user_id = ?';
+  let query = 'SELECT t.*, c.name as category_name, c.color as category_color, sc.name as subcategory_name FROM transactions t LEFT JOIN categories c ON t.category_id = c.id LEFT JOIN subcategories sc ON t.subcategory_id = sc.id AND sc.user_id = t.user_id WHERE t.user_id = ?';
   const params = [req.dataUserId];
 
   if (from) { query += ' AND t.date >= ?'; params.push(from); }
@@ -146,7 +146,7 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
 router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
   const tx = db.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
   if (!tx) return res.status(404).json({ error: 'Transakce nenalezena.' });
-  const { amount, currency, date, description, note, category_id } = req.body;
+  const { amount, currency, date, description, note, category_id, subcategory_id } = req.body;
   if (amount !== undefined && !Number.isFinite(Number(amount))) return res.status(400).json({ error: 'Částka musí být číslo.' });
   if (date !== undefined && (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date))) return res.status(400).json({ error: 'Datum musí být ve formátu YYYY-MM-DD.' });
   if (category_id !== undefined && category_id !== null) {
@@ -154,7 +154,7 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
     if (!owned) return res.status(400).json({ error: 'Neplatná kategorie.' });
   }
   db.prepare(
-    'UPDATE transactions SET amount = ?, currency = ?, date = ?, description = ?, note = ?, category_id = ? WHERE id = ?'
+    'UPDATE transactions SET amount = ?, currency = ?, date = ?, description = ?, note = ?, category_id = ?, subcategory_id = ? WHERE id = ?'
   ).run(
     amount !== undefined ? Number(amount) : tx.amount,
     currency !== undefined ? String(currency).slice(0, 8) : tx.currency,
@@ -162,6 +162,7 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
     description !== undefined ? String(description).slice(0, 500) : tx.description,
     note !== undefined ? String(note).slice(0, 500) : tx.note,
     category_id !== undefined ? category_id : tx.category_id,
+    subcategory_id !== undefined ? (subcategory_id != null ? parseInt(subcategory_id) : null) : tx.subcategory_id,
     tx.id
   );
   res.json(db.prepare('SELECT * FROM transactions WHERE id = ?').get(tx.id));
