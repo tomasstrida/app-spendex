@@ -16,8 +16,8 @@ test('24 unikátních kategorií', () => {
   assert.equal(catNames.size, 24);
 });
 
-test('typy kategorií jsou 1, 2 nebo 3', () => {
-  for (const c of categories) assert.ok([1, 2, 3].includes(c.type), c.name);
+test('typy kategorií jsou 1, 2, 3 nebo 4', () => {
+  for (const c of categories) assert.ok([1, 2, 3, 4].includes(c.type), c.name);
 });
 
 test('10 účtů s validní rolí, Hlavní má roli income', () => {
