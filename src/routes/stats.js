@@ -40,6 +40,16 @@ router.get('/overview', requireAuth, (req, res) => {
     ORDER BY spent DESC
   `).all(req.dataUserId, start, end, req.dataUserId);
 
+  const bySubcategory = db.prepare(`
+    SELECT t.subcategory_id, sc.category_id, sc.name,
+      COALESCE(SUM(-t.amount), 0) as spent
+    FROM transactions t
+    JOIN subcategories sc ON sc.id = t.subcategory_id
+    WHERE t.user_id = ? AND t.date >= ? AND t.date <= ? ${SPENDING_FILTER}
+    GROUP BY t.subcategory_id
+    ORDER BY spent DESC
+  `).all(req.dataUserId, start, end);
+
   // Posledních 12 období
   const trend = db.prepare(`
     SELECT strftime('%Y-%m', t.date) as month_key,
@@ -135,6 +145,7 @@ router.get('/overview', requireAuth, (req, res) => {
     billing_day: billingDay,
     total_spent: total.total_spent,
     by_category: byCategory,
+    by_subcategory: bySubcategory,
     monthly_trend: trend,
     savings,
     reserve,
