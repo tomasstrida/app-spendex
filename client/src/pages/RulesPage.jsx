@@ -39,27 +39,21 @@ export default function RulesPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Subkategorie závisí na vybrané kategorii. Při změně kategorie (uživatelem)
-  // starou subkategorii zahodíme — patřila jiné kategorii. Při předvyplnění
-  // formuláře z existujícího pravidla (startEdit nastaví category_id i
-  // subcategory_id najednou) subkategorii zachováme, pokud je v načteném
-  // seznamu skutečně přítomná.
+  // Subkategorie závisí na vybrané kategorii — tento efekt jen NAČÍTÁ options
+  // pro dropdown. Reset staré subcategory_id při ruční změně kategorie řeší
+  // synchronně onChange u selectu Kategorie (níže), ne tento efekt — jinak
+  // vzniká okno mezi změnou kategorie a doběhnutím fetch, kdy jde odeslat
+  // neplatná (cizí) subcategory_id (uložení dřív, než fetch skončí, nebo
+  // .catch větev). Při předvyplnění z existujícího pravidla (startEdit
+  // nastaví category_id i subcategory_id najednou přímo přes setForm, ne
+  // přes tento onChange) subcategory_id díky tomu zůstane zachovaná.
   useEffect(() => {
     const catId = form.category_id;
     if (!catId) { setSubcats([]); return; }
     let cancelled = false;
     fetch(`/api/subcategories?category_id=${catId}`)
       .then(r => (r.ok ? r.json() : []))
-      .then(list => {
-        if (cancelled) return;
-        const arr = Array.isArray(list) ? list : [];
-        setSubcats(arr);
-        setForm(f => (
-          f.subcategory_id && !arr.some(s => String(s.id) === String(f.subcategory_id))
-            ? { ...f, subcategory_id: '' }
-            : f
-        ));
-      })
+      .then(list => { if (!cancelled) setSubcats(Array.isArray(list) ? list : []); })
       .catch(() => { if (!cancelled) setSubcats([]); });
     return () => { cancelled = true; };
   }, [form.category_id]);
@@ -158,7 +152,7 @@ export default function RulesPage() {
             <select
               className="input"
               value={form.category_id}
-              onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))}
+              onChange={e => setForm(f => ({ ...f, category_id: e.target.value, subcategory_id: '' }))}
             >
               <option value="">— vyber —</option>
               {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
