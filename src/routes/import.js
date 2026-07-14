@@ -85,9 +85,9 @@ router.post('/confirm', requireAuth, writeLimiter, (req, res) => {
 
   const insert = db.prepare(`
     INSERT OR IGNORE INTO transactions
-      (user_id, category_id, amount, currency, date, description, note, source, external_id,
+      (user_id, category_id, subcategory_id, amount, currency, date, description, note, source, external_id,
        tx_time, tx_type, counterparty_account, entered_by, place, account_id, ab_category)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'airbank', ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'airbank', ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const upsertMapping = db.prepare(`
@@ -144,12 +144,12 @@ router.post('/confirm', requireAuth, writeLimiter, (req, res) => {
       // Autoritativní dedup přes kanonické external_id
       if (extId && existingIds.has(extId)) { skipped++; continue; }
 
-      // Kategorizace: applyRules vrací jméno kategorie (precedence L0>L3>L1>L2>fallback).
+      // Kategorizace: applyRules vrací { category, subcategory_id } (precedence L0>L3>L1>L2>fallback).
       // Pokud kategorie u tohoto usera neexistuje (např. nový user bez seedu), padne na null.
-      const catName = applyRules(t, account, effectiveRules);
+      const { category: catName, subcategory_id } = applyRules(t, account, effectiveRules);
       const categoryId = catIdByName[catName] || null;
       const result = insert.run(
-        req.dataUserId, categoryId, t.amount, t.currency, t.date,
+        req.dataUserId, categoryId, subcategory_id ?? null, t.amount, t.currency, t.date,
         t.description, t.note || '', extId || null,
         t.tx_time || null, t.tx_type || null,
         t.counterparty_account || null, t.entered_by || null, t.place || null,

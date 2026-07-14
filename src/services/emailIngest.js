@@ -6,13 +6,13 @@ const seedRules = require('../../scripts/seed/rules');
 const loadUserRules = require('../utils/load-user-rules');
 
 const TX_INSERT = `INSERT OR IGNORE INTO transactions
-    (user_id, category_id, amount, currency, date, description, note, source, external_id,
+    (user_id, category_id, subcategory_id, amount, currency, date, description, note, source, external_id,
      tx_time, tx_type, counterparty_account, entered_by, place, account_id, ab_category)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'airbank-email', ?, ?, ?, ?, ?, ?, ?, ?)`;
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'airbank-email', ?, ?, ?, ?, ?, ?, ?, ?)`;
 
-function insertTx(db, userId, tx, categoryId, extId) {
+function insertTx(db, userId, tx, categoryId, extId, subcategoryId) {
   return db.prepare(TX_INSERT).run(
-    userId, categoryId || null, tx.amount, tx.currency, tx.date, tx.description, tx.note || '',
+    userId, categoryId || null, subcategoryId ?? null, tx.amount, tx.currency, tx.date, tx.description, tx.note || '',
     extId || null, tx.tx_time || null, tx.tx_type || null,
     tx.counterparty_account || null, tx.entered_by || null, tx.place || null,
     tx.account_id ?? null, tx.ab_category || null);
@@ -21,19 +21,19 @@ function insertTx(db, userId, tx, categoryId, extId) {
 // Rozhodne kategorii. account = řádek accounts ({id, account_number}) nebo null.
 function categorize(db, userId, tx, account) {
   const rules = { ...seedRules, textOverrides: loadUserRules(db, userId) };
-  const catName = applyRules(tx, account ? { account_number: account.account_number } : null, rules);
+  const { category: catName, subcategory_id } = applyRules(tx, account ? { account_number: account.account_number } : null, rules);
   const row = db.prepare('SELECT id FROM categories WHERE user_id = ? AND name = ?').get(userId, catName);
   const categoryId = row ? row.id : null;
   const confident = catName !== rules.fallbackCategory && categoryId != null;
-  return { catName, categoryId, confident };
+  return { catName, categoryId, subcategory_id, confident };
 }
 
 // Uloží transakci (jisté) nebo do review fronty (nejisté). Vrací result vč. notifyUserId.
 function classifyAndStore(db, userId, tx, account, extId, notifyUserId, text) {
   const accId = account ? account.id : null;
-  const { catName, categoryId, confident } = categorize(db, userId, tx, account);
+  const { catName, categoryId, subcategory_id, confident } = categorize(db, userId, tx, account);
   if (confident) {
-    const r = insertTx(db, userId, { ...tx, account_id: accId }, categoryId, extId);
+    const r = insertTx(db, userId, { ...tx, account_id: accId }, categoryId, extId, subcategory_id);
     const transactionId = r.changes > 0
       ? Number(r.lastInsertRowid)
       : (db.prepare('SELECT id FROM transactions WHERE user_id = ? AND external_id = ?').get(userId, extId)?.id ?? null);
@@ -120,9 +120,9 @@ function releaseHeldCard(db, dataOwnerId, last4) {
     const account = tx.account_id != null
       ? db.prepare('SELECT id, account_number FROM accounts WHERE id = ?').get(tx.account_id)
       : null;
-    const { categoryId, confident } = categorize(db, dataOwnerId, tx, account);
+    const { categoryId, subcategory_id, confident } = categorize(db, dataOwnerId, tx, account);
     if (confident) {
-      insertTx(db, dataOwnerId, tx, categoryId, row.external_id);
+      insertTx(db, dataOwnerId, tx, categoryId, row.external_id, subcategory_id);
       db.prepare("UPDATE email_inbox SET status = 'imported' WHERE id = ?").run(row.id);
     } else {
       db.prepare("UPDATE email_inbox SET status = 'pending', suggested_category_id = ? WHERE id = ?").run(categoryId, row.id);
