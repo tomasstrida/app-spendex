@@ -10,7 +10,9 @@ const CONFIRM = process.env.CONFIRM === '1';
 if (!DB_PATH) { console.error('Chybí DB_PATH'); process.exit(1); }
 
 // Názvy kategorií, které jsou účetní (rozšiřitelné).
-const ACCOUNTING_NAMES = ['Převody'];
+// Pozn.: seed používá „Převody", ale na prod je kategorie přejmenovaná na
+// „Převody interní" — pokrýváme obě, aby skript našel kandidáta bez ohledu na název.
+const ACCOUNTING_NAMES = ['Převody', 'Převody interní'];
 
 const db = new Database(DB_PATH);
 const ph = ACCOUNTING_NAMES.map(() => '?').join(',');
