@@ -20,9 +20,11 @@ function parseAmount(v) {
 router.get('/', requireAuth, (req, res) => {
   const rows = db.prepare(`
     SELECT r.id, r.pattern, r.category_id, r.amount_max_abs, r.amount_min_abs,
+           r.subcategory_id, sc.name AS subcategory_name,
            c.name AS category_name, c.color AS category_color
     FROM category_rules r
     JOIN categories c ON c.id = r.category_id
+    LEFT JOIN subcategories sc ON sc.id = r.subcategory_id
     WHERE r.user_id = ?
     ORDER BY (r.amount_max_abs IS NOT NULL OR r.amount_min_abs IS NOT NULL) DESC, r.id ASC
   `).all(req.dataUserId);
@@ -40,9 +42,10 @@ router.post('/', requireAuth, (req, res) => {
   if (!max.ok || !min.ok) return res.status(400).json({ error: 'Neplatná částka.' });
   if (max.value != null && min.value != null && min.value > max.value)
     return res.status(400).json({ error: 'Minimální částka nesmí být větší než maximální.' });
+  const subId = req.body.subcategory_id != null ? parseInt(req.body.subcategory_id) : null;
   const info = db.prepare(
-    'INSERT INTO category_rules (user_id, category_id, pattern, amount_max_abs, amount_min_abs) VALUES (?, ?, ?, ?, ?)'
-  ).run(req.dataUserId, categoryId, pattern, max.value, min.value);
+    'INSERT INTO category_rules (user_id, category_id, pattern, amount_max_abs, amount_min_abs, subcategory_id) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(req.dataUserId, categoryId, pattern, max.value, min.value, subId);
   const row = db.prepare('SELECT * FROM category_rules WHERE id = ?').get(info.lastInsertRowid);
   res.json(row);
 });
@@ -61,8 +64,9 @@ router.patch('/:id', requireAuth, (req, res) => {
   if (!max.ok || !min.ok) return res.status(400).json({ error: 'Neplatná částka.' });
   if (max.value != null && min.value != null && min.value > max.value)
     return res.status(400).json({ error: 'Minimální částka nesmí být větší než maximální.' });
-  db.prepare('UPDATE category_rules SET pattern = ?, category_id = ?, amount_max_abs = ?, amount_min_abs = ? WHERE id = ?')
-    .run(pattern, categoryId, max.value, min.value, existing.id);
+  const subId = 'subcategory_id' in req.body ? (req.body.subcategory_id != null ? parseInt(req.body.subcategory_id) : null) : existing.subcategory_id;
+  db.prepare('UPDATE category_rules SET pattern = ?, category_id = ?, amount_max_abs = ?, amount_min_abs = ?, subcategory_id = ? WHERE id = ?')
+    .run(pattern, categoryId, max.value, min.value, subId, existing.id);
   res.json(db.prepare('SELECT * FROM category_rules WHERE id = ?').get(existing.id));
 });
 

@@ -86,3 +86,18 @@ test('rules: min > max odmítnuto', async () => {
   assert.equal(res.status, 400);
   server.close();
 });
+
+test('POST pravidlo se subcategory_id ho uloží a GET vrátí', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const catId = db.prepare("SELECT id FROM categories WHERE user_id=1 LIMIT 1").get().id;
+  const subId = db.prepare("INSERT INTO subcategories (user_id, category_id, name) VALUES (1,?, 'ChatGPT')").run(catId).lastInsertRowid;
+  const res = await fetch(`${base}/api/rules`, { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ pattern:'OPENAI', category_id:catId, subcategory_id:subId }) });
+  assert.equal(res.status, 200);
+  const list = await (await fetch(`${base}/api/rules`)).json();
+  const rule = list.find(r => r.pattern === 'OPENAI');
+  assert.equal(rule.subcategory_id, subId);
+  assert.equal(rule.subcategory_name, 'ChatGPT');
+  server.close();
+});
