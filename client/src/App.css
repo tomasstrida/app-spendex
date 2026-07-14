@@ -441,7 +441,6 @@
   position: relative;
   z-index: 1;
 }
-.budget-bar-fill.over { background: var(--danger) !important; }
 
 /* Svislá čárka = dnešní den v billing období */
 .budget-bar-day-marker {
