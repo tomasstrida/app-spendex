@@ -15,6 +15,7 @@ import AnnualBudgetsPage from './pages/AnnualBudgetsPage';
 import DuplicatesPage from './pages/DuplicatesPage';
 import AccountsPage from './pages/AccountsPage';
 import RulesPage from './pages/RulesPage';
+import FixedExpensesPage from './pages/FixedExpensesPage';
 import { PeriodProvider } from './contexts/PeriodContext';
 
 const AuthContext = createContext(null);
@@ -87,6 +88,7 @@ export default function App() {
             <Route path="/transactions" element={<R el={<TransactionsPage />} />} />
             <Route path="/categories"   element={<R el={<CategoriesPage />} />} />
             <Route path="/rules"        element={<R el={<RulesPage />} />} />
+            <Route path="/fixed-expenses" element={<R el={<FixedExpensesPage />} />} />
             <Route path="/budgets"      element={<R el={<BudgetsPage />} />} />
             <Route path="/report"       element={<R el={<ReportPage />} />} />
             <Route path="/annual-budgets" element={<R el={<AnnualBudgetsPage />} />} />

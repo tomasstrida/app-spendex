@@ -4,6 +4,7 @@ const cs = {
     transactions: 'Transakce',
     categories: 'Kategorie',
     rules: 'Pravidla',
+    fixedExpenses: 'Fixní platby',
     budgets: 'Rozpočty',
     report: 'Schůzka',
     annualBudgets: 'Roční budgety',

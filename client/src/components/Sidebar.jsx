@@ -15,6 +15,7 @@ import {
   CopyX,
   Wallet,
   ListFilter,
+  Receipt,
 } from 'lucide-react';
 
 const navGroups = [
@@ -33,6 +34,7 @@ const navGroups = [
     items: [
       { to: '/categories', icon: Tag,        label: t.nav.categories },
       { to: '/rules',      icon: ListFilter, label: t.nav.rules },
+      { to: '/fixed-expenses', icon: Receipt, label: t.nav.fixedExpenses },
       { to: '/budgets',    icon: PiggyBank, label: t.nav.budgets },
       { to: '/accounts',   icon: Wallet,    label: t.nav.accounts },
       { to: '/import',     icon: Upload,    label: t.nav.import },
