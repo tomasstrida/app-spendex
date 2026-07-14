@@ -78,8 +78,8 @@ ALTER TABLE category_rules ADD COLUMN subcategory_id INTEGER REFERENCES subcateg
   názvu, writeLimiter).
 - **Správa v UI:** na stránce **Kategorie** (`CategoriesPage.jsx`) – u kategorie
   akce „Subkategorie" → modal/sekce se seznamem + přidání/přejmenování/smazání.
-  *(K potvrzení při review specu: umístit správu na Kategorie, nebo samostatnou
-  stránku? Doporučení: na Kategorie, subkategorie logicky patří ke kategorii.)*
+  (Potvrzeno uživatelem 2026-07-14: správa na stránce Kategorie, subkategorie
+  logicky patří ke kategorii.)
 
 ### 4. Pravidla – pole subkategorie (`src/routes/rules.js`, `RulesPage.jsx`)
 
