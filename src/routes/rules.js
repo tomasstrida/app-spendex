@@ -8,11 +8,25 @@ function ownsCategory(userId, categoryId) {
   return !!db.prepare('SELECT 1 FROM categories WHERE id = ? AND user_id = ?').get(categoryId, userId);
 }
 
+// Ověří, že subkategorie patří uživateli A spadá pod danou kategorii
+function ownsSubcategory(userId, subcategoryId, categoryId) {
+  return !!db.prepare('SELECT 1 FROM subcategories WHERE id = ? AND user_id = ? AND category_id = ?')
+    .get(subcategoryId, userId, categoryId);
+}
+
 // Volitelná částka: '' / undefined / null → null; jinak kladné číslo nebo {ok:false}
 function parseAmount(v) {
   if (v === undefined || v === null || String(v).trim() === '') return { ok: true, value: null };
   const n = Number(v);
   if (!Number.isFinite(n) || n < 0) return { ok: false };
+  return { ok: true, value: n };
+}
+
+// Volitelné ID subkategorie: '' / undefined / null → null; jinak celé číslo nebo {ok:false} (NaN apod.)
+function parseOptionalId(v) {
+  if (v === undefined || v === null || String(v).trim() === '') return { ok: true, value: null };
+  const n = parseInt(v, 10);
+  if (!Number.isFinite(n)) return { ok: false };
   return { ok: true, value: n };
 }
 
@@ -24,7 +38,7 @@ router.get('/', requireAuth, (req, res) => {
            c.name AS category_name, c.color AS category_color
     FROM category_rules r
     JOIN categories c ON c.id = r.category_id
-    LEFT JOIN subcategories sc ON sc.id = r.subcategory_id
+    LEFT JOIN subcategories sc ON sc.id = r.subcategory_id AND sc.user_id = r.user_id
     WHERE r.user_id = ?
     ORDER BY (r.amount_max_abs IS NOT NULL OR r.amount_min_abs IS NOT NULL) DESC, r.id ASC
   `).all(req.dataUserId);
@@ -42,7 +56,11 @@ router.post('/', requireAuth, (req, res) => {
   if (!max.ok || !min.ok) return res.status(400).json({ error: 'Neplatná částka.' });
   if (max.value != null && min.value != null && min.value > max.value)
     return res.status(400).json({ error: 'Minimální částka nesmí být větší než maximální.' });
-  const subId = req.body.subcategory_id != null ? parseInt(req.body.subcategory_id) : null;
+  const subParsed = parseOptionalId(req.body.subcategory_id);
+  if (!subParsed.ok) return res.status(400).json({ error: 'Neplatná subkategorie pro tuto kategorii.' });
+  const subId = subParsed.value;
+  if (subId != null && !ownsSubcategory(req.dataUserId, subId, categoryId))
+    return res.status(400).json({ error: 'Neplatná subkategorie pro tuto kategorii.' });
   const info = db.prepare(
     'INSERT INTO category_rules (user_id, category_id, pattern, amount_max_abs, amount_min_abs, subcategory_id) VALUES (?, ?, ?, ?, ?, ?)'
   ).run(req.dataUserId, categoryId, pattern, max.value, min.value, subId);
@@ -64,7 +82,14 @@ router.patch('/:id', requireAuth, (req, res) => {
   if (!max.ok || !min.ok) return res.status(400).json({ error: 'Neplatná částka.' });
   if (max.value != null && min.value != null && min.value > max.value)
     return res.status(400).json({ error: 'Minimální částka nesmí být větší než maximální.' });
-  const subId = 'subcategory_id' in req.body ? (req.body.subcategory_id != null ? parseInt(req.body.subcategory_id) : null) : existing.subcategory_id;
+  let subId = existing.subcategory_id;
+  if ('subcategory_id' in req.body) {
+    const subParsed = parseOptionalId(req.body.subcategory_id);
+    if (!subParsed.ok) return res.status(400).json({ error: 'Neplatná subkategorie pro tuto kategorii.' });
+    subId = subParsed.value;
+  }
+  if (subId != null && !ownsSubcategory(req.dataUserId, subId, categoryId))
+    return res.status(400).json({ error: 'Neplatná subkategorie pro tuto kategorii.' });
   db.prepare('UPDATE category_rules SET pattern = ?, category_id = ?, amount_max_abs = ?, amount_min_abs = ?, subcategory_id = ? WHERE id = ?')
     .run(pattern, categoryId, max.value, min.value, subId, existing.id);
   res.json(db.prepare('SELECT * FROM category_rules WHERE id = ?').get(existing.id));

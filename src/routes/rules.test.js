@@ -101,3 +101,48 @@ test('POST pravidlo se subcategory_id ho uloží a GET vrátí', async () => {
   assert.equal(rule.subcategory_name, 'ChatGPT');
   server.close();
 });
+
+test('POST pravidlo s cizí subcategory_id (jiný uživatel) odmítnuto', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const catId = db.prepare("SELECT id FROM categories WHERE user_id=1 LIMIT 1").get().id;
+  const otherCatId = db.prepare("SELECT id FROM categories WHERE user_id=2 LIMIT 1").get().id;
+  const foreignSubId = db.prepare("INSERT INTO subcategories (user_id, category_id, name) VALUES (2,?, 'Cizí sub')")
+    .run(otherCatId).lastInsertRowid;
+  const res = await fetch(`${base}/api/rules`, { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ pattern:'HACK', category_id:catId, subcategory_id:foreignSubId }) });
+  assert.equal(res.status, 400);
+  const list = await (await fetch(`${base}/api/rules`)).json();
+  assert.equal(list.find(r => r.pattern === 'HACK'), undefined);
+  server.close();
+});
+
+test('POST pravidlo se subcategory_id patřící vlastníkovi, ale pod jinou kategorií, odmítnuto', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const catId = db.prepare("SELECT id FROM categories WHERE user_id=1 LIMIT 1").get().id;
+  const otherCatId = db.prepare("INSERT INTO categories (user_id, name) VALUES (1,'Jídlo')").run().lastInsertRowid;
+  const subId = db.prepare("INSERT INTO subcategories (user_id, category_id, name) VALUES (1,?, 'Restaurace')")
+    .run(otherCatId).lastInsertRowid;
+  const res = await fetch(`${base}/api/rules`, { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ pattern:'MISMATCH', category_id:catId, subcategory_id:subId }) });
+  assert.equal(res.status, 400);
+  server.close();
+});
+
+test('PATCH pravidlo s cizí subcategory_id odmítnuto', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const catId = db.prepare("SELECT id FROM categories WHERE user_id=1 LIMIT 1").get().id;
+  const otherCatId = db.prepare("SELECT id FROM categories WHERE user_id=2 LIMIT 1").get().id;
+  const foreignSubId = db.prepare("INSERT INTO subcategories (user_id, category_id, name) VALUES (2,?, 'Cizí sub 2')")
+    .run(otherCatId).lastInsertRowid;
+  const created = await (await fetch(`${base}/api/rules`, { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ pattern:'OK', category_id:catId }) })).json();
+  const res = await fetch(`${base}/api/rules/${created.id}`, { method:'PATCH', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ subcategory_id:foreignSubId }) });
+  assert.equal(res.status, 400);
+  const patched = db.prepare('SELECT subcategory_id FROM category_rules WHERE id = ?').get(created.id);
+  assert.equal(patched.subcategory_id, null);
+  server.close();
+});
