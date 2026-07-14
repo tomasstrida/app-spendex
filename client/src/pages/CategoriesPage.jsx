@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Pencil, Trash2, X, Check } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Check, Layers } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t } from '../i18n';
 import { CATALOG, CategoryIcon } from '../categoryIcons';
@@ -89,6 +89,90 @@ function IconPicker({ cat, onUpdated }) {
         </div>
       )}
     </>
+  );
+}
+
+function SubcategoryModal({ category, onClose }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [name, setName] = useState('');
+  const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const load = () => fetch(`/api/subcategories?category_id=${category.id}`)
+    .then(r => r.json())
+    .then(d => { setItems(Array.isArray(d) ? d : []); setLoading(false); });
+
+  useEffect(() => { load(); }, [category.id]);
+
+  async function add(e) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setSaving(true);
+    setErr('');
+    const res = await fetch('/api/subcategories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category_id: category.id, name: name.trim() }),
+    });
+    setSaving(false);
+    if (res.ok) { setName(''); load(); }
+    else { setErr((await res.json().catch(() => ({}))).error || 'Chyba.'); }
+  }
+
+  async function del(id) {
+    if (!confirm('Smazat subkategorii?')) return;
+    setErr('');
+    const res = await fetch(`/api/subcategories/${id}`, { method: 'DELETE' });
+    if (res.ok) load();
+    else setErr((await res.json().catch(() => ({}))).error || 'Chyba mazání.');
+  }
+
+  return (
+    <div className="icon-modal-overlay" onClick={onClose}>
+      <div className="icon-modal" onClick={e => e.stopPropagation()}>
+        <div className="icon-modal-head">
+          <Layers size={18} />
+          <strong style={{ flex: 1 }}>Subkategorie – {category.name}</strong>
+          <button className="btn btn-ghost btn-icon" onClick={onClose}><X size={16} /></button>
+        </div>
+
+        {err && <div className="alert alert-error" style={{ marginBottom: 10 }}>{err}</div>}
+
+        {loading ? (
+          <div className="text-muted" style={{ fontSize: 13 }}>Načítání…</div>
+        ) : items.length === 0 ? (
+          <div className="text-muted" style={{ fontSize: 13, marginBottom: 8 }}>Zatím žádné subkategorie.</div>
+        ) : (
+          <div style={{ marginBottom: 8 }}>
+            {items.map(s => (
+              <div key={s.id} className="report-budget-row">
+                <span className="report-budget-name">{s.name}</span>
+                <button className="btn btn-ghost btn-icon" onClick={() => del(s.id)} title="Smazat">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <form onSubmit={add} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <input
+            className="input"
+            placeholder="Nová subkategorie"
+            value={name}
+            onChange={e => setName(e.target.value)}
+          />
+          <button className="btn btn-primary" type="submit" disabled={saving}>
+            <Plus size={15} /> {saving ? '…' : 'Přidat'}
+          </button>
+        </form>
+
+        <div className="icon-modal-actions">
+          <button className="btn btn-ghost" onClick={onClose}>Zavřít</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -224,6 +308,7 @@ export default function CategoriesPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
+  const [subcatFor, setSubcatFor] = useState(null);
 
   useEffect(() => {
     fetch('/api/categories')
@@ -270,6 +355,9 @@ export default function CategoriesPage() {
           </span>
         </div>
         <div className="category-row-actions">
+          <button className="btn btn-ghost btn-icon" onClick={() => setSubcatFor(cat)} title="Subkategorie">
+            <Layers size={15} />
+          </button>
           <button className="btn btn-ghost btn-icon" onClick={() => { setShowForm(false); setEditItem(cat); }}>
             <Pencil size={15} />
           </button>
@@ -321,6 +409,8 @@ export default function CategoriesPage() {
             })}
         </div>
       )}
+
+      {subcatFor && <SubcategoryModal category={subcatFor} onClose={() => setSubcatFor(null)} />}
     </Layout>
   );
 }
