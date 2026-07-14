@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Plus, Pencil, Trash2, Check, X, Search } from 'lucide-react';
 import Layout from '../components/Layout';
 
-const EMPTY = { pattern: '', category_id: '', amount_max_abs: '', amount_min_abs: '' };
+const EMPTY = { pattern: '', category_id: '', subcategory_id: '', amount_max_abs: '', amount_min_abs: '' };
 
 // Necitlivé na velikost písmen i diakritiku (konvence appky – viz unaccent_lower).
 const norm = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -10,6 +10,7 @@ const norm = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCa
 export default function RulesPage() {
   const [rules, setRules] = useState([]);
   const [cats, setCats] = useState([]);
+  const [subcats, setSubcats] = useState([]);
   const [form, setForm] = useState(EMPTY);
   const [editId, setEditId] = useState(null);
   const [adv, setAdv] = useState(false);
@@ -38,6 +39,31 @@ export default function RulesPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Subkategorie závisí na vybrané kategorii. Při změně kategorie (uživatelem)
+  // starou subkategorii zahodíme — patřila jiné kategorii. Při předvyplnění
+  // formuláře z existujícího pravidla (startEdit nastaví category_id i
+  // subcategory_id najednou) subkategorii zachováme, pokud je v načteném
+  // seznamu skutečně přítomná.
+  useEffect(() => {
+    const catId = form.category_id;
+    if (!catId) { setSubcats([]); return; }
+    let cancelled = false;
+    fetch(`/api/subcategories?category_id=${catId}`)
+      .then(r => (r.ok ? r.json() : []))
+      .then(list => {
+        if (cancelled) return;
+        const arr = Array.isArray(list) ? list : [];
+        setSubcats(arr);
+        setForm(f => (
+          f.subcategory_id && !arr.some(s => String(s.id) === String(f.subcategory_id))
+            ? { ...f, subcategory_id: '' }
+            : f
+        ));
+      })
+      .catch(() => { if (!cancelled) setSubcats([]); });
+    return () => { cancelled = true; };
+  }, [form.category_id]);
+
   function reset() { setForm(EMPTY); setEditId(null); setAdv(false); setErr(''); }
 
   async function save() {
@@ -47,6 +73,7 @@ export default function RulesPage() {
     const body = {
       pattern: form.pattern.trim(),
       category_id: form.category_id ? Number(form.category_id) : null,
+      subcategory_id: form.subcategory_id || null,
       amount_max_abs: form.amount_max_abs === '' ? null : Number(form.amount_max_abs),
       amount_min_abs: form.amount_min_abs === '' ? null : Number(form.amount_min_abs),
     };
@@ -66,6 +93,7 @@ export default function RulesPage() {
     setForm({
       pattern: r.pattern,
       category_id: String(r.category_id),
+      subcategory_id: r.subcategory_id ? String(r.subcategory_id) : '',
       amount_max_abs: r.amount_max_abs ?? '',
       amount_min_abs: r.amount_min_abs ?? '',
     });
@@ -134,6 +162,18 @@ export default function RulesPage() {
             >
               <option value="">— vyber —</option>
               {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div className="form-group" style={{ flex: 2, minWidth: 200, margin: 0 }}>
+            <label className="form-label">Subkategorie</label>
+            <select
+              className="input"
+              value={form.subcategory_id}
+              disabled={subcats.length === 0}
+              onChange={e => setForm(f => ({ ...f, subcategory_id: e.target.value }))}
+            >
+              <option value="">— žádná —</option>
+              {subcats.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -237,6 +277,7 @@ export default function RulesPage() {
                         flexShrink: 0,
                       }} />
                       {r.category_name || '—'}
+                      {r.subcategory_name && <span className="text-muted"> · {r.subcategory_name}</span>}
                     </span>
                   </td>
                   <td style={{ padding: '8px 12px' }} className="text-muted">
