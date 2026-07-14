@@ -17,6 +17,13 @@ function fixedExpensesForPeriod(db, userId, period) {
   const billingDay = getUserBillingDay(db, userId);
   const { start, end } = getPeriodDates(billingDay, period);
 
+  // Posun periodKey "YYYY-MM" o delta měsíců (bez závislosti na frontend addPeriods).
+  const shiftPeriod = (p, delta) => {
+    const [y, m] = p.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  };
+
   const matchStmt = db.prepare(`
     SELECT COALESCE(SUM(ABS(amount)), 0) AS actual, COUNT(*) AS tx_count
     FROM transactions
@@ -24,14 +31,17 @@ function fixedExpensesForPeriod(db, userId, period) {
       AND description LIKE '%' || ? || '%'
   `);
 
+  const windowEnd = end;  // konec aktuálního období
   const manualWithStatus = manual.map(row => {
     if (!row.match_pattern) return row;
-    const m = matchStmt.get(userId, start, end, row.match_pattern);
+    const freq = row.frequency_months > 0 ? row.frequency_months : 1;
+    const windowStart = getPeriodDates(billingDay, shiftPeriod(period, -(freq - 1))).start;
+    const m = matchStmt.get(userId, windowStart, windowEnd, row.match_pattern);
     return {
       ...row,
       actual: m.actual,
       tx_count: m.tx_count,
-      status: paymentStatus(row.amount, m.actual, m.tx_count),
+      status: paymentStatus(row.amount_min, row.amount_max, m.actual, m.tx_count),
     };
   });
 
