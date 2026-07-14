@@ -602,7 +602,7 @@ export default function ReportPage() {
                           {subcats.map(s => (
                             <Link
                               key={s.subcategory_id}
-                              to={`/transactions?subcategory_id=${s.subcategory_id}` + (period ? `&period=${period}` : '')}
+                              to={`/transactions?category_id=${s.category_id}&subcategory_id=${s.subcategory_id}` + (period ? `&period=${period}` : '')}
                               className="report-subcat-row"
                               style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
                             >

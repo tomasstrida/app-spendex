@@ -19,10 +19,17 @@ const updates = [];
 for (const u of users) {
   const rules = { ...seedRules, textOverrides: loadUserRules(db, u.id) };
   const txs = db.prepare('SELECT * FROM transactions WHERE user_id = ? AND subcategory_id IS NULL AND category_id IS NOT NULL').all(u.id);
+  const subcatCatId = db.prepare('SELECT category_id FROM subcategories WHERE id = ?');
   for (const t of txs) {
     const account = t.account_id ? db.prepare('SELECT account_number FROM accounts WHERE id = ?').get(t.account_id) : null;
     const { subcategory_id } = applyRules(t, account, rules);
-    if (subcategory_id != null) { updates.push({ id: t.id, subcategory_id }); planned++; }
+    if (subcategory_id == null) continue;
+    // Guard konzistence: subkategorii doplň jen když patří k ULOŽENÉ kategorii transakce.
+    // Chrání před cross-category zápisem u ručně přeřazených tx (subcat z jiné rodičovské
+    // kategorie by pak rozbila rozpad by_subcategory na Schůzce/Dashboardu).
+    const scRow = subcatCatId.get(subcategory_id);
+    if (!scRow || scRow.category_id !== t.category_id) continue;
+    updates.push({ id: t.id, subcategory_id }); planned++;
   }
 }
 console.log(`Kandidátů k doplnění subcategory_id: ${planned}`);
