@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
+const { ownsSubcategory: ownsSubcategoryShared } = require('../utils/subcategory-ownership');
 
 // Ověří, že kategorie patří uživateli
 function ownsCategory(userId, categoryId) {
@@ -10,8 +11,7 @@ function ownsCategory(userId, categoryId) {
 
 // Ověří, že subkategorie patří uživateli A spadá pod danou kategorii
 function ownsSubcategory(userId, subcategoryId, categoryId) {
-  return !!db.prepare('SELECT 1 FROM subcategories WHERE id = ? AND user_id = ? AND category_id = ?')
-    .get(subcategoryId, userId, categoryId);
+  return ownsSubcategoryShared(db, userId, subcategoryId, categoryId);
 }
 
 // Volitelná částka: '' / undefined / null → null; jinak kladné číslo nebo {ok:false}

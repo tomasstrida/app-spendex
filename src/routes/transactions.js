@@ -4,6 +4,7 @@ const rateLimit = require('express-rate-limit');
 const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
 const { findDuplicates, wouldEmptyDuplicateGroup } = require('../utils/duplicates');
+const { ownsSubcategory } = require('../utils/subcategory-ownership');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
@@ -153,6 +154,26 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
     const owned = db.prepare('SELECT 1 FROM categories WHERE id = ? AND user_id = ?').get(category_id, req.dataUserId);
     if (!owned) return res.status(400).json({ error: 'Neplatná kategorie.' });
   }
+
+  // subcategory_id: '' / undefined / null → null; jinak celé číslo, ověřené proti
+  // vlastníkovi A výsledné (effective) kategorii transakce — viz ownsSubcategory.
+  let subId = tx.subcategory_id;
+  if (subcategory_id !== undefined) {
+    if (subcategory_id === null || String(subcategory_id).trim() === '') {
+      subId = null;
+    } else {
+      const parsed = parseInt(subcategory_id, 10);
+      if (!Number.isFinite(parsed)) return res.status(400).json({ error: 'Neplatná subkategorie pro tuto kategorii.' });
+      subId = parsed;
+    }
+  }
+  if (subId != null) {
+    const effectiveCategoryId = category_id !== undefined ? parseInt(category_id) : tx.category_id;
+    if (!ownsSubcategory(db, req.dataUserId, subId, effectiveCategoryId)) {
+      return res.status(400).json({ error: 'Neplatná subkategorie pro tuto kategorii.' });
+    }
+  }
+
   db.prepare(
     'UPDATE transactions SET amount = ?, currency = ?, date = ?, description = ?, note = ?, category_id = ?, subcategory_id = ? WHERE id = ?'
   ).run(
@@ -162,7 +183,7 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
     description !== undefined ? String(description).slice(0, 500) : tx.description,
     note !== undefined ? String(note).slice(0, 500) : tx.note,
     category_id !== undefined ? category_id : tx.category_id,
-    subcategory_id !== undefined ? (subcategory_id != null ? parseInt(subcategory_id) : null) : tx.subcategory_id,
+    subId,
     tx.id
   );
   res.json(db.prepare('SELECT * FROM transactions WHERE id = ?').get(tx.id));

@@ -69,6 +69,45 @@ test('GET: transakce bez subcategory_id vrátí subcategory_name = null', async 
   server.close();
 });
 
+test('PATCH: subcategory_id jiného usera odmítnut (400), tx zůstane beze změny', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO users (id, email) VALUES (2,'other@x')").run();
+  db.prepare("INSERT INTO categories (id, user_id, name) VALUES (6,2,'Cizí')").run();
+  const foreignSubId = db.prepare("INSERT INTO subcategories (user_id, category_id, name) VALUES (2,6,'Cizí sub')").run().lastInsertRowid;
+  const txId = db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description) VALUES (1,5,-500,'2026-07-01','OPENAI')").run().lastInsertRowid;
+  const res = await fetch(`${base}/api/transactions/${txId}`, { method:'PATCH', headers:{'content-type':'application/json'}, body: JSON.stringify({ subcategory_id: foreignSubId }) });
+  assert.equal(res.status, 400);
+  const stored = db.prepare('SELECT subcategory_id FROM transactions WHERE id = ?').get(txId);
+  assert.equal(stored.subcategory_id, null);
+  server.close();
+});
+
+test('PATCH: vlastní subkategorie pod jinou kategorií než tx odmítnuta (400)', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const otherCatId = db.prepare("INSERT INTO categories (user_id, name) VALUES (1,'Jídlo')").run().lastInsertRowid;
+  const subId = db.prepare("INSERT INTO subcategories (user_id, category_id, name) VALUES (1,?, 'Restaurace')").run(otherCatId).lastInsertRowid;
+  const txId = db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description) VALUES (1,5,-500,'2026-07-01','OPENAI')").run().lastInsertRowid;
+  const res = await fetch(`${base}/api/transactions/${txId}`, { method:'PATCH', headers:{'content-type':'application/json'}, body: JSON.stringify({ subcategory_id: subId }) });
+  assert.equal(res.status, 400);
+  const stored = db.prepare('SELECT subcategory_id FROM transactions WHERE id = ?').get(txId);
+  assert.equal(stored.subcategory_id, null);
+  server.close();
+});
+
+test('PATCH: validní subkategorie správné kategorie projde (happy path)', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const subId = db.prepare("INSERT INTO subcategories (user_id, category_id, name) VALUES (1,5,'ChatGPT')").run().lastInsertRowid;
+  const txId = db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description) VALUES (1,5,-500,'2026-07-01','OPENAI')").run().lastInsertRowid;
+  const res = await fetch(`${base}/api/transactions/${txId}`, { method:'PATCH', headers:{'content-type':'application/json'}, body: JSON.stringify({ subcategory_id: subId }) });
+  assert.equal(res.status, 200);
+  const patched = await res.json();
+  assert.equal(patched.subcategory_id, subId);
+  server.close();
+});
+
 test('GET: cizí subkategorie se stejným id (jiný user) se nepromítne (defense-in-depth JOIN)', async () => {
   const { db, app } = setup();
   const { server, base } = await listen(app);
