@@ -27,54 +27,6 @@ const FIXED_STATUS = {
   missing:  { icon: '❌' },
 };
 
-// ── Formulář pevných výdajů ──────────────────────────────────────────────────
-
-function FixedExpenseForm({ initial, onSave, onCancel }) {
-  const isNew = !initial;
-  const [name, setName] = useState(initial?.name || '');
-  const [amount, setAmount] = useState(initial?.amount != null ? String(initial.amount) : '');
-  const [note, setNote] = useState(initial?.note || '');
-  const [matchPattern, setMatchPattern] = useState(initial?.match_pattern || '');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    if (!name.trim()) { setError('Zadejte název.'); return; }
-    const amt = parseFloat(amount);
-    if (!amt || amt <= 0) { setError('Zadejte kladnou částku.'); return; }
-    setSaving(true); setError('');
-    try {
-      const method = isNew ? 'POST' : 'PATCH';
-      const url = isNew ? '/api/fixed-expenses' : `/api/fixed-expenses/${initial.id}`;
-      const body = { name: name.trim(), amount: amt, note: note || null, match_pattern: matchPattern.trim() || null };
-      const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const d = await r.json();
-      if (!r.ok) { setError(d.error || 'Chyba.'); return; }
-      onSave(d);
-    } catch { setError('Chyba připojení.'); }
-    finally { setSaving(false); }
-  }
-
-  return (
-    <form className="income-form" onSubmit={handleSubmit}>
-      {error && <div className="alert alert-error" style={{ marginBottom: 8 }}>{error}</div>}
-      <div className="income-form-row">
-        <input className="input" placeholder="Název (Nájem, Telefon, Lítačka…)"
-          value={name} onChange={e => setName(e.target.value)} autoFocus style={{ flex: 2 }} />
-        <input className="input" type="number" min="0" step="1" placeholder="Částka"
-          value={amount} onChange={e => setAmount(e.target.value)} style={{ maxWidth: 130 }} />
-        <input className="input" placeholder="Poznámka (volitelně)"
-          value={note} onChange={e => setNote(e.target.value)} style={{ maxWidth: 180 }} />
-        <input className="input" placeholder="Pattern transakce (volitelně)"
-          value={matchPattern} onChange={e => setMatchPattern(e.target.value)} style={{ maxWidth: 180 }} />
-        <button type="submit" className="btn btn-primary btn-icon" disabled={saving}><Check size={15} /></button>
-        <button type="button" className="btn btn-ghost btn-icon" onClick={onCancel}><X size={15} /></button>
-      </div>
-    </form>
-  );
-}
-
 // ── Formulář příjmových zdrojů ────────────────────────────────────────────────
 
 function IncomeSourceForm({ initial, onSave, onCancel }) {
@@ -210,8 +162,6 @@ export default function ReportPage() {
   const [editIncome, setEditIncome] = useState(null);
   const [prefillIncome, setPrefillIncome] = useState(null); // pre-fill „Přidat" z auto-only řádku
   const [unaliasedExpanded, setUnaliasedExpanded] = useState(false);
-  const [showFixedForm, setShowFixedForm] = useState(false);
-  const [editFixed, setEditFixed] = useState(null);
 
   useEffect(() => {
     if (!period) return;
@@ -233,22 +183,6 @@ export default function ReportPage() {
       setFunds(Array.isArray(fundStatus) ? fundStatus : []);
     }).finally(() => setLoading(false));
   }, [period]);
-
-  function handleFixedSaved(row) {
-    if (editFixed) {
-      setFixedExpenses(prev => prev.map(f => f.id === row.id ? row : f));
-      setEditFixed(null);
-    } else {
-      setFixedExpenses(prev => [...prev, row]);
-      setShowFixedForm(false);
-    }
-  }
-
-  async function handleDeleteFixed(id) {
-    if (!confirm('Smazat tento fixní výdaj?')) return;
-    const r = await fetch(`/api/fixed-expenses/${id}`, { method: 'DELETE' });
-    if (r.ok) setFixedExpenses(prev => prev.filter(f => f.id !== id));
-  }
 
   function handleIncomeSaved(row) {
     if (editIncome) {
@@ -552,54 +486,30 @@ export default function ReportPage() {
           <section className="report-section">
             <div className="report-section-header">
               <h2 className="report-section-title">Fixní platby</h2>
-              {!showFixedForm && !editFixed && (
-                <button className="btn btn-ghost btn-sm" onClick={() => setShowFixedForm(true)}>
-                  <Plus size={14} /> Přidat
-                </button>
-              )}
             </div>
-            {showFixedForm && !editFixed && (
-              <FixedExpenseForm
-                onSave={handleFixedSaved}
-                onCancel={() => setShowFixedForm(false)}
-              />
-            )}
-            {fixedExpenses.length === 0 && !showFixedForm ? (
-              <p className="text-muted" style={{ fontSize: 13 }}>Žádné fixní výdaje. Přidejte nájem, telefon, lítačku…</p>
+            <Link to="/fixed-expenses" className="text-muted" style={{ fontSize: 12, display: 'inline-block', marginBottom: 8 }}>
+              Spravovat fixní platby →
+            </Link>
+            {fixedExpenses.length === 0 ? (
+              <p className="text-muted" style={{ fontSize: 13 }}>Žádné fixní výdaje.</p>
             ) : (
               <div className="report-income-list">
                 {fixedExpenses.map(row => (
-                  editFixed?.id === row.id ? (
-                    <FixedExpenseForm
-                      key={row.id}
-                      initial={row}
-                      onSave={handleFixedSaved}
-                      onCancel={() => setEditFixed(null)}
-                    />
-                  ) : (
-                    <div key={row.id} className="report-income-row">
-                      {row.status && <span title={row.status}>{FIXED_STATUS[row.status].icon}</span>}
-                      <span className="report-income-person">{row.name}</span>
-                      {row.note && <span className="text-muted" style={{ fontSize: 12 }}>{row.note}</span>}
-                      {row.status === 'mismatch' && (
-                        <span className="text-muted" style={{ fontSize: 12 }}>
-                          {row.actual > row.amount ? '+' : '−'}{formatCurrency(Math.abs(row.actual - row.amount))} oproti plánu
-                          {row.tx_count > 1 ? ` · ${row.tx_count} platby` : ''}
-                        </span>
-                      )}
-                      {row.status === 'missing' && (
-                        <span className="text-muted" style={{ fontSize: 12 }}>chybí</span>
-                      )}
-                      <span className="report-income-amount">{formatCurrency(row.amount)}</span>
-                      <button className="btn btn-ghost btn-icon"
-                        onClick={() => { setShowFixedForm(false); setEditFixed(row); }}>
-                        <Pencil size={13} />
-                      </button>
-                      <button className="btn btn-ghost btn-icon" onClick={() => handleDeleteFixed(row.id)}>
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  )
+                  <div key={row.id ?? `${row.account_id}-${row.name}`} className="report-income-row">
+                    {row.status && <span title={row.status}>{FIXED_STATUS[row.status].icon}</span>}
+                    <span className="report-income-person">{row.name}</span>
+                    {row.note && <span className="text-muted" style={{ fontSize: 12 }}>{row.note}</span>}
+                    {row.status === 'mismatch' && row.amount_min != null && (
+                      <span className="text-muted" style={{ fontSize: 12 }}>
+                        {`${formatCurrency(row.actual)} (čekáno ${row.amount_min}–${row.amount_max} Kč)`}
+                        {row.tx_count > 1 ? ` · ${row.tx_count} platby` : ''}
+                      </span>
+                    )}
+                    {row.status === 'missing' && (
+                      <span className="text-muted" style={{ fontSize: 12 }}>chybí</span>
+                    )}
+                    <span className="report-income-amount">{formatCurrency(row.amount)}</span>
+                  </div>
                 ))}
               </div>
             )}
