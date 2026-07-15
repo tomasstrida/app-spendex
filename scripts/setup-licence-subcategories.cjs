@@ -35,7 +35,7 @@ const MAPPINGS = [
   { pattern: 'OPENAI',           subcat: 'ChatGPT',          forward: true },
   { pattern: 'CLAUDE',           subcat: 'Claude',           forward: true },
   { pattern: 'ANTHROPIC',        subcat: 'Anthropic API',    forward: true },
-  { pattern: 'APPLE.COM/BILL',   subcat: 'Apple',            forward: true },
+  { pattern: 'APPLE.COM',        subcat: 'Apple',            forward: true },
   { pattern: 'NUELINK',          subcat: 'Nuelink',          forward: true },
   { pattern: 'Google Workspace', subcat: 'Google Workspace', forward: true },
   { pattern: 'DISCORD',          subcat: 'Discord',          forward: true },
