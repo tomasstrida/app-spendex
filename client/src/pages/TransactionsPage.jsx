@@ -6,6 +6,7 @@ import { formatCurrency, formatPeriod, addPeriods, t } from '../i18n';
 import { usePeriod } from '../contexts/PeriodContext';
 import { usePeriodKeys } from '../hooks/usePeriodKeys';
 import { buildAccountNameMap, accountNameFor } from '../utils/accountName';
+import { accountFlow } from '../utils/accountFlow';
 
 const ALL_COLS = [
   { key: 'date',                 label: 'Datum',           default: true,  always: true },
@@ -17,6 +18,7 @@ const ALL_COLS = [
   { key: 'ab_category',          label: 'AirBank kat.',    default: true },
   { key: 'entered_by',           label: 'Kdo zadal',       default: false },
   { key: 'counterparty_account', label: 'Číslo účtu',      default: false },
+  { key: 'account_flow',         label: 'Účet (z → do)',   default: false },
   { key: 'place',                label: 'Obchodní místo',  default: false },
   { key: 'note',                 label: 'Zpráva/Poznámka', default: true },
   { key: 'amount',               label: 'Částka',          default: true,  always: true },
@@ -64,6 +66,7 @@ export default function TransactionsPage() {
   const [categories, setCategories] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const accountNameMap = useMemo(() => buildAccountNameMap(accounts), [accounts]);
+  const accountById = useMemo(() => new Map((accounts || []).map(a => [a.id, a.name])), [accounts]);
   const [filterCats, setFilterCats] = useState(() => {
     // Akceptujeme oboje: category_ids=1,2,none (multi) i category_id=1 (single).
     const multi = searchParams.get('category_ids');
@@ -886,7 +889,7 @@ export default function TransactionsPage() {
                           )}
                         </span>
                       )
-                    ) : renderCell(c.key, tx, categories, accountNameMap)}
+                    ) : renderCell(c.key, tx, categories, accountNameMap, accountById)}
                   </span>
                 ))}
                 <span className="tx-actions">
@@ -929,12 +932,13 @@ function colsToGrid(cols) {
     if (c.key === 'tx_type') return '130px';
     if (c.key === 'entered_by') return '120px';
     if (c.key === 'counterparty_account') return '140px';
+    if (c.key === 'account_flow') return '200px';
     return '1fr';
   }).join(' ');
   return `28px ${dataCols} 72px`;
 }
 
-function renderCell(key, tx, categories, accountNameMap) {
+function renderCell(key, tx, categories, accountNameMap, accountById) {
   switch (key) {
     case 'date':
       return <span className="tx-date">{formatDate(tx.date)}</span>;
@@ -966,6 +970,20 @@ function renderCell(key, tx, categories, accountNameMap) {
         <span className="text-muted" style={{ fontSize: 12 }}>
           {tx.counterparty_account || '—'}
           {accName && <> · <span style={{ color: 'var(--text)' }}>{accName}</span></>}
+        </span>
+      );
+    }
+    case 'account_flow': {
+      const { from, to } = accountFlow(tx, { accountById, accountNameMap });
+      return (
+        <span
+          className="text-muted"
+          title={`${from} → ${to}`}
+          style={{ fontSize: 12, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+        >
+          <span style={{ color: 'var(--text)' }}>{from}</span>
+          <span style={{ margin: '0 4px' }}>→</span>
+          <span style={{ color: 'var(--text)' }}>{to}</span>
         </span>
       );
     }
