@@ -81,8 +81,10 @@ export default function AnnualBudgetsPage() {
   const [yearSpent, setYearSpent] = useState({});   // category_id → roční utraceno
   const [monthSpent, setMonthSpent] = useState({}); // category_id → [12] měsíčně
   const [byCategory, setByCategory] = useState([]);
+  const [subcatYearSpent, setSubcatYearSpent] = useState({}); // category_id → [{subcategory_id,name,spent}]
   const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState({});     // category_id → bool (rozbalený graf)
+  const [expanded, setExpanded] = useState({});       // category_id → bool (rozbalený graf)
+  const [subExpanded, setSubExpanded] = useState({}); // category_id → bool (rozbalený rozpad subkategorií)
 
   const year = period ? Number(period.split('-')[0]) : new Date().getFullYear();
   const currentYear = currentPeriod ? Number(currentPeriod.split('-')[0]) : year;
@@ -97,6 +99,7 @@ export default function AnnualBudgetsPage() {
       setBudgetItems(items.items || []);
       setYearSpent(items.category_year_spent || {});
       setMonthSpent(items.category_month_spent || {});
+      setSubcatYearSpent(items.category_subcategory_year_spent || {});
       setByCategory(st?.by_category || []);
     }).finally(() => setLoading(false));
   }, [period, year]);
@@ -154,16 +157,46 @@ export default function AnnualBudgetsPage() {
                     const over = budget > 0 && spent > budget;
                     const isOpen = !!expanded[c.id];
                     const monthly = monthSpent[c.id] || Array(12).fill(0);
+                    const subcats = subcatYearSpent[c.id] || [];
+                    const hasSubcats = subcats.length > 0;
+                    const isSubOpen = hasSubcats && !!subExpanded[c.id];
                     const to = `/transactions?category_id=${c.id}&from=${year}-01-01&to=${year}-12-31`;
                     return (
                       <div key={c.id} className="report-budget-card" style={{ color: 'inherit' }}>
                         <Link to={to} className="report-budget-row" style={{ color: 'inherit', textDecoration: 'none' }}>
                           <span className="report-budget-dot" style={{ background: c.color || '#6366f1' }} />
-                          <span className="report-budget-name">{c.name}</span>
+                          <span className="report-budget-name">
+                            {hasSubcats && (
+                              <button
+                                type="button"
+                                className="report-subcat-toggle"
+                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSubExpanded(prev => ({ ...prev, [c.id]: !prev[c.id] })); }}
+                                title={isSubOpen ? 'Skrýt rozpad subkategorií' : 'Zobrazit rozpad subkategorií'}
+                              >
+                                {isSubOpen ? '▾' : '▸'}
+                              </button>
+                            )}
+                            {c.name}
+                          </span>
                           <span className={`report-budget-spent${over ? ' text-danger' : ''}`}>{formatCurrency(spent)}</span>
                           <span className="text-muted report-budget-limit">{budget > 0 ? `/ ${formatCurrency(budget)}` : ''}</span>
                           <span className="report-budget-status" />
                         </Link>
+                        {isSubOpen && (
+                          <div className="report-subcat-list">
+                            {subcats.map(s => (
+                              <Link
+                                key={s.subcategory_id}
+                                to={`/transactions?category_id=${c.id}&subcategory_id=${s.subcategory_id}&from=${year}-01-01&to=${year}-12-31`}
+                                className="report-subcat-row"
+                                style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                              >
+                                <span className="report-subcat-name">{s.name}</span>
+                                <span className="report-subcat-spent">{formatCurrency(s.spent)}</span>
+                              </Link>
+                            ))}
+                          </div>
+                        )}
                         {budget > 0 && (
                           <YearThermometer spent={spent} amount={budget} year={year} />
                         )}
