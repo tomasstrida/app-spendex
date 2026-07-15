@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Check, X } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
+import { fixedActualTotal, leftoverOnMain } from '../utils/meetingBalance';
 
 // ── Status budgetu ────────────────────────────────────────────────────────────
 
@@ -211,7 +212,7 @@ export default function ReportPage() {
     setExpandedSubcats(prev => ({ ...prev, [categoryId]: !prev[categoryId] }));
   }
 
-  const totalFixed   = fixedExpenses.reduce((s, f) => s + f.amount, 0);
+  const totalFixed   = fixedActualTotal(fixedExpenses);
   // Striktní whitelist: do bilance i sekce Příjmy vstupují jen ručně aliasované zdroje
   const aliasedSources   = incomeSources.filter(s => s.id != null);
   const totalIncome      = aliasedSources.reduce((s, i) => s + (i.actual || 0), 0);
@@ -224,6 +225,14 @@ export default function ReportPage() {
   const type3MonthlyBudget = funds.reduce((s, f) => s + (f.monthly_contribution || 0), 0);
   const savings      = stats?.savings || { net: 0 };
   const variablePoolFunded = stats?.variable_pool_funded || 0;
+  const leftover = leftoverOnMain({
+    totalIncome,
+    totalFixed,
+    variablePoolFunded,
+    totalType1,
+    totalType3,
+    savingsNet: savings.net || 0,
+  });
 
   // Account numbers used in bilance row links (musí sedět s recurring.js v backendu)
   const SAVINGS_ACCOUNT_NUM = '1679014082';
@@ -267,7 +276,7 @@ export default function ReportPage() {
       {loading ? <div className="page-loading">Načítání…</div> : (
         <div className="report-layout">
 
-          {/* ── BILANCE (Skutečně naspořeno) – první na stránce ── */}
+          {/* ── BILANCE (Zbylo na běžném) – první na stránce ── */}
           <section className="report-section report-section--bilance">
             <Link to={txLink('direction=in')} className="report-bilance-row"
               style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
@@ -325,11 +334,11 @@ export default function ReportPage() {
               </Link>
             )}
             <Link to={txLink(`counterparty=${SAVINGS_ACCOUNT_NUM}`)}
-              className={`report-bilance-row report-bilance-result ${savings.net >= 0 ? '' : 'text-danger'}`}
+              className="report-bilance-row"
               style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
-              title="Klik: převody na spořicí účet v období (4 řádky níže = ty, ze kterých vychází výsledek)">
-              <span>Skutečně naspořeno</span>
-              <span>{savings.net >= 0 ? '+' : '−'} {formatCurrency(Math.abs(savings.net))}</span>
+              title="Klik: převody na spořicí účet v období">
+              <span>Na spořicí</span>
+              <span>{savings.net >= 0 ? '−' : '+'} {formatCurrency(Math.abs(savings.net))}</span>
             </Link>
             {savings.transfers && savings.transfers.length > 0 && (
               <div className="savings-transfers">
@@ -362,8 +371,12 @@ export default function ReportPage() {
                 })}
               </div>
             )}
+            <div className={`report-bilance-row report-bilance-result ${leftover >= 0 ? '' : 'text-danger'}`}>
+              <span>Zbylo na běžném</span>
+              <span>{leftover >= 0 ? '+' : '−'} {formatCurrency(Math.abs(leftover))}</span>
+            </div>
             <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
-              Výsledek je měřené netto převodů, ne aritmetický rozdíl rozpadu výše.
+              „Zbylo na běžném" = přebytek/schodek toku za období (příjmy minus všechny odtoky včetně přesunů na spořicí a Nepravidelné). Je to orientační cash-flow, ne přesný bankovní zůstatek.
             </div>
           </section>
 
@@ -470,7 +483,9 @@ export default function ReportPage() {
                     {row.status === 'missing' && (
                       <span className="text-muted" style={{ fontSize: 12 }}>chybí</span>
                     )}
-                    <span className="report-income-amount">{formatCurrency(row.amount)}</span>
+                    <span className="report-income-amount">
+                      {formatCurrency(row.source === 'account' || row.tx_count > 0 ? (row.actual ?? row.amount) : row.amount)}
+                    </span>
                   </div>
                 ))}
               </div>
