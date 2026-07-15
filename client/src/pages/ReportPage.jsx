@@ -430,16 +430,6 @@ export default function ReportPage() {
                 })}
               </div>
             )}
-            {aliasedSources.some(i => i.status) && (() => {
-              const c = k => aliasedSources.filter(i => i.status === k).length;
-              return (
-                <div style={{ display: 'flex', gap: 16, fontSize: 13, marginTop: 4 }}>
-                  {c('ok') > 0 && <span>✅ {c('ok')} přišlo</span>}
-                  {c('missing') > 0 && <span>❌ {c('missing')} nepřišlo</span>}
-                </div>
-              );
-            })()}
-
             <div className="report-subtotal">
               <span>Příjmy celkem</span>
               <span>
