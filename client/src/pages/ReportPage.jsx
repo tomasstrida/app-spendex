@@ -474,16 +474,6 @@ export default function ReportPage() {
                 ))}
               </div>
             )}
-            {fixedExpenses.some(f => f.status) && (() => {
-              const s = k => fixedExpenses.filter(f => f.status === k).length;
-              return (
-                <div style={{ display: 'flex', gap: 16, fontSize: 13, marginTop: 4 }}>
-                  {s('ok') > 0 && <span>✅ {s('ok')} proběhly</span>}
-                  {s('mismatch') > 0 && <span>⚠️ {s('mismatch')} jiná částka</span>}
-                  {s('missing') > 0 && <span>❌ {s('missing')} chybí</span>}
-                </div>
-              );
-            })()}
             <div className="report-subtotal">
               <span>Fixní platby celkem</span>
               <span>{formatCurrency(totalFixed)}</span>
