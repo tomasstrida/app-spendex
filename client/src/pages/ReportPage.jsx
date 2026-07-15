@@ -216,6 +216,8 @@ export default function ReportPage() {
   const aliasedSources   = incomeSources.filter(s => s.id != null);
   const unaliasedSources = incomeSources.filter(s => s.id == null);
   const totalIncome      = aliasedSources.reduce((s, i) => s + (i.actual || 0), 0);
+  const totalPlanned = aliasedSources.reduce((s, i) => s + (i.planned_amount || 0), 0);
+  const totalDiff    = Math.round(totalIncome - totalPlanned);
   const unaliasedTotal   = unaliasedSources.reduce((s, i) => s + (i.actual || 0), 0);
   const totalType1       = budgets.reduce((s, b) => s + b.spent, 0);
   const totalType1Budget = budgets.reduce((s, b) => s + b.amount, 0);
@@ -404,9 +406,13 @@ export default function ReportPage() {
                       style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}>
                       {row.status && <span title={row.status}>{FIXED_STATUS[row.status].icon}</span>}
                       <span className="report-income-person">{row.person}</span>
-                      {row.status === 'mismatch' && (
-                        <span className="text-muted" style={{ fontSize: 12 }}>
-                          o {formatCurrency(Math.max(0, row.planned_amount - row.actual))} méně, než plán
+                      {row.status === 'ok' && row.planned_amount > 0 && Math.round(row.actual - row.planned_amount) !== 0 && (
+                        <span
+                          className={row.actual - row.planned_amount > 0 ? 'text-success' : 'text-danger'}
+                          style={{ fontSize: 12 }}
+                        >
+                          {row.actual - row.planned_amount > 0 ? '+' : '−'}
+                          {formatCurrency(Math.abs(Math.round(row.actual - row.planned_amount)))}
                           {row.tx_count > 1 ? ` · ${row.tx_count} platby` : ''}
                         </span>
                       )}
@@ -432,7 +438,6 @@ export default function ReportPage() {
               return (
                 <div style={{ display: 'flex', gap: 16, fontSize: 13, marginTop: 4 }}>
                   {c('ok') > 0 && <span>✅ {c('ok')} přišlo</span>}
-                  {c('mismatch') > 0 && <span>⚠️ {c('mismatch')} nižší částka</span>}
                   {c('missing') > 0 && <span>❌ {c('missing')} nepřišlo</span>}
                 </div>
               );
@@ -485,7 +490,14 @@ export default function ReportPage() {
             )}
             <div className="report-subtotal">
               <span>Příjmy celkem</span>
-              <span>{formatCurrency(totalIncome)}</span>
+              <span>
+                {formatCurrency(totalIncome)}
+                {totalDiff !== 0 && (
+                  <span className={totalDiff > 0 ? 'text-success' : 'text-danger'} style={{ marginLeft: 8, fontSize: 12 }}>
+                    ({totalDiff > 0 ? '+' : '−'}{formatCurrency(Math.abs(totalDiff))})
+                  </span>
+                )}
+              </span>
             </div>
           </section>
 
