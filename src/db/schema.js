@@ -300,6 +300,7 @@ function initSchema() {
     'ALTER TABLE fixed_expenses ADD COLUMN amount_min REAL',
     'ALTER TABLE fixed_expenses ADD COLUMN amount_max REAL',
     'ALTER TABLE fixed_expenses ADD COLUMN frequency_months INTEGER DEFAULT 1',
+    'ALTER TABLE fixed_expenses ADD COLUMN match_counterparty_account TEXT',
     'ALTER TABLE income_sources ADD COLUMN match_counterparty_account TEXT',
     'ALTER TABLE income_sources ADD COLUMN account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL',
     "ALTER TABLE settings ADD COLUMN notify_scope TEXT DEFAULT 'pending_only'",

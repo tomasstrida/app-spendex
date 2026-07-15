@@ -80,3 +80,18 @@ test('migrace: subcategories tabulka + subcategory_id FK sloupce existují', () 
   try { fs.unlinkSync(tmp + '-wal'); fs.unlinkSync(tmp + '-shm'); } catch { /* ok */ }
   assert.equal(tx.subcategory_id, sub.id);
 });
+
+test('migrace: fixed_expenses má match_counterparty_account', () => {
+  const tmp = path.join(os.tmpdir(), `spendex-fixed-mca-${Date.now()}.db`);
+  process.env.DB_PATH = tmp;
+  delete require.cache[require.resolve('../db/connection')];
+  delete require.cache[require.resolve('../db/schema')];
+  const db = require('../db/connection');
+  const { initSchema } = require('../db/schema');
+  initSchema();
+  const cols = db.prepare("PRAGMA table_info(fixed_expenses)").all().map(c => c.name);
+  db.close();
+  fs.unlinkSync(tmp);
+  try { fs.unlinkSync(tmp + '-wal'); fs.unlinkSync(tmp + '-shm'); } catch { /* ok */ }
+  assert.ok(cols.includes('match_counterparty_account'), 'chybí sloupec match_counterparty_account');
+});
