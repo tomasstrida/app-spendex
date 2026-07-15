@@ -5,7 +5,8 @@
 //   3) zpětně otaguje existující Licence transakce (subcategory_id IS NULL) podle patternu.
 //
 // Env: DB_PATH (povinné), CONFIRM=1 pro ostrý zápis (jinak dry-run). USER_ID (volitelné, jinak
-// všichni uživatelé s kategorií "Licence").
+// všichni uživatelé s cílovou kategorií). CATEGORY_NAME (volitelné, default "Licence";
+// na produkci se kategorie jmenuje "Y_Licence" – roční budget typu 2).
 // Aditivní: nikdy nic nemaže, doplňuje jen NULL subcategory_id a chybějící pravidla/subkategorie.
 //
 // POZOR – Railway: záměrně BEZ dopředného pravidla. Broad pattern "RAILWAY" koliduje s jízdným
@@ -17,8 +18,10 @@ const Database = require('better-sqlite3');
 
 const DB_PATH = process.env.DB_PATH;
 const CONFIRM = process.env.CONFIRM === '1';
+const CATEGORY_NAME = process.env.CATEGORY_NAME || 'Licence';
 if (!DB_PATH) { console.error('Chybí DB_PATH'); process.exit(1); }
 const db = new Database(DB_PATH);
+console.log(`Cílová kategorie: "${CATEGORY_NAME}"`);
 
 // Kompletní číselník subkategorií Licence (per služba). Ostatní = ruční koš, bez patternu.
 const SUBCATS = [
@@ -45,13 +48,13 @@ const MAPPINGS = [
 
 const users = process.env.USER_ID
   ? [{ id: +process.env.USER_ID }]
-  : db.prepare("SELECT DISTINCT user_id AS id FROM categories WHERE name = 'Licence'").all();
+  : db.prepare("SELECT DISTINCT user_id AS id FROM categories WHERE name = ?").all(CATEGORY_NAME);
 
 const plan = [];   // sběr akcí pro dry-run výpis
 const actions = []; // funkce k provedení při CONFIRM
 
 for (const u of users) {
-  const lic = db.prepare("SELECT id FROM categories WHERE user_id = ? AND name = 'Licence'").get(u.id);
+  const lic = db.prepare("SELECT id FROM categories WHERE user_id = ? AND name = ?").get(u.id, CATEGORY_NAME);
   if (!lic) { plan.push(`[user ${u.id}] kategorie Licence neexistuje – přeskočeno`); continue; }
   const licId = lic.id;
 
