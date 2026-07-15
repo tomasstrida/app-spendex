@@ -5,7 +5,7 @@ import Layout from '../components/Layout';
 import { formatCurrency, formatPeriod, addPeriods, t } from '../i18n';
 import { usePeriod } from '../contexts/PeriodContext';
 import { usePeriodKeys } from '../hooks/usePeriodKeys';
-import { buildAccountNameMap, accountNameFor } from '../utils/accountName';
+import { buildAccountNameMap } from '../utils/accountName';
 import { accountFlow } from '../utils/accountFlow';
 
 const ALL_COLS = [
@@ -17,7 +17,6 @@ const ALL_COLS = [
   { key: 'subcategory_name',     label: 'Subkategorie',    default: false },
   { key: 'ab_category',          label: 'AirBank kat.',    default: true },
   { key: 'entered_by',           label: 'Kdo zadal',       default: false },
-  { key: 'counterparty_account', label: 'Číslo účtu',      default: false },
   { key: 'flow_source',          label: 'Zdroj',           default: false },
   { key: 'flow_target',          label: 'Cíl',             default: false },
   { key: 'place',                label: 'Obchodní místo',  default: false },
@@ -932,7 +931,6 @@ function colsToGrid(cols) {
     if (c.key === 'ab_category') return '130px';
     if (c.key === 'tx_type') return '130px';
     if (c.key === 'entered_by') return '120px';
-    if (c.key === 'counterparty_account') return '140px';
     if (c.key === 'flow_source' || c.key === 'flow_target') return '150px';
     return '1fr';
   }).join(' ');
@@ -965,15 +963,6 @@ function renderCell(key, tx, categories, accountNameMap, accountById) {
       return <span className="text-muted" style={{ fontSize: 12 }}>{tx.ab_category || '—'}</span>;
     case 'entered_by':
       return <span style={{ fontSize: 13 }}>{tx.entered_by || '—'}</span>;
-    case 'counterparty_account': {
-      const accName = accountNameFor(tx.counterparty_account, accountNameMap);
-      return (
-        <span className="text-muted" style={{ fontSize: 12 }}>
-          {tx.counterparty_account || '—'}
-          {accName && <> · <span style={{ color: 'var(--text)' }}>{accName}</span></>}
-        </span>
-      );
-    }
     case 'flow_source':
     case 'flow_target': {
       const { from, to } = accountFlow(tx, { accountById, accountNameMap });
