@@ -205,6 +205,7 @@ export default function ReportPage() {
   const bySubcategory = stats?.by_subcategory || [];
   const accounting = stats?.accounting || [];
   const type3Spent = byCategory.filter(c => c.type === 3 && c.spent > 0);
+  const expensiveItems = stats?.expensive_items || [];
 
   function toggleSubcatExpand(categoryId) {
     setExpandedSubcats(prev => ({ ...prev, [categoryId]: !prev[categoryId] }));
@@ -625,22 +626,28 @@ export default function ReportPage() {
             </section>
           )}
 
-          {/* ── DRAHÉ VĚCI (Typ 3) ── */}
-          {type3Spent.length > 0 && (
+          {/* ── DRAHÉ VĚCI (Typ 3) – detailní rozpad na jednotlivé transakce ── */}
+          {expensiveItems.length > 0 && (
             <section className="report-section">
               <div className="report-section-header">
                 <h2 className="report-section-title">Drahé věci</h2>
               </div>
               <div className="report-budget-list">
-                {type3Spent.map(c => (
-                  <Link key={c.id} to={`/transactions?category_id=${c.id}` + (period ? `&period=${period}` : '')}
+                {expensiveItems.map(it => (
+                  <Link key={it.id} to={`/transactions?category_id=${it.category_id}` + (period ? `&period=${period}` : '')}
                     className="report-budget-row"
                     style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}>
-                    <span className="report-budget-dot" style={{ background: c.color || '#6366f1' }} />
-                    <span className="report-budget-name">{c.name}</span>
-                    <span className="report-budget-spent">{formatCurrency(c.spent)}</span>
-                    <span className="report-budget-limit" />
-                    <span className="report-budget-status" />
+                    <span className="report-budget-dot" style={{ background: it.category_color || '#6366f1' }} />
+                    <span className="report-budget-name">
+                      <span className="text-muted" style={{ marginRight: 8 }}>
+                        {`${+it.date.slice(8, 10)}. ${+it.date.slice(5, 7)}.`}
+                      </span>
+                      {it.description || it.category_name}
+                      {it.note && <span className="text-muted" style={{ display: 'block', fontSize: 11 }}>{it.note}</span>}
+                    </span>
+                    <span className={`report-budget-spent${it.amount < 0 ? '' : ' text-success'}`}>
+                      {formatCurrency(-it.amount)}
+                    </span>
                   </Link>
                 ))}
               </div>
