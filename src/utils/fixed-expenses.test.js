@@ -89,3 +89,46 @@ test('fixedExpensesForPeriod: kvartální bez platby v okně → missing', () =>
   const m = rows.find(r => r.source === 'manual');
   assert.equal(m.status, 'missing');
 });
+
+test('fixedExpensesForPeriod: párování přes counterparty_account (priorita nad patternem)', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, frequency_months, match_pattern, match_counterparty_account) VALUES (1,'Splátka RAV4',13255,13000,13500,1,'NESEDÍCÍ TEXT','1679014999')").run();
+  // popis pattern NEmatchne, ale číslo účtu ano → platba se najde přes účet
+  db.prepare("INSERT INTO transactions (user_id, amount, date, description, counterparty_account) VALUES (1,-13255,'2026-04-10','Toyota Financial','1679014999/0300')").run();
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const rows = fixedExpensesForPeriod(db, 1, '2026-04');
+  cleanup(db, tmp);
+  const m = rows.find(r => r.source === 'manual');
+  assert.equal(m.actual, 13255);
+  assert.equal(m.tx_count, 1);
+  assert.equal(m.status, 'ok');
+});
+
+test('fixedExpensesForPeriod: platba přes counterparty nepřišla → missing, actual 0', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, frequency_months, match_counterparty_account) VALUES (1,'Splátka',5000,4900,5100,1,'1679014999')").run();
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const rows = fixedExpensesForPeriod(db, 1, '2026-04');
+  cleanup(db, tmp);
+  const m = rows.find(r => r.source === 'manual');
+  assert.equal(m.tx_count, 0);
+  assert.equal(m.actual, 0);
+  assert.equal(m.status, 'missing');
+});
+
+test('fixedExpensesForPeriod: account-řádek se nezdvojí s ruční platbou přes číslo účtu', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO accounts (id, user_id, name, role) VALUES (20, 1, 'Harmonicka-najem', 'fixed')").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_counterparty_account) VALUES (1,'Nájem',38126,37000,39000,'1679014777')").run();
+  db.prepare("INSERT INTO transactions (user_id, account_id, amount, date, description, counterparty_account) VALUES (1,20,-38126,'2026-04-05','Platba nájem','1679014777/0300')").run();
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const rows = fixedExpensesForPeriod(db, 1, '2026-04');
+  cleanup(db, tmp);
+  // stejná transakce nesmí být zároveň account-řádek
+  assert.equal(rows.filter(r => r.source === 'account').length, 0);
+  const m = rows.find(r => r.source === 'manual');
+  assert.equal(m.actual, 38126);
+});

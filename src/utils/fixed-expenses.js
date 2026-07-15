@@ -24,19 +24,29 @@ function fixedExpensesForPeriod(db, userId, period) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   };
 
-  const matchStmt = db.prepare(`
+  const matchByDesc = db.prepare(`
     SELECT COALESCE(SUM(ABS(amount)), 0) AS actual, COUNT(*) AS tx_count
     FROM transactions
     WHERE user_id = ? AND amount < 0 AND date >= ? AND date <= ?
       AND description LIKE '%' || ? || '%'
   `);
+  const matchByAccount = db.prepare(`
+    SELECT COALESCE(SUM(ABS(amount)), 0) AS actual, COUNT(*) AS tx_count
+    FROM transactions
+    WHERE user_id = ? AND amount < 0 AND date >= ? AND date <= ?
+      AND counterparty_account LIKE ? || '%'
+  `);
 
   const windowEnd = end;  // konec aktuálního období
   const manualWithStatus = manual.map(row => {
-    if (!row.match_pattern) return row;
+    const hasMatcher = row.match_counterparty_account || row.match_pattern;
+    if (!hasMatcher) return row;  // po validaci nenastane; bezpečný fallback
     const freq = row.frequency_months > 0 ? row.frequency_months : 1;
     const windowStart = getPeriodDates(billingDay, shiftPeriod(period, -(freq - 1))).start;
-    const m = matchStmt.get(userId, windowStart, windowEnd, row.match_pattern);
+    // Číslo účtu příjemce má přednost před textovým patternem.
+    const m = row.match_counterparty_account
+      ? matchByAccount.get(userId, windowStart, windowEnd, row.match_counterparty_account)
+      : matchByDesc.get(userId, windowStart, windowEnd, row.match_pattern);
     return {
       ...row,
       actual: m.actual,
@@ -45,10 +55,15 @@ function fixedExpensesForPeriod(db, userId, period) {
     };
   });
 
+  // Account-řádky (role='fixed') vynech, pokud odpovídají ručnímu matcheru
+  // (jinak by se platba počítala dvakrát). Match přes description-pattern i číslo účtu.
   const patterns = manual.map(m => m.match_pattern).filter(Boolean);
-  const excludeSql = patterns.length
-    ? ' AND NOT (' + patterns.map(() => "t.description LIKE '%' || ? || '%'").join(' OR ') + ')'
-    : '';
+  const cpAccounts = manual.map(m => m.match_counterparty_account).filter(Boolean);
+  const excludeParts = [
+    ...patterns.map(() => "t.description LIKE '%' || ? || '%'"),
+    ...cpAccounts.map(() => "t.counterparty_account LIKE ? || '%'"),
+  ];
+  const excludeSql = excludeParts.length ? ' AND NOT (' + excludeParts.join(' OR ') + ')' : '';
 
   const fromAccounts = db.prepare(`
     SELECT
@@ -68,7 +83,7 @@ function fixedExpensesForPeriod(db, userId, period) {
       AND t.date >= ? AND t.date <= ?${excludeSql}
     GROUP BY t.description, a.id
     ORDER BY a.name ASC, SUM(ABS(t.amount)) DESC
-  `).all(userId, start, end, ...patterns);
+  `).all(userId, start, end, ...patterns, ...cpAccounts);
 
   return [...manualWithStatus, ...fromAccounts];
 }
