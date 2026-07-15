@@ -1,6 +1,5 @@
 'use strict';
 
-const MATCH_TOLERANCE_PCT = 5;
 
 // Stabilní bankovní fakta (stejný princip jako ownAccountNumbers v scripts/seed/rules.js)
 const savingsAccount = '1679014082';
@@ -20,15 +19,13 @@ function paymentStatus(min, max, actual, txCount) {
 }
 
 /**
- * Stav příjmu za období. Na rozdíl od paymentStatus je přebytek (skutečnost
- * nad plán) v pořádku – penalizuje se jen výpadek pod plán.
- * @returns 'ok' | 'mismatch' | 'missing' | null
+ * Stav příjmu za období. Bez tolerance — jakmile přijde cokoli, je to ok.
+ * @returns 'ok' | 'missing' | null  (null = plán ≤ 0, missing = 0 tx)
  */
 function incomeStatus(expected, actual, txCount) {
-  if (!(expected > 0)) return null;
+  if (!(expected > 0)) return null;      // není plán → bez statusu
   if (!txCount || txCount === 0) return 'missing';
-  const floor = expected * (1 - MATCH_TOLERANCE_PCT / 100);
-  return actual >= floor ? 'ok' : 'mismatch';
+  return 'ok';                            // přišlo cokoli → ok (rozdíl řeší UI)
 }
 
 function savingsNet({ deposits, withdrawals }) {
@@ -40,7 +37,6 @@ function reserveBalance({ envelopeDeposits, najemSum, preSum, envelopeReturns })
 }
 
 module.exports = {
-  MATCH_TOLERANCE_PCT,
   savingsAccount,
   reserveAccount,
   reservePaidPatterns,
