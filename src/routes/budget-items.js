@@ -73,7 +73,27 @@ router.get('/', requireAuth, (req, res) => {
     if (r.month >= 1 && r.month <= 12) category_month_spent[r.category_id][r.month - 1] = r.spent;
   }
 
-  res.json({ year, items: result, category_year_spent, category_month_spent });
+  // Roční rozpad po subkategoriích (Typ 2): pro každou roční kategorii pole
+  // { subcategory_id, name, spent } za celý kalendářní rok. Slouží k rozkliku
+  // rozpadu Licence na stránce Roční budgety. Klíč = category_id.
+  const subSpent = db.prepare(`
+    SELECT sc.category_id, t.subcategory_id, sc.name,
+           COALESCE(SUM(-t.amount), 0) AS spent
+    FROM transactions t
+    JOIN subcategories sc ON sc.id = t.subcategory_id
+    JOIN categories c ON c.id = sc.category_id
+    WHERE t.user_id = ? AND c.user_id = ? AND c.type = 2
+      AND t.date >= ? AND t.date <= ?
+    GROUP BY t.subcategory_id
+    ORDER BY spent DESC
+  `).all(req.dataUserId, req.dataUserId, `${year}-01-01`, `${year}-12-31`);
+  const category_subcategory_year_spent = {};
+  for (const r of subSpent) {
+    if (!category_subcategory_year_spent[r.category_id]) category_subcategory_year_spent[r.category_id] = [];
+    category_subcategory_year_spent[r.category_id].push({ subcategory_id: r.subcategory_id, name: r.name, spent: r.spent });
+  }
+
+  res.json({ year, items: result, category_year_spent, category_month_spent, category_subcategory_year_spent });
 });
 
 // POST /api/budget-items
