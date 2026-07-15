@@ -89,6 +89,8 @@ export default function TransactionsPage() {
   const [editId, setEditId] = useState(null);
   const [editData, setEditData] = useState({});
   const [editSubcats, setEditSubcats] = useState([]);
+  const [addingSubcat, setAddingSubcat] = useState(false);
+  const [newSubcatName, setNewSubcatName] = useState('');
   const [catEditId, setCatEditId] = useState(null);
   const [filterSubcatId, setFilterSubcatId] = useState(searchParams.get('subcategory_id') || '');
   const [filterSubcatOptions, setFilterSubcatOptions] = useState([]);
@@ -335,6 +337,8 @@ export default function TransactionsPage() {
   function startEdit(tx) {
     setCatEditId(null);
     setEditId(tx.id);
+    setAddingSubcat(false);
+    setNewSubcatName('');
     setEditData({
       // u e-mailových kartových plateb je obchodník jen v `place` → předvyplň ho do Popisu,
       // ať ho uživatel při ručním zařazování vidí (a uložením se propíše do description)
@@ -362,6 +366,31 @@ export default function TransactionsPage() {
       .catch(() => { if (!cancelled) setEditSubcats([]); });
     return () => { cancelled = true; };
   }, [editId, editData.category_id]);
+
+  // Založí novou subkategorii pod aktuálně vybranou kategorií přímo z editace
+  // transakce (bez odskoku na stránku Kategorie) a rovnou ji transakci přiřadí.
+  async function createSubcategory() {
+    const name = newSubcatName.trim();
+    const catId = editData.category_id;
+    if (!name || !catId) return;
+    const res = await fetch('/api/subcategories', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ category_id: parseInt(catId), name }),
+    });
+    if (res.ok) {
+      const created = await res.json();
+      setEditSubcats(prev => [...prev, created].sort(
+        (a, b) => (a.sort_order - b.sort_order) || a.name.localeCompare(b.name, 'cs')
+      ));
+      setEditData(d => ({ ...d, subcategory_id: String(created.id) }));
+      setNewSubcatName('');
+      setAddingSubcat(false);
+    } else {
+      const err = await res.json().catch(() => ({}));
+      alert(err.error || 'Nepodařilo se přidat subkategorii.');
+    }
+  }
 
   async function saveEdit(tx) {
     const body = {
@@ -727,7 +756,7 @@ export default function TransactionsPage() {
                     <select
                       className="input"
                       value={editData.category_id}
-                      onChange={e => setEditData(d => ({ ...d, category_id: e.target.value, subcategory_id: '' }))}
+                      onChange={e => { setAddingSubcat(false); setNewSubcatName(''); setEditData(d => ({ ...d, category_id: e.target.value, subcategory_id: '' })); }}
                     >
                       <option value="">— bez kategorie —</option>
                       {categories.map(c => (
@@ -737,17 +766,45 @@ export default function TransactionsPage() {
                   </div>
                   <div className="form-group" style={{ margin: 0 }}>
                     <label className="form-label" style={{ fontSize: 11 }}>Subkategorie</label>
-                    <select
-                      className="input"
-                      value={editData.subcategory_id}
-                      disabled={editSubcats.length === 0}
-                      onChange={e => setEditData(d => ({ ...d, subcategory_id: e.target.value }))}
-                    >
-                      <option value="">— žádná —</option>
-                      {editSubcats.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
+                    {addingSubcat ? (
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <input
+                          className="input"
+                          autoFocus
+                          placeholder="Název subkategorie"
+                          value={newSubcatName}
+                          onChange={e => setNewSubcatName(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') { e.preventDefault(); createSubcategory(); }
+                            if (e.key === 'Escape') { setAddingSubcat(false); setNewSubcatName(''); }
+                          }}
+                        />
+                        <button type="button" className="btn btn-primary btn-sm" onClick={createSubcategory}>Přidat</button>
+                        <button type="button" className="btn btn-ghost btn-sm" title="Zrušit" onClick={() => { setAddingSubcat(false); setNewSubcatName(''); }}>×</button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <select
+                          className="input"
+                          value={editData.subcategory_id}
+                          disabled={editSubcats.length === 0}
+                          onChange={e => setEditData(d => ({ ...d, subcategory_id: e.target.value }))}
+                        >
+                          <option value="">— žádná —</option>
+                          {editSubcats.map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          style={{ whiteSpace: 'nowrap' }}
+                          disabled={!editData.category_id}
+                          title={editData.category_id ? 'Přidat novou subkategorii' : 'Nejdřív vyber kategorii'}
+                          onClick={() => setAddingSubcat(true)}
+                        >+ Nová</button>
+                      </div>
+                    )}
                   </div>
                   <div className="form-group" style={{ margin: 0 }}>
                     <label className="form-label" style={{ fontSize: 11 }}>Částka (Kč)</label>
