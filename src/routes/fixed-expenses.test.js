@@ -21,7 +21,7 @@ test('POST přijme rozmezí + frekvenci', async () => {
   const { app } = setup();
   const { server, base } = await listen(app);
   const res = await fetch(`${base}/api/fixed-expenses`, { method:'POST', headers:{'content-type':'application/json'},
-    body: JSON.stringify({ name:'Nájem', amount:38000, amount_min:36000, amount_max:40000, frequency_months:1 }) });
+    body: JSON.stringify({ name:'Nájem', amount:38000, amount_min:36000, amount_max:40000, frequency_months:1, match_pattern:'NÁJEM' }) });
   assert.equal(res.status, 201);
   const row = await res.json();
   assert.equal(row.amount_min, 36000);
@@ -34,7 +34,7 @@ test('POST s min > max → 400', async () => {
   const { app } = setup();
   const { server, base } = await listen(app);
   const res = await fetch(`${base}/api/fixed-expenses`, { method:'POST', headers:{'content-type':'application/json'},
-    body: JSON.stringify({ name:'Nájem', amount:38000, amount_min:40000, amount_max:36000 }) });
+    body: JSON.stringify({ name:'Nájem', amount:38000, amount_min:40000, amount_max:36000, match_pattern:'NÁJEM' }) });
   assert.equal(res.status, 400);
   server.close();
 });
@@ -44,7 +44,7 @@ test('PATCH jen amount_min vyšší než stávající amount_max → 400', async
   const { server, base } = await listen(app);
   // POST položka
   const postRes = await fetch(`${base}/api/fixed-expenses`, { method:'POST', headers:{'content-type':'application/json'},
-    body: JSON.stringify({ name:'Nájem', amount:38000, amount_min:36000, amount_max:40000, frequency_months:1 }) });
+    body: JSON.stringify({ name:'Nájem', amount:38000, amount_min:36000, amount_max:40000, frequency_months:1, match_pattern:'NÁJEM' }) });
   assert.equal(postRes.status, 201);
   const row = await postRes.json();
   const id = row.id;
@@ -60,7 +60,7 @@ test('PATCH jen amount_max nižší než stávající amount_min → 400', async
   const { server, base } = await listen(app);
   // POST položka
   const postRes = await fetch(`${base}/api/fixed-expenses`, { method:'POST', headers:{'content-type':'application/json'},
-    body: JSON.stringify({ name:'Nájem', amount:38000, amount_min:36000, amount_max:40000, frequency_months:1 }) });
+    body: JSON.stringify({ name:'Nájem', amount:38000, amount_min:36000, amount_max:40000, frequency_months:1, match_pattern:'NÁJEM' }) });
   assert.equal(postRes.status, 201);
   const row = await postRes.json();
   const id = row.id;
@@ -76,7 +76,7 @@ test('PATCH partial update zachová nezadaná pole', async () => {
   const { server, base } = await listen(app);
   // POST položka s min/max/frequency
   const postRes = await fetch(`${base}/api/fixed-expenses`, { method:'POST', headers:{'content-type':'application/json'},
-    body: JSON.stringify({ name:'Nájem', amount:38000, amount_min:36000, amount_max:40000, frequency_months:1, note:'Původní' }) });
+    body: JSON.stringify({ name:'Nájem', amount:38000, amount_min:36000, amount_max:40000, frequency_months:1, note:'Původní', match_pattern:'NÁJEM' }) });
   assert.equal(postRes.status, 201);
   const row = await postRes.json();
   const id = row.id;
@@ -89,5 +89,37 @@ test('PATCH partial update zachová nezadaná pole', async () => {
   assert.equal(updated.amount_min, 36000);
   assert.equal(updated.amount_max, 40000);
   assert.equal(updated.frequency_months, 1);
+  server.close();
+});
+
+test('POST bez matcheru → 400', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const res = await fetch(`${base}/api/fixed-expenses`, { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ name:'Nájem', amount:38000 }) });
+  assert.equal(res.status, 400);
+  server.close();
+});
+
+test('POST s counterparty → 201 a uloží číslo účtu', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const res = await fetch(`${base}/api/fixed-expenses`, { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ name:'Splátka', amount:5000, match_counterparty_account:'1679014999' }) });
+  assert.equal(res.status, 201);
+  const row = await res.json();
+  assert.equal(row.match_counterparty_account, '1679014999');
+  server.close();
+});
+
+test('PATCH odebrání jediného matcheru → 400', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const postRes = await fetch(`${base}/api/fixed-expenses`, { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ name:'Splátka', amount:5000, match_pattern:'SPLÁTKA' }) });
+  const { id } = await postRes.json();
+  const patchRes = await fetch(`${base}/api/fixed-expenses/${id}`, { method:'PATCH', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ match_pattern: null }) });
+  assert.equal(patchRes.status, 400);
   server.close();
 });

@@ -15,16 +15,19 @@ router.get('/', requireAuth, (req, res) => {
 
 // POST /api/fixed-expenses
 router.post('/', requireAuth, writeLimiter, (req, res) => {
-  const { name, amount, note, sort_order, match_pattern, amount_min, amount_max, frequency_months } = req.body;
+  const { name, amount, note, sort_order, match_pattern, match_counterparty_account, amount_min, amount_max, frequency_months } = req.body;
   if (!name || amount == null) return res.status(400).json({ error: 'Název a částka jsou povinné.' });
+  const pattern = match_pattern && match_pattern.trim() ? match_pattern.trim() : null;
+  const cpAccount = match_counterparty_account && String(match_counterparty_account).trim() ? String(match_counterparty_account).trim() : null;
+  if (!pattern && !cpAccount) return res.status(400).json({ error: 'Zadej text v popisu nebo číslo účtu příjemce.' });
   const min = amount_min != null ? parseFloat(amount_min) : null;
   const max = amount_max != null ? parseFloat(amount_max) : null;
   if (min != null && max != null && min > max) return res.status(400).json({ error: 'Min nesmí být větší než max.' });
   const freq = frequency_months != null ? Math.max(1, parseInt(frequency_months, 10) || 1) : 1;
   const result = db.prepare(
-    'INSERT INTO fixed_expenses (user_id, name, amount, note, sort_order, match_pattern, amount_min, amount_max, frequency_months) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO fixed_expenses (user_id, name, amount, note, sort_order, match_pattern, match_counterparty_account, amount_min, amount_max, frequency_months) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).run(req.dataUserId, name.trim(), parseFloat(amount), note || null, sort_order ?? 0,
-    match_pattern && match_pattern.trim() ? match_pattern.trim() : null, min, max, freq);
+    pattern, cpAccount, min, max, freq);
   res.status(201).json(db.prepare('SELECT * FROM fixed_expenses WHERE id = ?').get(result.lastInsertRowid));
 });
 
@@ -32,16 +35,21 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
 router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
   const row = db.prepare('SELECT * FROM fixed_expenses WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
   if (!row) return res.status(404).json({ error: 'Záznam nenalezen.' });
-  const { name, amount, note, sort_order, match_pattern, amount_min, amount_max, frequency_months } = req.body;
+  const { name, amount, note, sort_order, match_pattern, match_counterparty_account, amount_min, amount_max, frequency_months } = req.body;
   const min = amount_min !== undefined ? (amount_min != null ? parseFloat(amount_min) : null) : row.amount_min;
   const max = amount_max !== undefined ? (amount_max != null ? parseFloat(amount_max) : null) : row.amount_max;
   if (min != null && max != null && min > max) return res.status(400).json({ error: 'Min nesmí být větší než max.' });
-  db.prepare('UPDATE fixed_expenses SET name = ?, amount = ?, note = ?, sort_order = ?, match_pattern = ?, amount_min = ?, amount_max = ?, frequency_months = ? WHERE id = ?').run(
+  const pattern = match_pattern !== undefined ? (match_pattern && match_pattern.trim() ? match_pattern.trim() : null) : row.match_pattern;
+  const cpAccount = match_counterparty_account !== undefined
+    ? (match_counterparty_account && String(match_counterparty_account).trim() ? String(match_counterparty_account).trim() : null)
+    : row.match_counterparty_account;
+  if (!pattern && !cpAccount) return res.status(400).json({ error: 'Zadej text v popisu nebo číslo účtu příjemce.' });
+  db.prepare('UPDATE fixed_expenses SET name = ?, amount = ?, note = ?, sort_order = ?, match_pattern = ?, match_counterparty_account = ?, amount_min = ?, amount_max = ?, frequency_months = ? WHERE id = ?').run(
     name ?? row.name,
     amount != null ? parseFloat(amount) : row.amount,
     note !== undefined ? (note || null) : row.note,
     sort_order ?? row.sort_order,
-    match_pattern !== undefined ? (match_pattern && match_pattern.trim() ? match_pattern.trim() : null) : row.match_pattern,
+    pattern, cpAccount,
     min, max,
     frequency_months !== undefined ? Math.max(1, parseInt(frequency_months, 10) || 1) : row.frequency_months,
     row.id
