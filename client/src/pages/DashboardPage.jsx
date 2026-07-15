@@ -5,20 +5,32 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
-import { budgetFillColor } from '../utils/budgetColor';
+import { budgetFillColor, budgetState, BUDGET_ORANGE, BUDGET_RED_TEXT } from '../utils/budgetColor';
 import { sumExpensiveTotal } from '../utils/expensiveTotal.js';
 
 // ── Teploměr Typ 1 ────────────────────────────────────────────────────────────
 
-function Thermometer({ spent, amount, periodStart, periodEnd, showProjection = true }) {
-  const spentPct = amount > 0 ? Math.min((spent / amount) * 100, 100) : 0;
-  const over = spent > amount;
+// Uplynulé/celkové dny období — jeden zdroj pro rtuť i pro barvu textu.
+function periodDays(periodStart, periodEnd) {
   const today = new Date();
   const start = new Date(periodStart + 'T00:00:00');
   const end = new Date(periodEnd + 'T00:00:00');
-  const periodOver = today > end;
   const totalDays = Math.round((end - start) / 86400000) + 1;
   const daysPassed = Math.max(0, Math.min(Math.round((today - start) / 86400000), totalDays));
+  return { today, end, totalDays, daysPassed };
+}
+
+// Barva textu částky podle stavu budgetu (shodná s barvou rtuti teploměru).
+// green → null (dědí výchozí barvu), orange/red → sytá barva semaforu.
+function stateTextColor(state) {
+  return state === 'orange' ? BUDGET_ORANGE : state === 'red' ? BUDGET_RED_TEXT : null;
+}
+
+function Thermometer({ spent, amount, periodStart, periodEnd, showProjection = true }) {
+  const spentPct = amount > 0 ? Math.min((spent / amount) * 100, 100) : 0;
+  const over = spent > amount;
+  const { today, end, totalDays, daysPassed } = periodDays(periodStart, periodEnd);
+  const periodOver = today > end;
   const dayPct = Math.min((daysPassed / totalDays) * 100, 100);
   const projection = daysPassed > 0 ? Math.round((spent / daysPassed) * totalDays) : 0;
   const fillColor = budgetFillColor({ spent, amount, daysPassed, totalDays });
@@ -32,7 +44,7 @@ function Thermometer({ spent, amount, periodStart, periodEnd, showProjection = t
       {showProjection && !periodOver && projection > 0 && projection > amount && (
         <div className="budget-projection">
           projekce: <strong>{formatCurrency(projection)}</strong>
-          <span className="text-danger"> (+{formatCurrency(projection - amount)})</span>
+          <span style={{ color: BUDGET_RED_TEXT, fontWeight: 600 }}> (+{formatCurrency(projection - amount)})</span>
         </div>
       )}
     </div>
@@ -45,6 +57,9 @@ function BudgetBar({ budget, period, periodStart, periodEnd, subcategories = [],
   const remaining = budget.amount - budget.spent;
   const pct = budget.amount > 0 ? (budget.spent / budget.amount) * 100 : 0;
   const hasSubcategories = subcategories.length > 0;
+  const { totalDays, daysPassed } = periodDays(periodStart, periodEnd);
+  const state = budgetState({ spent: budget.spent, amount: budget.amount, daysPassed, totalDays });
+  const amountColor = stateTextColor(state);
 
   return (
     <div className="budget-item budget-item-clickable"
@@ -55,15 +70,15 @@ function BudgetBar({ budget, period, periodStart, periodEnd, subcategories = [],
           {budget.category_name}
         </div>
         <div className="budget-item-amounts">
-          <span className={over ? 'text-danger' : ''}>{formatCurrency(budget.spent)}</span>
+          <span style={amountColor ? { color: amountColor, fontWeight: 600 } : undefined}>{formatCurrency(budget.spent)}</span>
           <span className="text-muted"> / {formatCurrency(budget.amount)}</span>
         </div>
       </div>
       <Thermometer spent={budget.spent} amount={budget.amount} periodStart={periodStart} periodEnd={periodEnd} />
       <div className="budget-item-footer">
         {over
-          ? <span className="text-danger">{formatCurrency(Math.abs(remaining))} {t.dashboard.over}</span>
-          : <span className="text-muted">{formatCurrency(remaining)} {t.dashboard.remaining}</span>}
+          ? <span style={{ color: amountColor || BUDGET_RED_TEXT, fontWeight: 600 }}>{formatCurrency(Math.abs(remaining))} {t.dashboard.over}</span>
+          : <span style={state === 'orange' ? { color: BUDGET_ORANGE, fontWeight: 600 } : undefined} className={state === 'orange' ? '' : 'text-muted'}>{formatCurrency(remaining)} {t.dashboard.remaining}</span>}
         <span className="text-muted">{Math.round(pct)} %</span>
       </div>
       {hasSubcategories && (
@@ -103,36 +118,34 @@ function BudgetSummary({ budgets, periodStart, periodEnd }) {
   const remaining = totalAmount - totalSpent;
   const pct = (totalSpent / totalAmount) * 100;
 
-  const today = new Date();
-  const start = new Date(periodStart + 'T00:00:00');
-  const end = new Date(periodEnd + 'T00:00:00');
+  const { today, end, totalDays, daysPassed } = periodDays(periodStart, periodEnd);
   const periodOver = today > end;
-  const totalDays = Math.round((end - start) / 86400000) + 1;
-  const daysPassed = Math.max(0, Math.min(Math.round((today - start) / 86400000), totalDays));
   const projection = daysPassed > 0 ? Math.round((totalSpent / daysPassed) * totalDays) : 0;
   const projOver = projection - totalAmount;
+  const state = budgetState({ spent: totalSpent, amount: totalAmount, daysPassed, totalDays });
+  const amountColor = stateTextColor(state);
 
   return (
     <div className="budget-item budget-summary">
       <div className="budget-item-header">
         <div className="budget-item-name"><strong>Celkem za období</strong></div>
         <div className="budget-item-amounts">
-          <span className={over ? 'text-danger' : ''}>{formatCurrency(totalSpent)}</span>
+          <span style={amountColor ? { color: amountColor, fontWeight: 600 } : undefined}>{formatCurrency(totalSpent)}</span>
           <span className="text-muted"> / {formatCurrency(totalAmount)}</span>
         </div>
       </div>
       <Thermometer spent={totalSpent} amount={totalAmount} periodStart={periodStart} periodEnd={periodEnd} showProjection={false} />
       <div className="budget-item-footer">
         {over
-          ? <span className="text-danger">{formatCurrency(Math.abs(remaining))} {t.dashboard.over}</span>
-          : <span className="text-muted">{formatCurrency(remaining)} {t.dashboard.remaining}</span>}
+          ? <span style={{ color: amountColor || BUDGET_RED_TEXT, fontWeight: 600 }}>{formatCurrency(Math.abs(remaining))} {t.dashboard.over}</span>
+          : <span style={state === 'orange' ? { color: BUDGET_ORANGE, fontWeight: 600 } : undefined} className={state === 'orange' ? '' : 'text-muted'}>{formatCurrency(remaining)} {t.dashboard.remaining}</span>}
         <span className="text-muted">{Math.round(pct)} %</span>
       </div>
       {!periodOver && projection > 0 && (
         <div className="budget-projection">
           projekce: <strong>{formatCurrency(projection)}</strong>
           {projOver > 0
-            ? <span className="text-danger"> (+{formatCurrency(projOver)})</span>
+            ? <span style={{ color: BUDGET_RED_TEXT, fontWeight: 600 }}> (+{formatCurrency(projOver)})</span>
             : <span className="text-muted"> ({formatCurrency(projOver)})</span>}
         </div>
       )}

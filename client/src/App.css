@@ -471,12 +471,21 @@
 
 /* Rozpad subkategorií pod teploměrem (Měsíční rozpočty) */
 .budget-subcat-toggle {
-  background: none;
-  border: none;
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 3px 10px;
   cursor: pointer;
-  color: var(--text2);
-  font-size: 11px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.budget-subcat-toggle:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
 }
 .budget-subcat-list {
   display: flex;
@@ -567,14 +576,27 @@ a.report-budget-card:hover { background: var(--bg2); text-decoration: none; }
 
 /* Rozpad subkategorií pod řádkem kategorie (Měsíční výdaje) */
 .report-subcat-toggle {
-  background: none;
-  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-right: 8px;
   padding: 0;
-  margin-right: 6px;
   cursor: pointer;
-  color: var(--text2);
-  font-size: 11px;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
   line-height: 1;
+  vertical-align: middle;
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+.report-subcat-toggle:hover {
+  background: var(--accent-hover);
+  transform: scale(1.1);
 }
 .report-subcat-list {
   display: flex;

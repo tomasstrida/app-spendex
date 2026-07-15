@@ -1,6 +1,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { budgetFillColor, BUDGET_GREEN, BUDGET_ORANGE, BUDGET_RED } from './budgetColor.js';
+import { budgetFillColor, budgetState, BUDGET_GREEN, BUDGET_ORANGE, BUDGET_RED } from './budgetColor.js';
+
+test('budgetState: bez rozpočtu → green', () => {
+  assert.equal(budgetState({ spent: 500, amount: 0, daysPassed: 10, totalDays: 30 }), 'green');
+});
+test('budgetState: v normě → green', () => {
+  assert.equal(budgetState({ spent: 40, amount: 100, daysPassed: 15, totalDays: 30 }), 'green');
+});
+test('budgetState: hrozí (tempo) → orange', () => {
+  assert.equal(budgetState({ spent: 60, amount: 100, daysPassed: 15, totalDays: 30 }), 'orange');
+});
+test('budgetState: přečerpáno ≤10 % → orange', () => {
+  assert.equal(budgetState({ spent: 110, amount: 100, daysPassed: 30, totalDays: 30 }), 'orange');
+});
+test('budgetState: přečerpáno >10 % → red', () => {
+  assert.equal(budgetState({ spent: 111, amount: 100, daysPassed: 30, totalDays: 30 }), 'red');
+});
 
 test('bez rozpočtu → zelená (žádné dělení nulou)', () => {
   assert.equal(budgetFillColor({ spent: 500, amount: 0, daysPassed: 10, totalDays: 30 }), BUDGET_GREEN);
