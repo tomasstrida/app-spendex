@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import { t } from '../i18n';
 
-const EMPTY = { name: '', amount: '', amount_min: '', amount_max: '', frequency_months: 1, match_pattern: '', note: '' };
+const EMPTY = { name: '', amount: '', amount_min: '', amount_max: '', frequency_months: 1, match_pattern: '', match_counterparty_account: '', note: '' };
 
 export default function FixedExpensesPage() {
   const [items, setItems] = useState([]);
@@ -16,13 +16,17 @@ export default function FixedExpensesPage() {
   const submit = async (e) => {
     e.preventDefault();
     setError('');
+    const pattern = form.match_pattern.trim();
+    const cpAccount = form.match_counterparty_account.trim();
+    if (!pattern && !cpAccount) { setError('Zadej text v popisu nebo číslo účtu příjemce.'); return; }
     const body = {
       name: form.name,
       amount: parseFloat(form.amount),
       amount_min: form.amount_min === '' ? null : parseFloat(form.amount_min),
       amount_max: form.amount_max === '' ? null : parseFloat(form.amount_max),
       frequency_months: parseInt(form.frequency_months, 10) || 1,
-      match_pattern: form.match_pattern || null,
+      match_pattern: pattern || null,
+      match_counterparty_account: cpAccount || null,
       note: form.note || null,
     };
     const url = editId ? `/api/fixed-expenses/${editId}` : '/api/fixed-expenses';
@@ -46,6 +50,7 @@ export default function FixedExpensesPage() {
       amount_max: it.amount_max ?? '',
       frequency_months: it.frequency_months || 1,
       match_pattern: it.match_pattern || '',
+      match_counterparty_account: it.match_counterparty_account || '',
       note: it.note || '',
     });
     setError('');
@@ -120,6 +125,15 @@ export default function FixedExpensesPage() {
         />
         <input
           className="input"
+          placeholder="Číslo účtu příjemce (volitelné, má přednost)"
+          value={form.match_counterparty_account}
+          onChange={e => setForm({ ...form, match_counterparty_account: e.target.value })}
+        />
+        <span className="text-muted" style={{ fontSize: 11 }}>
+          Vyplň aspoň jedno: text v popisu, nebo číslo účtu příjemce. Podle toho se pozná, jestli platba proběhla a v jaké částce. Číslo účtu je spolehlivější a má přednost.
+        </span>
+        <input
+          className="input"
           placeholder="Poznámka"
           value={form.note}
           onChange={e => setForm({ ...form, note: e.target.value })}
@@ -143,6 +157,7 @@ export default function FixedExpensesPage() {
                   {it.amount_min != null && it.amount_max != null ? `${it.amount_min}–${it.amount_max} Kč` : `${it.amount} Kč`}
                   {it.frequency_months > 1 ? ` · à ${it.frequency_months} měs.` : ''}
                   {it.match_pattern ? ` · „${it.match_pattern}"` : ''}
+                  {it.match_counterparty_account ? ` · účet ${it.match_counterparty_account}` : ''}
                 </span>
               </span>
               <button className="btn btn-ghost btn-sm" onClick={() => edit(it)}>Upravit</button>
