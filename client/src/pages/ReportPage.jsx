@@ -160,8 +160,7 @@ export default function ReportPage() {
   const [loading, setLoading] = useState(true);
   const [showIncomeForm, setShowIncomeForm] = useState(false);
   const [editIncome, setEditIncome] = useState(null);
-  const [prefillIncome, setPrefillIncome] = useState(null); // pre-fill „Přidat" z auto-only řádku
-  const [unaliasedExpanded, setUnaliasedExpanded] = useState(false);
+  const [prefillIncome, setPrefillIncome] = useState(null); // pre-fill „Přidat" z ručního formuláře
   const [expandedSubcats, setExpandedSubcats] = useState({}); // per-kategorie rozklik subkategorií
 
   useEffect(() => {
@@ -214,11 +213,9 @@ export default function ReportPage() {
   const totalFixed   = fixedExpenses.reduce((s, f) => s + f.amount, 0);
   // Striktní whitelist: do bilance i sekce Příjmy vstupují jen ručně aliasované zdroje
   const aliasedSources   = incomeSources.filter(s => s.id != null);
-  const unaliasedSources = incomeSources.filter(s => s.id == null);
   const totalIncome      = aliasedSources.reduce((s, i) => s + (i.actual || 0), 0);
   const totalPlanned = aliasedSources.reduce((s, i) => s + (i.planned_amount || 0), 0);
   const totalDiff    = Math.round(totalIncome - totalPlanned);
-  const unaliasedTotal   = unaliasedSources.reduce((s, i) => s + (i.actual || 0), 0);
   const totalType1       = budgets.reduce((s, b) => s + b.spent, 0);
   const totalType1Budget = budgets.reduce((s, b) => s + b.amount, 0);
   const totalType3   = type3Spent.reduce((s, c) => s + c.spent, 0);
@@ -443,51 +440,6 @@ export default function ReportPage() {
               );
             })()}
 
-            {unaliasedSources.length > 0 && (
-              <div style={{ marginTop: 12 }}>
-                <button className="btn btn-ghost btn-sm"
-                  onClick={() => setUnaliasedExpanded(e => !e)}
-                  style={{ fontSize: 12, padding: '4px 8px' }}
-                  title="Auto-detekované příchozí platby, které nejsou přiřazené k žádnému ručnímu zdroji. Nepočítají se do Příjmy celkem.">
-                  Detekováno {unaliasedSources.length} dalších plateb v součtu {formatCurrency(unaliasedTotal)} {unaliasedExpanded ? '▲' : '▼'}
-                </button>
-                {unaliasedExpanded && (
-                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4, paddingLeft: 8 }}>
-                    {unaliasedSources.map((row, i) => {
-                      const autoKey = row.match_counterparty_account || row.person || `idx-${i}`;
-                      const to = `/transactions?q=${encodeURIComponent(autoKey)}`
-                        + (periodStart && periodEnd ? `&from=${periodStart}&to=${periodEnd}` : '');
-                      return (
-                        <Link key={`auto-${autoKey}`} to={to}
-                          className="report-income-row text-muted"
-                          style={{ fontSize: 12, textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}>
-                          <span className="report-income-person">{row.person}</span>
-                          {row.tx_count > 1 && (
-                            <span style={{ fontSize: 11 }}>· {row.tx_count} plateb</span>
-                          )}
-                          <span className="report-income-amount">{formatCurrency(row.actual)}</span>
-                          <button className="btn btn-ghost btn-sm"
-                            title="Přidat jako trvalý příjem (pojmenovat a započítat)"
-                            onClick={(e) => {
-                              e.preventDefault(); e.stopPropagation();
-                              setPrefillIncome({
-                                person: '',
-                                planned_amount: 0,
-                                match_pattern: null,
-                                match_counterparty_account: row.match_counterparty_account || '',
-                              });
-                              setEditIncome(null);
-                              setShowIncomeForm(true);
-                            }}>
-                            <Plus size={12} /> Přidat
-                          </button>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
             <div className="report-subtotal">
               <span>Příjmy celkem</span>
               <span>
