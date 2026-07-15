@@ -18,7 +18,8 @@ const ALL_COLS = [
   { key: 'ab_category',          label: 'AirBank kat.',    default: true },
   { key: 'entered_by',           label: 'Kdo zadal',       default: false },
   { key: 'counterparty_account', label: 'Číslo účtu',      default: false },
-  { key: 'account_flow',         label: 'Účet (z → do)',   default: false },
+  { key: 'flow_source',          label: 'Zdroj',           default: false },
+  { key: 'flow_target',          label: 'Cíl',             default: false },
   { key: 'place',                label: 'Obchodní místo',  default: false },
   { key: 'note',                 label: 'Zpráva/Poznámka', default: true },
   { key: 'amount',               label: 'Částka',          default: true,  always: true },
@@ -932,7 +933,7 @@ function colsToGrid(cols) {
     if (c.key === 'tx_type') return '130px';
     if (c.key === 'entered_by') return '120px';
     if (c.key === 'counterparty_account') return '140px';
-    if (c.key === 'account_flow') return '200px';
+    if (c.key === 'flow_source' || c.key === 'flow_target') return '150px';
     return '1fr';
   }).join(' ');
   return `28px ${dataCols} 72px`;
@@ -973,17 +974,16 @@ function renderCell(key, tx, categories, accountNameMap, accountById) {
         </span>
       );
     }
-    case 'account_flow': {
+    case 'flow_source':
+    case 'flow_target': {
       const { from, to } = accountFlow(tx, { accountById, accountNameMap });
+      const val = key === 'flow_source' ? from : to;
       return (
         <span
-          className="text-muted"
-          title={`${from} → ${to}`}
+          title={val}
           style={{ fontSize: 12, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
         >
-          <span style={{ color: 'var(--text)' }}>{from}</span>
-          <span style={{ margin: '0 4px' }}>→</span>
-          <span style={{ color: 'var(--text)' }}>{to}</span>
+          {val}
         </span>
       );
     }
