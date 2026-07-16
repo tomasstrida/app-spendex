@@ -132,3 +132,31 @@ test('fixedExpensesForPeriod: account-řádek se nezdvojí s ruční platbou př
   const m = rows.find(r => r.source === 'manual');
   assert.equal(m.actual, 38126);
 });
+
+test('fixedExpensesForPeriod: counterparty match je exact na číslo (ne prefix) — delší číslo se stejným začátkem NEmatchne', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_counterparty_account) VALUES (1,'Splátka',5000,4900,5100,'1679014074')").run();
+  // jiný účet, jehož číslo jen začíná stejně (raw prefix LIKE by ho chybně chytil)
+  db.prepare("INSERT INTO transactions (user_id, amount, date, description, counterparty_account) VALUES (1,-5000,'2026-04-10','Cizí','16790140749/0300')").run();
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const rows = fixedExpensesForPeriod(db, 1, '2026-04');
+  cleanup(db, tmp);
+  const m = rows.find(r => r.source === 'manual');
+  assert.equal(m.tx_count, 0);
+  assert.equal(m.actual, 0);
+  assert.equal(m.status, 'missing');
+});
+
+test('fixedExpensesForPeriod: counterparty se normalizuje jako u income (uložené bez kódu banky, tx s /kódem)', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_counterparty_account) VALUES (1,'PRE',3500,3400,3600,'1679014066')").run();
+  db.prepare("INSERT INTO transactions (user_id, amount, date, description, counterparty_account) VALUES (1,-3500,'2026-04-08','Energie','1679014066/2010')").run();
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const rows = fixedExpensesForPeriod(db, 1, '2026-04');
+  cleanup(db, tmp);
+  const m = rows.find(r => r.source === 'manual');
+  assert.equal(m.actual, 3500);
+  assert.equal(m.status, 'ok');
+});
