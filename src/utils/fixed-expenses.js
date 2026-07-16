@@ -4,9 +4,9 @@ const { paymentStatus } = require('./recurring');
 const { normCounterparty } = require('./income');
 
 /**
- * Manuální fixní položky + sumované odchozí transakce z účtů role='fixed'.
- * Account-řádky, jejichž description odpovídá nějakému ručnímu match_pattern
- * nebo číslu účtu příjemce, se vynechají (jinak by se nájem/energie počítaly dvakrát).
+ * Vrací JEN ručně definované fixní platby (žádné auto-řádky z účtů role='fixed' —
+ * catch-all agregace odstraněna 2026-07-17 na přání uživatele: ve Schůzce se mají
+ * ukazovat výhradně platby zadefinované v seznamu).
  *
  * Číslo účtu příjemce se páruje přes `normCounterparty` (číslice před `/`), exact
  * shodou — stejně jako income_sources, ne jako raw prefix (aby delší číslo se
@@ -26,7 +26,7 @@ function fixedExpensesForPeriod(db, userId, period) {
   );
 
   const billingDay = getUserBillingDay(db, userId);
-  const { start, end } = getPeriodDates(billingDay, period);
+  const { end } = getPeriodDates(billingDay, period);
 
   // Posun periodKey "YYYY-MM" o delta měsíců (bez závislosti na frontend addPeriods).
   const shiftPeriod = (p, delta) => {
@@ -79,43 +79,7 @@ function fixedExpensesForPeriod(db, userId, period) {
     };
   });
 
-  // Account-řádky (role='fixed') vynech, pokud odpovídají ručnímu matcheru
-  // (jinak by se platba počítala dvakrát). Match přes description-pattern
-  // (case-insensitive substring) i normalizované číslo účtu příjemce.
-  const patterns = active.map(m => m.match_pattern).filter(Boolean).map(p => p.toLowerCase());
-  const cpTargets = active.map(m => normCounterparty(m.match_counterparty_account)).filter(Boolean);
-  const cpTargetSet = new Set(cpTargets);
-
-  const fixedAccountTx = db.prepare(`
-    SELECT t.description, t.amount, t.counterparty_account,
-           a.name AS account_name, a.id AS account_id
-    FROM transactions t
-    JOIN accounts a ON a.id = t.account_id
-    WHERE t.user_id = ?
-      AND a.role = 'fixed'
-      AND t.amount < 0
-      AND t.date >= ? AND t.date <= ?
-  `).all(userId, start, end);
-
-  const grouped = new Map();  // key = account_id + '\x00' + description
-  for (const t of fixedAccountTx) {
-    const desc = t.description || '';
-    const patternHit = patterns.some(p => desc.toLowerCase().includes(p));
-    const cpHit = t.counterparty_account && cpTargetSet.has(normCounterparty(t.counterparty_account));
-    if (patternHit || cpHit) continue;
-    const key = t.account_id + '\x00' + desc;
-    const g = grouped.get(key) || {
-      id: null, name: desc, amount: 0, note: null, sort_order: 0,
-      source: 'account', account_name: t.account_name, account_id: t.account_id,
-    };
-    g.amount += Math.abs(t.amount);
-    grouped.set(key, g);
-  }
-  const fromAccounts = [...grouped.values()].sort(
-    (a, b) => (a.account_name || '').localeCompare(b.account_name || '') || b.amount - a.amount
-  );
-
-  return [...manualWithStatus, ...fromAccounts];
+  return manualWithStatus;
 }
 
 module.exports = { fixedExpensesForPeriod };

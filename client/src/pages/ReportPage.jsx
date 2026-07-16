@@ -445,7 +445,7 @@ export default function ReportPage() {
                       <span className="text-muted" style={{ fontSize: 12 }}>chybí</span>
                     )}
                     <span className="report-income-amount">
-                      {formatCurrency(row.source === 'account' || row.tx_count > 0 ? (row.actual ?? row.amount) : row.amount)}
+                      {formatCurrency(row.tx_count > 0 ? (row.actual ?? row.amount) : row.amount)}
                     </span>
                   </div>
                 ))}

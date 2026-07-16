@@ -1,10 +1,9 @@
-// Skutečný součet fixních plateb: account-řádky nesou skutečnou sumu z transakcí,
-// manuální položky se počítají jen když proběhly (tx_count > 0), skutečnou částkou.
+// Skutečný součet fixních plateb: jen definované položky, a jen když proběhly
+// (tx_count > 0), skutečnou částkou. Auto account-řádky už API nevrací.
 export function fixedActualTotal(fixedExpenses) {
-  return (fixedExpenses || []).reduce((s, f) => {
-    if (f.source === 'account') return s + (f.amount || 0);
-    return s + (f.tx_count > 0 ? (f.actual || 0) : 0);
-  }, 0);
+  return (fixedExpenses || []).reduce(
+    (s, f) => s + (f.tx_count > 0 ? (f.actual || 0) : 0), 0
+  );
 }
 
 // „Na spořicí" = přebytek za období = příjmy minus všechny výdaje (fixní, dotace na

@@ -198,10 +198,10 @@ export default function FixedExpensesPage() {
       </form>
 
       <div className="card" style={{ maxWidth: 520 }}>
-        {items.filter(i => i.source !== 'account').length === 0 ? (
+        {items.length === 0 ? (
           <div className="text-muted" style={{ fontSize: 13 }}>Zatím žádné fixní platby.</div>
         ) : (
-          items.filter(i => i.source !== 'account').map(it => (
+          items.map(it => (
             <div key={it.id} className="report-budget-row" style={{ alignItems: 'center', opacity: it.valid_to && it.valid_to < nowKey ? 0.55 : 1 }}>
               <span className="report-budget-name">
                 {it.name}

@@ -20,21 +20,21 @@ function cleanup(db, tmp) {
   try { fs.unlinkSync(tmp + '-wal'); fs.unlinkSync(tmp + '-shm'); } catch { /* ok */ }
 }
 
-test('fixedExpensesForPeriod: transakce pokrytá ručním match_pattern se NEobjeví jako account-řádek', () => {
+test('fixedExpensesForPeriod: vrací JEN definované platby — žádné auto account-řádky z účtů role=fixed', () => {
   const { db, tmp } = freshDb();
   db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
   db.prepare("INSERT INTO accounts (id, user_id, name, role) VALUES (20, 1, 'Harmonicka-najem', 'fixed')").run();
   db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, sort_order, match_pattern) VALUES (1, 'Nájem Stodůlky', 38126, 37000, 39000, 1, 'JANA HRDLIČKOVÁ')").run();
   db.prepare("INSERT INTO transactions (user_id, account_id, amount, date, description) VALUES (1, 20, -38126, '2026-04-05', 'JANA HRDLIČKOVÁ')").run();
+  // odchozí tx z fixed účtu, kterou žádná definice nepokrývá — dřív by vznikl account-řádek
   db.prepare("INSERT INTO transactions (user_id, account_id, amount, date, description) VALUES (1, 20, -1234, '2026-04-06', 'Něco jiného')").run();
 
   const { fixedExpensesForPeriod } = require('./fixed-expenses');
   const rows = fixedExpensesForPeriod(db, 1, '2026-04');
   cleanup(db, tmp);
 
-  const accountRows = rows.filter(r => r.source === 'account');
-  assert.equal(accountRows.length, 1);
-  assert.equal(accountRows[0].name, 'Něco jiného');
+  assert.equal(rows.filter(r => r.source === 'account').length, 0);
+  assert.equal(rows.length, 1);
   const manual = rows.find(r => r.source === 'manual');
   assert.equal(manual.name, 'Nájem Stodůlky');
   assert.equal(manual.actual, 38126);
@@ -208,19 +208,15 @@ test('fixedExpensesForPeriod: bez period vrací i ukončené řádky (editační
   assert.equal(rows[0].valid_to, '2020-01');
 });
 
-test('fixedExpensesForPeriod: matcher ukončeného řádku neschovává account-řádky', () => {
+test('fixedExpensesForPeriod: ukončený řádek se nevrací a nevzniká z jeho transakcí žádný jiný řádek', () => {
   const { db, tmp } = freshDb();
   db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
   db.prepare("INSERT INTO accounts (id, user_id, name, role) VALUES (20, 1, 'Fixní účet', 'fixed')").run();
-  // ukončený řádek (valid_to 2026-03) s patternem, který by transakci z dubna matchnul
+  // ukončený řádek (valid_to 2026-03); transakce z dubna už nikam nepatří
   db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, match_pattern, valid_to) VALUES (1,'NORDIC internet',500,'NORDIC','2026-03')").run();
   db.prepare("INSERT INTO transactions (user_id, account_id, amount, date, description) VALUES (1, 20, -500, '2026-04-05', 'NORDIC TELECOM')").run();
   const { fixedExpensesForPeriod } = require('./fixed-expenses');
   const rows = fixedExpensesForPeriod(db, 1, '2026-04');
   cleanup(db, tmp);
-  // ukončený manuální řádek se nevrací a jeho pattern nesmí transakci schovat
-  assert.equal(rows.filter(r => r.source === 'manual').length, 0);
-  const accountRows = rows.filter(r => r.source === 'account');
-  assert.equal(accountRows.length, 1);
-  assert.equal(accountRows[0].name, 'NORDIC TELECOM');
+  assert.equal(rows.length, 0);
 });
