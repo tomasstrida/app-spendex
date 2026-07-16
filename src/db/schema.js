@@ -332,6 +332,7 @@ function initSchema() {
     'ALTER TABLE transactions ADD COLUMN subcategory_id INTEGER REFERENCES subcategories(id) ON DELETE SET NULL',
     'ALTER TABLE category_rules ADD COLUMN subcategory_id INTEGER REFERENCES subcategories(id) ON DELETE SET NULL',
     'ALTER TABLE transactions ADD COLUMN variable_symbol TEXT',
+    'ALTER TABLE transactions ADD COLUMN card_last4 TEXT',
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* sloupec/index/tabulka již existuje nebo nelze aplikovat */ }

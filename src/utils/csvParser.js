@@ -4,7 +4,7 @@
  */
 
 const COL = {
-  DATE: 0,
+  DATE: 0,                 // Datum provedení
   DIRECTION: 1,
   TYPE: 2,
   AB_CATEGORY: 3,
@@ -12,10 +12,13 @@ const COL = {
   AMOUNT: 5,
   COUNTERPARTY: 9,
   COUNTERPARTY_ACCOUNT: 10,
+  VARIABLE_SYMBOL: 12,
   NOTE_ME: 17,
   MESSAGE: 18,
+  CARD_NUMBER: 21,
   PLACE: 24,
   DATETIME: 28,
+  SETTLEMENT_DATE: 31,     // Datum zaúčtování (konzistentní s e-mailovým parserem)
   REF_NUMBER: 32,
   ENTERED_BY: 34,
 };
@@ -74,7 +77,8 @@ function parseAirBankCSV(text) {
     if (fields.length < 10) continue;
 
     const amount = parseAmount(fields[COL.AMOUNT]);
-    const date = parseDate(fields[COL.DATE]);
+    // Datum: primárně zaúčtování (jako e-mailový parser), fallback provedení (nezaúčtované).
+    const date = parseDate(fields[COL.SETTLEMENT_DATE]) || parseDate(fields[COL.DATE]);
     if (amount === null || !date) continue;
 
     const counterparty = fields[COL.COUNTERPARTY]?.trim() || '';
@@ -88,6 +92,10 @@ function parseAirBankCSV(text) {
     if (!description && message) description = message;
 
     const refNumber = fields[COL.REF_NUMBER]?.trim() || '';
+
+    // Číslo karty (maskované, např. "515735******0987") → poslední 4 číslice.
+    const cardDigits = (fields[COL.CARD_NUMBER] || '').replace(/[^\d]/g, '');
+    const card_last4 = cardDigits.length >= 4 ? cardDigits.slice(-4) : null;
 
     // Čas z "DD/MM/YYYY HH:MM:SS"
     const datetimeRaw = fields[COL.DATETIME]?.trim() || '';
@@ -108,6 +116,8 @@ function parseAirBankCSV(text) {
       counterparty_account: fields[COL.COUNTERPARTY_ACCOUNT]?.trim() || null,
       entered_by: fields[COL.ENTERED_BY]?.trim() || null,
       place: place || null,
+      variable_symbol: fields[COL.VARIABLE_SYMBOL]?.trim() || null,
+      card_last4,
     });
   }
 
