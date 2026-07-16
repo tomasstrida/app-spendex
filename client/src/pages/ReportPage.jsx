@@ -430,7 +430,7 @@ export default function ReportPage() {
               <p className="text-muted" style={{ fontSize: 13 }}>Žádné fixní výdaje.</p>
             ) : (
               <div className="report-income-list">
-                {fixedExpenses.map(row => (
+                {[...fixedExpenses].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'cs')).map(row => (
                   <div key={row.id ?? `${row.account_id}-${row.name}`} className="report-income-row">
                     {row.status && <span title={row.status}>{FIXED_STATUS[row.status].icon}</span>}
                     <span className="report-income-person">{row.name}</span>

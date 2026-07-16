@@ -68,6 +68,30 @@ export default function FixedExpensesPage() {
   const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const fmtPeriod = (p) => `${parseInt(p.slice(5), 10)}/${p.slice(0, 4)}`;
 
+  // Abecední řazení; ukončené platby (valid_to < aktuální měsíc) v sekci na konci.
+  const isEnded = (it) => it.valid_to && it.valid_to < nowKey;
+  const sorted = [...items].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'cs'));
+  const activeItems = sorted.filter(it => !isEnded(it));
+  const endedItems = sorted.filter(isEnded);
+
+  const renderItem = (it) => (
+    <div key={it.id} className="report-budget-row" style={{ alignItems: 'center', opacity: isEnded(it) ? 0.55 : 1 }}>
+      <span className="report-budget-name">
+        {it.name}
+        <span className="text-muted" style={{ display: 'block', fontSize: 11 }}>
+          {it.amount_min != null && it.amount_max != null ? `${it.amount_min}–${it.amount_max} Kč` : `${it.amount} Kč`}
+          {it.frequency_months > 1 ? ` · à ${it.frequency_months} měs.` : ''}
+          {it.match_pattern ? ` · „${it.match_pattern}"` : ''}
+          {it.match_counterparty_account ? ` · účet ${it.match_counterparty_account}` : ''}
+          {isEnded(it) ? ` · ukončeno ${fmtPeriod(it.valid_to)}` : ''}
+          {it.valid_from && it.valid_from > nowKey ? ` · od ${fmtPeriod(it.valid_from)}` : ''}
+        </span>
+      </span>
+      <button className="btn btn-ghost btn-sm" onClick={() => edit(it)}>Upravit</button>
+      <button className="btn btn-ghost btn-sm" onClick={() => del(it.id)}>Smazat</button>
+    </div>
+  );
+
   // Nabídka období pro selectboxy Platí od/do: ±2 roky kolem dneška;
   // hodnota mimo rozsah (starý záznam) se do nabídky přidá, aby se neztratila.
   const monthOptions = [];
@@ -201,23 +225,17 @@ export default function FixedExpensesPage() {
         {items.length === 0 ? (
           <div className="text-muted" style={{ fontSize: 13 }}>Zatím žádné fixní platby.</div>
         ) : (
-          items.map(it => (
-            <div key={it.id} className="report-budget-row" style={{ alignItems: 'center', opacity: it.valid_to && it.valid_to < nowKey ? 0.55 : 1 }}>
-              <span className="report-budget-name">
-                {it.name}
-                <span className="text-muted" style={{ display: 'block', fontSize: 11 }}>
-                  {it.amount_min != null && it.amount_max != null ? `${it.amount_min}–${it.amount_max} Kč` : `${it.amount} Kč`}
-                  {it.frequency_months > 1 ? ` · à ${it.frequency_months} měs.` : ''}
-                  {it.match_pattern ? ` · „${it.match_pattern}"` : ''}
-                  {it.match_counterparty_account ? ` · účet ${it.match_counterparty_account}` : ''}
-                  {it.valid_to && it.valid_to < nowKey ? ` · ukončeno ${fmtPeriod(it.valid_to)}` : ''}
-                  {it.valid_from && it.valid_from > nowKey ? ` · od ${fmtPeriod(it.valid_from)}` : ''}
-                </span>
-              </span>
-              <button className="btn btn-ghost btn-sm" onClick={() => edit(it)}>Upravit</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => del(it.id)}>Smazat</button>
-            </div>
-          ))
+          <>
+            {activeItems.map(renderItem)}
+            {endedItems.length > 0 && (
+              <>
+                <div className="text-muted" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 16, marginBottom: 4 }}>
+                  Už neaktivní
+                </div>
+                {endedItems.map(renderItem)}
+              </>
+            )}
+          </>
         )}
       </div>
     </Layout>
