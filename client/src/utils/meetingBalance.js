@@ -7,8 +7,9 @@ export function fixedActualTotal(fixedExpenses) {
   }, 0);
 }
 
-// Aritmetická měsíční bilance: kolik zbylo na běžném po všech pohybech.
-// Interní převody (dotace na Nepravidelné, spoření) jsou vědomě mínus řádky.
-export function leftoverOnMain({ totalIncome, totalFixed, variablePoolFunded, totalType1, totalType3, savingsNet }) {
-  return totalIncome - totalFixed - variablePoolFunded - totalType1 - totalType3 - savingsNet;
+// „Na spořicí" = přebytek za období = příjmy minus všechny výdaje (fixní, dotace na
+// nepravidelné, měsíční, drahé věci). Kolik by mělo jít na spoření. Skutečné pohyby
+// na spořicím účtu se NEpočítají — Schůzka je plánovací, pohyby jsou v Transakcích.
+export function surplusToSavings({ totalIncome, totalFixed, variablePoolFunded, totalType1, totalType3 }) {
+  return totalIncome - totalFixed - variablePoolFunded - totalType1 - totalType3;
 }

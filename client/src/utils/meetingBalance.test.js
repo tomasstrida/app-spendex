@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fixedActualTotal, leftoverOnMain } from './meetingBalance.js';
+import { fixedActualTotal, surplusToSavings } from './meetingBalance.js';
 
 test('fixedActualTotal: manuální proběhlá se počítá skutečnou částkou', () => {
   const rows = [{ source: 'manual', amount: 13255, actual: 13100, tx_count: 1 }];
@@ -26,10 +26,18 @@ test('fixedActualTotal: mix', () => {
   assert.equal(fixedActualTotal(rows), 38326);
 });
 
-test('leftoverOnMain: aritmetický součet bilance', () => {
-  const left = leftoverOnMain({
-    totalIncome: 182000, totalFixed: 58126, variablePoolFunded: 5000,
-    totalType1: 34210, totalType3: 5400, savingsNet: 80000,
+test('surplusToSavings: přebytek = příjmy − 4 výdaje (bez pohybů na spořicím)', () => {
+  const surplus = surplusToSavings({
+    totalIncome: 182000, totalFixed: 44653, variablePoolFunded: 5000,
+    totalType1: 34210, totalType3: 5400,
   });
-  assert.equal(left, 182000 - 58126 - 5000 - 34210 - 5400 - 80000);
+  assert.equal(surplus, 182000 - 44653 - 5000 - 34210 - 5400);
+});
+
+test('surplusToSavings: záporný přebytek (výdaje přesáhly příjmy)', () => {
+  const surplus = surplusToSavings({
+    totalIncome: 50000, totalFixed: 44653, variablePoolFunded: 5000,
+    totalType1: 34210, totalType3: 5400,
+  });
+  assert.ok(surplus < 0);
 });

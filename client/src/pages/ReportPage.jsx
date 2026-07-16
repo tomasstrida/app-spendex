@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Check, X } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
-import { fixedActualTotal, leftoverOnMain } from '../utils/meetingBalance';
+import { fixedActualTotal, surplusToSavings } from '../utils/meetingBalance';
 
 // ── Status budgetu ────────────────────────────────────────────────────────────
 
@@ -223,19 +223,18 @@ export default function ReportPage() {
   const totalType3   = type3Spent.reduce((s, c) => s + c.spent, 0);
   // Očekávaný měsíční příspěvek do fondů (Typ 3)
   const type3MonthlyBudget = funds.reduce((s, f) => s + (f.monthly_contribution || 0), 0);
-  const savings      = stats?.savings || { net: 0 };
   const variablePoolFunded = stats?.variable_pool_funded || 0;
-  const leftover = leftoverOnMain({
+  // „Na spořicí" = přebytek za období (příjmy − všechny výdaje). Skutečné pohyby
+  // na spořicím účtu Schůzka nezobrazuje — jsou v Transakcích.
+  const surplus = surplusToSavings({
     totalIncome,
     totalFixed,
     variablePoolFunded,
     totalType1,
     totalType3,
-    savingsNet: savings.net || 0,
   });
 
   // Account numbers used in bilance row links (musí sedět s recurring.js v backendu)
-  const SAVINGS_ACCOUNT_NUM = '1679014082';
   const VARIABLE_ACCOUNT_NUM = '1679014074';
   const typ1CatIds = byCategory.filter(c => c.type === 1).map(c => c.id).join(',');
   const typ3CatIds = byCategory.filter(c => c.type === 3).map(c => c.id).join(',');
@@ -333,50 +332,12 @@ export default function ReportPage() {
                 </span>
               </Link>
             )}
-            <Link to={txLink(`counterparty=${SAVINGS_ACCOUNT_NUM}`)}
-              className="report-bilance-row"
-              style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
-              title="Klik: převody na spořicí účet v období">
+            <div className={`report-bilance-row report-bilance-result ${surplus >= 0 ? '' : 'text-danger'}`}>
               <span>Na spořicí</span>
-              <span>{savings.net >= 0 ? '−' : '+'} {formatCurrency(Math.abs(savings.net))}</span>
-            </Link>
-            {savings.transfers && savings.transfers.length > 0 && (
-              <div className="savings-transfers">
-                {savings.transfers.map(tr => {
-                  // tr.amount je z perspektivy zdrojového účtu (typ. Hlavní): záporné
-                  // = peníze tam odešly na spořicí, kladné = vrátily se zpět. Z pohledu
-                  // spořicího účtu (a uživatele — „kolik jsem naspořil") to obrátíme.
-                  const onSavings = -tr.amount;
-                  return (
-                    <div
-                      key={tr.id}
-                      className={`savings-transfer-row ${tr.is_regular ? 'savings-transfer-regular' : 'savings-transfer-special'}`}
-                    >
-                      <span className="savings-transfer-date">
-                        {new Date(tr.date + 'T00:00:00').toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' })}
-                      </span>
-                      <span className="savings-transfer-desc">
-                        {/* Šipka vždy „→", pozice = směr toku: před názvem = peníze
-                            jdou NA spořicí, za názvem = jdou ZE spořicího. */}
-                        {onSavings > 0 && '→ '}
-                        {tr.description || <span className="text-muted">—</span>}
-                        {onSavings <= 0 && ' →'}
-                        {tr.is_regular && <span className="savings-transfer-badge">pravidelný</span>}
-                      </span>
-                      <span className={`savings-transfer-amount ${onSavings > 0 ? 'tx-amount-in' : 'tx-amount-out'}`}>
-                        {onSavings > 0 ? '+' : '−'}{formatCurrency(Math.abs(onSavings))}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            <div className={`report-bilance-row report-bilance-result ${leftover >= 0 ? '' : 'text-danger'}`}>
-              <span>Zbylo na běžném</span>
-              <span>{leftover >= 0 ? '+' : '−'} {formatCurrency(Math.abs(leftover))}</span>
+              <span>{surplus >= 0 ? '+' : '−'} {formatCurrency(Math.abs(surplus))}</span>
             </div>
             <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
-              „Zbylo na běžném" = přebytek/schodek toku za období (příjmy minus všechny odtoky včetně přesunů na spořicí a Nepravidelné). Je to orientační cash-flow, ne přesný bankovní zůstatek.
+              „Na spořicí" = přebytek za období (příjmy minus výdaje). Skutečné pohyby na spořicím účtu najdeš v Transakcích.
             </div>
           </section>
 
