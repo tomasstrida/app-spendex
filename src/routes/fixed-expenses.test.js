@@ -123,3 +123,75 @@ test('PATCH odebrání jediného matcheru → 400', async () => {
   assert.equal(patchRes.status, 400);
   server.close();
 });
+
+test('POST s valid_from/valid_to → 201 a uloží okno platnosti', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const res = await fetch(`${base}/api/fixed-expenses`, { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ name:'T-Mobile internet', amount:600, match_pattern:'T-MOBILE', valid_from:'2026-08', valid_to:null }) });
+  assert.equal(res.status, 201);
+  const row = await res.json();
+  assert.equal(row.valid_from, '2026-08');
+  assert.equal(row.valid_to, null);
+  server.close();
+});
+
+test('POST se špatným formátem valid_from → 400', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const res = await fetch(`${base}/api/fixed-expenses`, { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ name:'X', amount:1, match_pattern:'X', valid_from:'srpen 2026' }) });
+  assert.equal(res.status, 400);
+  server.close();
+});
+
+test('POST s valid_from > valid_to → 400', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const res = await fetch(`${base}/api/fixed-expenses`, { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ name:'X', amount:1, match_pattern:'X', valid_from:'2026-09', valid_to:'2026-08' }) });
+  assert.equal(res.status, 400);
+  server.close();
+});
+
+test('PATCH nastaví valid_to a nezaslaná pole zachová', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const postRes = await fetch(`${base}/api/fixed-expenses`, { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ name:'NORDIC internet', amount:500, match_pattern:'NORDIC', valid_from:'2024-01' }) });
+  const { id } = await postRes.json();
+  const patchRes = await fetch(`${base}/api/fixed-expenses/${id}`, { method:'PATCH', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ valid_to:'2026-07' }) });
+  assert.equal(patchRes.status, 200);
+  const updated = await patchRes.json();
+  assert.equal(updated.valid_to, '2026-07');
+  assert.equal(updated.valid_from, '2024-01');
+  assert.equal(updated.match_pattern, 'NORDIC');
+  server.close();
+});
+
+test('PATCH valid_from do konfliktu se stávajícím valid_to → 400', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const postRes = await fetch(`${base}/api/fixed-expenses`, { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ name:'X', amount:1, match_pattern:'X', valid_to:'2026-07' }) });
+  const { id } = await postRes.json();
+  const patchRes = await fetch(`${base}/api/fixed-expenses/${id}`, { method:'PATCH', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ valid_from:'2026-09' }) });
+  assert.equal(patchRes.status, 400);
+  server.close();
+});
+
+test('PATCH valid_to=null smaže konec platnosti', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const postRes = await fetch(`${base}/api/fixed-expenses`, { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ name:'X', amount:1, match_pattern:'X', valid_to:'2026-07' }) });
+  const { id } = await postRes.json();
+  const patchRes = await fetch(`${base}/api/fixed-expenses/${id}`, { method:'PATCH', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ valid_to:null }) });
+  assert.equal(patchRes.status, 200);
+  const updated = await patchRes.json();
+  assert.equal(updated.valid_to, null);
+  server.close();
+});
