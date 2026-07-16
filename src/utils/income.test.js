@@ -179,3 +179,18 @@ test('alias bez account_id (null) matchne libovolnou destinaci — backward comp
   assert.equal(rows[0].person, 'Tom');
   assert.equal(rows[0].actual, 100000);
 });
+
+test('normCounterparty: zachovává předčíslí — účty lišící se jen číslem za předčíslím nesplývají', () => {
+  const { normCounterparty } = require('./income');
+  // bez předčíslí: kód banky za / se zahodí
+  assert.equal(normCounterparty('1679014999/0300'), '1679014999');
+  assert.equal(normCounterparty('1679014999'), '1679014999');
+  // s předčíslím: předčíslí je součást identity účtu
+  assert.equal(normCounterparty('51-1065424327/8060'), '51-1065424327');
+  assert.equal(normCounterparty('51-2019053005/8060'), '51-2019053005');
+  assert.notEqual(normCounterparty('51-1065424327/8060'), normCounterparty('51-2019053005/8060'));
+  assert.equal(normCounterparty('19-2235210247/0800'), '19-2235210247');
+  // nečíselný vstup
+  assert.equal(normCounterparty('ABC'), null);
+  assert.equal(normCounterparty(null), null);
+});

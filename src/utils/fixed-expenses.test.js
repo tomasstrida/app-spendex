@@ -148,6 +148,28 @@ test('fixedExpensesForPeriod: counterparty match je exact na číslo (ne prefix)
   assert.equal(m.status, 'missing');
 });
 
+test('fixedExpensesForPeriod: účty s předčíslím 51-… si vzájemně nematchují platby (Buřinka 1 vs Buřinka 2 vs nájem)', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_counterparty_account) VALUES (1,'Úvěr Buřinka 1',4487,4487,4487,'51-1065424327/8060')").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_counterparty_account) VALUES (1,'Úvěr Buřinka 2',1868,1868,1868,'51-2019053005/8060')").run();
+  db.prepare("INSERT INTO transactions (user_id, amount, date, description, counterparty_account) VALUES (1,-4487,'2026-07-05','Splátka Buřinka 1','51-1065424327/8060')").run();
+  db.prepare("INSERT INTO transactions (user_id, amount, date, description, counterparty_account) VALUES (1,-1868,'2026-07-06','Splátka Buřinka 2','51-2019053005/8060')").run();
+  // třetí platba na jiný účet se stejným předčíslím (nájem) — nesmí matchnout ani jednomu úvěru
+  db.prepare("INSERT INTO transactions (user_id, amount, date, description, counterparty_account) VALUES (1,-38126,'2026-07-01','Najem a sluzby','51-1686550297/0100')").run();
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const rows = fixedExpensesForPeriod(db, 1, '2026-07');
+  cleanup(db, tmp);
+  const b1 = rows.find(r => r.name === 'Úvěr Buřinka 1');
+  assert.equal(b1.tx_count, 1);
+  assert.equal(b1.actual, 4487);
+  assert.equal(b1.status, 'ok');
+  const b2 = rows.find(r => r.name === 'Úvěr Buřinka 2');
+  assert.equal(b2.tx_count, 1);
+  assert.equal(b2.actual, 1868);
+  assert.equal(b2.status, 'ok');
+});
+
 test('fixedExpensesForPeriod: counterparty se normalizuje jako u income (uložené bez kódu banky, tx s /kódem)', () => {
   const { db, tmp } = freshDb();
   db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
