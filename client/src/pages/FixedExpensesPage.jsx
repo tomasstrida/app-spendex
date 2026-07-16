@@ -68,6 +68,17 @@ export default function FixedExpensesPage() {
   const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const fmtPeriod = (p) => `${parseInt(p.slice(5), 10)}/${p.slice(0, 4)}`;
 
+  // Nabídka období pro selectboxy Platí od/do: ±2 roky kolem dneška;
+  // hodnota mimo rozsah (starý záznam) se do nabídky přidá, aby se neztratila.
+  const monthOptions = [];
+  for (let y = now.getFullYear() - 2; y <= now.getFullYear() + 2; y++) {
+    for (let m = 1; m <= 12; m++) monthOptions.push(`${y}-${String(m).padStart(2, '0')}`);
+  }
+  const periodOptions = (current) =>
+    current && !monthOptions.includes(current)
+      ? [current, ...monthOptions].sort()
+      : monthOptions;
+
   const del = async (id) => {
     if (!confirm('Smazat fixní platbu?')) return;
     const res = await fetch(`/api/fixed-expenses/${id}`, { method: 'DELETE' });
@@ -151,21 +162,29 @@ export default function FixedExpensesPage() {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <label className="text-muted" style={{ fontSize: 11, flex: 1 }}>
             Platí od
-            <input
+            <select
               className="input"
-              type="month"
               value={form.valid_from}
               onChange={e => setForm({ ...form, valid_from: e.target.value })}
-            />
+            >
+              <option value="">— bez omezení —</option>
+              {periodOptions(form.valid_from).map(p => (
+                <option key={p} value={p}>{fmtPeriod(p)}</option>
+              ))}
+            </select>
           </label>
           <label className="text-muted" style={{ fontSize: 11, flex: 1 }}>
             Platí do (včetně)
-            <input
+            <select
               className="input"
-              type="month"
               value={form.valid_to}
               onChange={e => setForm({ ...form, valid_to: e.target.value })}
-            />
+            >
+              <option value="">— bez omezení —</option>
+              {periodOptions(form.valid_to).map(p => (
+                <option key={p} value={p}>{fmtPeriod(p)}</option>
+              ))}
+            </select>
           </label>
         </div>
         <span className="text-muted" style={{ fontSize: 11 }}>
