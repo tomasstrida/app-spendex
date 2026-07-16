@@ -34,15 +34,17 @@ router.get('/', requireAuth, (req, res) => {
     ))`;
   }
 
-  // match_patterns=A,B,C → t.description LIKE %A% OR LIKE %B% OR LIKE %C%
-  // Užívá Schůzka pro klik na „Fixní platby" (5 patternů trackeru).
+  // match_patterns=A,B,C → pattern LIKE přes description/note/place (stejná
+  // sémantika jako matcher fixních plateb). Užívá Schůzka pro klik na „Fixní platby".
   if (req.query.match_patterns !== undefined && String(req.query.match_patterns).trim() !== '') {
     const patterns = String(req.query.match_patterns)
       .split(',').map(s => s.trim()).filter(Boolean);
     if (patterns.length > 0) {
-      const ors = patterns.map(() => 't.description LIKE ?').join(' OR ');
+      const ors = patterns.map(() =>
+        '(t.description LIKE ? OR t.note LIKE ? OR t.place LIKE ?)'
+      ).join(' OR ');
       query += ` AND (${ors})`;
-      for (const p of patterns) params.push(`%${p}%`);
+      for (const p of patterns) params.push(`%${p}%`, `%${p}%`, `%${p}%`);
     }
   }
 

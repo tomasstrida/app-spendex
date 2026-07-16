@@ -35,11 +35,16 @@ function fixedExpensesForPeriod(db, userId, period) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   };
 
+  // Pattern se hledá v description + note + place — stejně jako L3 textová
+  // kategorizace (apply-rules). Např. splátka půjčky má description jen
+  // „Air Bank" a rozlišení nese poznámka; karetní platby mají obchodníka v place.
   const matchByDesc = db.prepare(`
     SELECT COALESCE(SUM(ABS(amount)), 0) AS actual, COUNT(*) AS tx_count
     FROM transactions
     WHERE user_id = ? AND amount < 0 AND date >= ? AND date <= ?
-      AND description LIKE '%' || ? || '%'
+      AND (description LIKE '%' || :pattern || '%'
+        OR note LIKE '%' || :pattern || '%'
+        OR place LIKE '%' || :pattern || '%')
   `);
   // Číslo účtu se normalizuje v JS (SQLite neumí „číslice před /" čistě), proto
   // načteme odchozí transakce s protiúčtem v okně a porovnáme přes normCounterparty.
@@ -69,7 +74,7 @@ function fixedExpensesForPeriod(db, userId, period) {
       }
       m = { actual, tx_count };
     } else {
-      m = matchByDesc.get(userId, windowStart, windowEnd, row.match_pattern);
+      m = matchByDesc.get(userId, windowStart, windowEnd, { pattern: row.match_pattern });
     }
     return {
       ...row,

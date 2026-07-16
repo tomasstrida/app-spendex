@@ -41,6 +41,34 @@ test('fixedExpensesForPeriod: vrací JEN definované platby — žádné auto ac
   assert.equal(manual.status, 'ok');
 });
 
+test('fixedExpensesForPeriod: pattern matchuje i note a place (splátka půjčky má popis jen „Air Bank")', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_pattern) VALUES (1,'Úvěr AirBank 15k',15000,15000,15000,'Úvěr AirBank 15k')").run();
+  // reálný tvar splátky: description jen 'Air Bank', pattern je v note
+  db.prepare("INSERT INTO transactions (user_id, amount, date, description, note) VALUES (1,-15000,'2026-04-22','Air Bank','Úvěr AirBank 15k')").run();
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const rows = fixedExpensesForPeriod(db, 1, '2026-04');
+  cleanup(db, tmp);
+  const m = rows.find(r => r.source === 'manual');
+  assert.equal(m.tx_count, 1);
+  assert.equal(m.actual, 15000);
+  assert.equal(m.status, 'ok');
+});
+
+test('fixedExpensesForPeriod: pattern matchuje place (karetní platba s obchodníkem v place)', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_pattern) VALUES (1,'Internet',500,450,550,'NORDIC')").run();
+  db.prepare("INSERT INTO transactions (user_id, amount, date, description, place) VALUES (1,-500,'2026-04-10','','NORDIC TELECOM')").run();
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const rows = fixedExpensesForPeriod(db, 1, '2026-04');
+  cleanup(db, tmp);
+  const m = rows.find(r => r.source === 'manual');
+  assert.equal(m.tx_count, 1);
+  assert.equal(m.status, 'ok');
+});
+
 test('fixedExpensesForPeriod: bez period vrátí jen manuální položky', () => {
   const { db, tmp } = freshDb();
   db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
