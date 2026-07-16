@@ -19,6 +19,12 @@ function fixedExpensesForPeriod(db, userId, period) {
 
   if (!period) return manual;
 
+  // Okno platnosti: řádek platí v období, když period ∈ [valid_from, valid_to]
+  // (NULL = bez omezení; stringové porovnání periodKey je lexikograficky korektní).
+  const active = manual.filter(r =>
+    (!r.valid_from || r.valid_from <= period) && (!r.valid_to || r.valid_to >= period)
+  );
+
   const billingDay = getUserBillingDay(db, userId);
   const { start, end } = getPeriodDates(billingDay, period);
 
@@ -45,7 +51,7 @@ function fixedExpensesForPeriod(db, userId, period) {
   `);
 
   const windowEnd = end;  // konec aktuálního období
-  const manualWithStatus = manual.map(row => {
+  const manualWithStatus = active.map(row => {
     const hasMatcher = row.match_counterparty_account || row.match_pattern;
     if (!hasMatcher) return row;  // po validaci nenastane; bezpečný fallback
     const freq = row.frequency_months > 0 ? row.frequency_months : 1;
@@ -76,8 +82,8 @@ function fixedExpensesForPeriod(db, userId, period) {
   // Account-řádky (role='fixed') vynech, pokud odpovídají ručnímu matcheru
   // (jinak by se platba počítala dvakrát). Match přes description-pattern
   // (case-insensitive substring) i normalizované číslo účtu příjemce.
-  const patterns = manual.map(m => m.match_pattern).filter(Boolean).map(p => p.toLowerCase());
-  const cpTargets = manual.map(m => normCounterparty(m.match_counterparty_account)).filter(Boolean);
+  const patterns = active.map(m => m.match_pattern).filter(Boolean).map(p => p.toLowerCase());
+  const cpTargets = active.map(m => normCounterparty(m.match_counterparty_account)).filter(Boolean);
   const cpTargetSet = new Set(cpTargets);
 
   const fixedAccountTx = db.prepare(`

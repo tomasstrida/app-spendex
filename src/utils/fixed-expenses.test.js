@@ -160,3 +160,67 @@ test('fixedExpensesForPeriod: counterparty se normalizuje jako u income (uložen
   assert.equal(m.actual, 3500);
   assert.equal(m.status, 'ok');
 });
+
+test('fixedExpensesForPeriod: řádek s valid_to v minulosti se v novějším období nevrací, ve starším ano', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_pattern, valid_to) VALUES (1,'NORDIC internet',500,450,550,'NORDIC','2026-07')").run();
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const inAugust = fixedExpensesForPeriod(db, 1, '2026-08');
+  const inJuly = fixedExpensesForPeriod(db, 1, '2026-07');
+  const inMay = fixedExpensesForPeriod(db, 1, '2026-05');
+  cleanup(db, tmp);
+  assert.equal(inAugust.filter(r => r.source === 'manual').length, 0);
+  assert.equal(inJuly.filter(r => r.source === 'manual').length, 1);   // valid_to je včetně
+  assert.equal(inMay.filter(r => r.source === 'manual').length, 1);
+});
+
+test('fixedExpensesForPeriod: řádek s valid_from v budoucnu se v dřívějším období nevrací', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_pattern, valid_from) VALUES (1,'T-Mobile internet',600,550,650,'T-MOBILE','2026-08')").run();
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const inJuly = fixedExpensesForPeriod(db, 1, '2026-07');
+  const inAugust = fixedExpensesForPeriod(db, 1, '2026-08');
+  cleanup(db, tmp);
+  assert.equal(inJuly.filter(r => r.source === 'manual').length, 0);
+  assert.equal(inAugust.filter(r => r.source === 'manual').length, 1); // valid_from je včetně
+});
+
+test('fixedExpensesForPeriod: NULL/NULL okno = platí ve všech obdobích (beze změny chování)', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_pattern) VALUES (1,'Nájem',38000,36000,40000,'NÁJEM')").run();
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const rows = fixedExpensesForPeriod(db, 1, '2026-04');
+  cleanup(db, tmp);
+  assert.equal(rows.filter(r => r.source === 'manual').length, 1);
+});
+
+test('fixedExpensesForPeriod: bez period vrací i ukončené řádky (editační seznam)', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, match_pattern, valid_to) VALUES (1,'NORDIC internet',500,'NORDIC','2020-01')").run();
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const rows = fixedExpensesForPeriod(db, 1, undefined);
+  cleanup(db, tmp);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].valid_to, '2020-01');
+});
+
+test('fixedExpensesForPeriod: matcher ukončeného řádku neschovává account-řádky', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO accounts (id, user_id, name, role) VALUES (20, 1, 'Fixní účet', 'fixed')").run();
+  // ukončený řádek (valid_to 2026-03) s patternem, který by transakci z dubna matchnul
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, match_pattern, valid_to) VALUES (1,'NORDIC internet',500,'NORDIC','2026-03')").run();
+  db.prepare("INSERT INTO transactions (user_id, account_id, amount, date, description) VALUES (1, 20, -500, '2026-04-05', 'NORDIC TELECOM')").run();
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const rows = fixedExpensesForPeriod(db, 1, '2026-04');
+  cleanup(db, tmp);
+  // ukončený manuální řádek se nevrací a jeho pattern nesmí transakci schovat
+  assert.equal(rows.filter(r => r.source === 'manual').length, 0);
+  const accountRows = rows.filter(r => r.source === 'account');
+  assert.equal(accountRows.length, 1);
+  assert.equal(accountRows[0].name, 'NORDIC TELECOM');
+});
