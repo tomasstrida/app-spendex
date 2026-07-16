@@ -24,7 +24,7 @@ test('odchozí převod: vytáhne všechna pole', () => {
   assert.equal(tx.amount, -10);
   assert.equal(tx.direction, 'Odchozí');
   assert.equal(tx.currency, 'CZK');
-  assert.equal(tx.source_account, '1679014023');
+  assert.equal(tx.source_account, '1679014023/3030');
   assert.equal(tx.counterparty_account, '1679014138/3030');
   assert.equal(tx.description, 'Tomáš Střída');
   assert.equal(tx.note, 'test 10 Kč');
@@ -47,7 +47,7 @@ Kód transakce: 160614737162`;
   const tx = parseEmailNotification(incoming);
   assert.equal(tx.amount, 15);
   assert.equal(tx.direction, 'Příchozí');
-  assert.equal(tx.source_account, '1679014023');
+  assert.equal(tx.source_account, '1679014023/3030');
   assert.equal(tx.description, 'Tomáš Střída');
   assert.equal(tx.counterparty_account, '1679014138/3030');
   assert.equal(tx.note, '15 back');
@@ -80,7 +80,7 @@ Zpráva pro plátce: Toyota - RAV4 - splátka
 Zpráva pro příjemce: Tomáš Střída
 Kód transakce: 162182232012`);
   assert.equal(tx.counterparty_account, '1000451009/3500');
-  assert.equal(tx.source_account, '1679014031');
+  assert.equal(tx.source_account, '1679014031/3030');
   // jméno chybí v řádku úhrady → description fallbackuje na "Zpráva pro plátce"
   assert.equal(tx.description, 'Toyota - RAV4 - splátka');
   // Variabilní symbol se uloží
@@ -120,7 +120,7 @@ test('platba kartou: vytáhne místo, poslední 4 karty, typ a datum provedení'
   assert.equal(tx.card_last4, '6062');
   assert.equal(tx.tx_type, 'Platba kartou');
   assert.equal(tx.date, '2026-06-08');
-  assert.equal(tx.source_account, '1679014023');
+  assert.equal(tx.source_account, '1679014023/3030');
   assert.equal(tx.counterparty_account, null);
 });
 
@@ -179,7 +179,7 @@ test('korekce blokace: vytáhne obchodníka do place/popisu a označí typ', () 
   assert.equal(tx.description, 'GLOBUS VAM DEKUJE, Praha - Cakov');
   assert.equal(tx.tx_type, 'Korekce blokace');
   assert.equal(tx.date, '2026-06-29');
-  assert.equal(tx.source_account, '1679014023');
+  assert.equal(tx.source_account, '1679014023/3030');
 });
 
 // Varianta se zvýšením blokace (méně časté: dodatečné dočerpání, zůstatek se sníží)

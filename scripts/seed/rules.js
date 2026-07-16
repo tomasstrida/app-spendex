@@ -5,13 +5,15 @@ module.exports = {
   internalTransferCategory: 'Převody',
   fallbackCategory: 'Ostatní',
 
+  // Kompletní čísla účtů vč. kódu banky — porovnává se exact celý string.
   ownAccountNumbers: [
-    '1679014015', '1679014023', '1679014031', '1679014058', '1679014066',
-    '1679014074', '1679014082', '1679014103', '1679014111', '1679014138',
+    '1679014015/3030', '1679014023/3030', '1679014031/3030', '1679014058/3030',
+    '1679014066/3030', '1679014074/3030', '1679014082/3030', '1679014103/3030',
+    '1679014111/3030', '1679014138/3030',
   ],
 
   accountRules: {
-    '1679014111': 'Licence', // účet Licence → vše Licence
+    '1679014111/3030': 'Licence', // účet Licence → vše Licence
   },
 
   abCategoryMap: {

@@ -43,8 +43,9 @@ function parseEmailNotification(text) {
   const currency = headM[3].toUpperCase();
   const direction = sign < 0 ? 'Odchozí' : 'Příchozí';
 
-  // Zdrojový účet z hlavičky: "na účtu Společný číslo 1679014023/3030 se snížil"
-  const srcM = body.match(/na\s+ú[cč]tu\s+.*?[cč]íslo\s*(\d+)\/\d+\s+se\s+(?:sn[ií][žz]il|zv[ýy][šs]il)/i);
+  // Zdrojový účet z hlavičky: "na účtu Společný číslo 1679014023/3030 se snížil".
+  // Zachytává KOMPLETNÍ číslo vč. případného předčíslí a kódu banky.
+  const srcM = body.match(/na\s+ú[cč]tu\s+.*?[cč]íslo\s*((?:\d+-)?\d+\/\d+)\s+se\s+(?:sn[ií][žz]il|zv[ýy][šs]il)/i);
   const source_account = srcM ? srcM[1] : null;
 
   // Protistrana + protiúčet:

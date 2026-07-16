@@ -1,12 +1,13 @@
 'use strict';
 
 
-// Stabilní bankovní fakta (stejný princip jako ownAccountNumbers v scripts/seed/rules.js)
-const savingsAccount = '1679014082';
-const reserveAccount = '1679014066';
+// Stabilní bankovní fakta (stejný princip jako ownAccountNumbers v scripts/seed/rules.js).
+// Kompletní čísla vč. kódu banky — porovnává se celý string.
+const savingsAccount = '1679014082/3030';
+const reserveAccount = '1679014066/3030';
 const reservePaidPatterns = ['JANA HRDLIČKOVÁ', 'Pražská energetika'];
-const mainAccount = '1679014138';      // Hlavní (transit, zdroj „dotace" pro Nepravidelné)
-const variableAccount = '1679014074';  // Nepravidelné (pool, ze kterého se platí roční výdaje)
+const mainAccount = '1679014138/3030';      // Hlavní (transit, zdroj „dotace" pro Nepravidelné)
+const variableAccount = '1679014074/3030';  // Nepravidelné (pool, ze kterého se platí roční výdaje)
 
 /**
  * Stav fixní platby: skutečná částka vůči akceptovanému rozmezí [min, max].

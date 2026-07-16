@@ -3,16 +3,16 @@ const { getPeriodDates } = require('./period');
 const { incomeStatus } = require('./recurring');
 
 /**
- * Normalizuje counterparty_account: identita účtu = [předčíslí-]číslo, kód banky
- * za `/` se zahodí. Předčíslí MUSÍ zůstat součástí — jinak by všechny účty se
- * stejným předčíslím (např. 51-… u stavebních spoření) splývaly a matchovaly si
- * vzájemně platby. Vrátí null pokud se nepodaří extrahovat číslo.
+ * Normalizuje counterparty_account: identita účtu = KOMPLETNÍ číslo
+ * `[předčíslí-]číslo/kódbanky` — nic se nezahazuje, jen se ořežou mezery.
+ * Porovnává se exact celý string; uložené matchery i vlastní účty proto musí
+ * být v plném formátu včetně kódu banky. Vrátí null pokud vstup nezačíná číslem.
  */
 function normCounterparty(s) {
   if (!s) return null;
-  const m = String(s).match(/^(?:(\d+)-)?(\d+)/);
-  if (!m) return null;
-  return m[1] ? `${m[1]}-${m[2]}` : m[2];
+  const v = String(s).replace(/\s+/g, '');
+  const m = v.match(/^(?:\d+-)?\d+(?:\/\d+)?/);
+  return m ? m[0] : null;
 }
 
 /**

@@ -2,9 +2,10 @@
 // Čistá funkce: (tx, account, rules) → { category, subcategory_id }.
 // Precedence: L0 Převody → L3 text → L1 účet → L2 AB → fallback.
 
+// Identita účtu = kompletní číslo [předčíslí-]číslo/kódbanky; ořezávají se jen mezery.
 function normalizeAccount(raw) {
   if (!raw) return '';
-  return String(raw).split('/')[0].replace(/\s/g, '').replace(/^0+/, '');
+  return String(raw).replace(/\s/g, '');
 }
 
 function applyRules(tx, account, rules) {

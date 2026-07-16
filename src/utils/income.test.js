@@ -180,16 +180,18 @@ test('alias bez account_id (null) matchne libovolnou destinaci — backward comp
   assert.equal(rows[0].actual, 100000);
 });
 
-test('normCounterparty: zachovává předčíslí — účty lišící se jen číslem za předčíslím nesplývají', () => {
+test('normCounterparty: kompletní číslo účtu = předčíslí + číslo + kód banky, ořezávají se jen mezery', () => {
   const { normCounterparty } = require('./income');
-  // bez předčíslí: kód banky za / se zahodí
-  assert.equal(normCounterparty('1679014999/0300'), '1679014999');
-  assert.equal(normCounterparty('1679014999'), '1679014999');
-  // s předčíslím: předčíslí je součást identity účtu
-  assert.equal(normCounterparty('51-1065424327/8060'), '51-1065424327');
-  assert.equal(normCounterparty('51-2019053005/8060'), '51-2019053005');
+  // kompletní číslo se zachová celé
+  assert.equal(normCounterparty('1679014999/0300'), '1679014999/0300');
+  assert.equal(normCounterparty(' 1679014999/0300 '), '1679014999/0300');
+  assert.equal(normCounterparty('51-1065424327/8060'), '51-1065424327/8060');
+  assert.equal(normCounterparty('19-2235210247/0800'), '19-2235210247/0800');
+  // účty lišící se předčíslím nebo kódem banky nesplývají
   assert.notEqual(normCounterparty('51-1065424327/8060'), normCounterparty('51-2019053005/8060'));
-  assert.equal(normCounterparty('19-2235210247/0800'), '19-2235210247');
+  assert.notEqual(normCounterparty('1679014066/3030'), normCounterparty('1679014066/2010'));
+  // číslo bez kódu banky zůstane bez kódu (a exact match ho pak nespáruje s plným)
+  assert.equal(normCounterparty('1679014999'), '1679014999');
   // nečíselný vstup
   assert.equal(normCounterparty('ABC'), null);
   assert.equal(normCounterparty(null), null);

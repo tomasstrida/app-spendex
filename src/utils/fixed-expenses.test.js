@@ -93,7 +93,7 @@ test('fixedExpensesForPeriod: kvartální bez platby v okně → missing', () =>
 test('fixedExpensesForPeriod: párování přes counterparty_account (priorita nad patternem)', () => {
   const { db, tmp } = freshDb();
   db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
-  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, frequency_months, match_pattern, match_counterparty_account) VALUES (1,'Splátka RAV4',13255,13000,13500,1,'NESEDÍCÍ TEXT','1679014999')").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, frequency_months, match_pattern, match_counterparty_account) VALUES (1,'Splátka RAV4',13255,13000,13500,1,'NESEDÍCÍ TEXT','1679014999/0300')").run();
   // popis pattern NEmatchne, ale číslo účtu ano → platba se najde přes účet
   db.prepare("INSERT INTO transactions (user_id, amount, date, description, counterparty_account) VALUES (1,-13255,'2026-04-10','Toyota Financial','1679014999/0300')").run();
   const { fixedExpensesForPeriod } = require('./fixed-expenses');
@@ -122,7 +122,7 @@ test('fixedExpensesForPeriod: account-řádek se nezdvojí s ruční platbou př
   const { db, tmp } = freshDb();
   db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
   db.prepare("INSERT INTO accounts (id, user_id, name, role) VALUES (20, 1, 'Harmonicka-najem', 'fixed')").run();
-  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_counterparty_account) VALUES (1,'Nájem',38126,37000,39000,'1679014777')").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_counterparty_account) VALUES (1,'Nájem',38126,37000,39000,'1679014777/0300')").run();
   db.prepare("INSERT INTO transactions (user_id, account_id, amount, date, description, counterparty_account) VALUES (1,20,-38126,'2026-04-05','Platba nájem','1679014777/0300')").run();
   const { fixedExpensesForPeriod } = require('./fixed-expenses');
   const rows = fixedExpensesForPeriod(db, 1, '2026-04');
@@ -136,7 +136,7 @@ test('fixedExpensesForPeriod: account-řádek se nezdvojí s ruční platbou př
 test('fixedExpensesForPeriod: counterparty match je exact na číslo (ne prefix) — delší číslo se stejným začátkem NEmatchne', () => {
   const { db, tmp } = freshDb();
   db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
-  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_counterparty_account) VALUES (1,'Splátka',5000,4900,5100,'1679014074')").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_counterparty_account) VALUES (1,'Splátka',5000,4900,5100,'1679014074/0300')").run();
   // jiný účet, jehož číslo jen začíná stejně (raw prefix LIKE by ho chybně chytil)
   db.prepare("INSERT INTO transactions (user_id, amount, date, description, counterparty_account) VALUES (1,-5000,'2026-04-10','Cizí','16790140749/0300')").run();
   const { fixedExpensesForPeriod } = require('./fixed-expenses');
@@ -170,17 +170,23 @@ test('fixedExpensesForPeriod: účty s předčíslím 51-… si vzájemně nemat
   assert.equal(b2.status, 'ok');
 });
 
-test('fixedExpensesForPeriod: counterparty se normalizuje jako u income (uložené bez kódu banky, tx s /kódem)', () => {
+test('fixedExpensesForPeriod: identita účtu je KOMPLETNÍ číslo — matcher bez kódu banky NEmatchne tx s kódem', () => {
   const { db, tmp } = freshDb();
   db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
-  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_counterparty_account) VALUES (1,'PRE',3500,3400,3600,'1679014066')").run();
-  db.prepare("INSERT INTO transactions (user_id, amount, date, description, counterparty_account) VALUES (1,-3500,'2026-04-08','Energie','1679014066/2010')").run();
+  // legacy matcher bez kódu banky — po zavedení kompletních čísel už nematchuje
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_counterparty_account) VALUES (1,'PRE-legacy',3500,3400,3600,'1679014066')").run();
+  // kompletní matcher matchuje (mezery v tx čísle se ořežou)
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_counterparty_account) VALUES (1,'PRE',3500,3400,3600,'1679014066/2010')").run();
+  db.prepare("INSERT INTO transactions (user_id, amount, date, description, counterparty_account) VALUES (1,-3500,'2026-04-08','Energie',' 1679014066/2010 ')").run();
   const { fixedExpensesForPeriod } = require('./fixed-expenses');
   const rows = fixedExpensesForPeriod(db, 1, '2026-04');
   cleanup(db, tmp);
-  const m = rows.find(r => r.source === 'manual');
-  assert.equal(m.actual, 3500);
-  assert.equal(m.status, 'ok');
+  const legacy = rows.find(r => r.name === 'PRE-legacy');
+  assert.equal(legacy.tx_count, 0);
+  assert.equal(legacy.status, 'missing');
+  const full = rows.find(r => r.name === 'PRE');
+  assert.equal(full.actual, 3500);
+  assert.equal(full.status, 'ok');
 });
 
 test('fixedExpensesForPeriod: řádek s valid_to v minulosti se v novějším období nevrací, ve starším ano', () => {

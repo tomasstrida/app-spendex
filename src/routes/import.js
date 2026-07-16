@@ -41,10 +41,11 @@ router.post('/preview', requireAuth, writeLimiter, express.text({ limit: '2mb', 
     const savedMappings = {};
     mappingRows.forEach(r => { savedMappings[r.ab_category] = r.category_id; });
 
-    // Detekce účtu: najdi čísla účtů /3030 z protistrany – kandidáti jsou vlastní účty v DB
+    // Detekce účtu: protistrany z výpisu (kompletní čísla vč. kódu banky) –
+    // kandidáti jsou vlastní účty v DB, jejichž číslo se mezi protistranami nevyskytuje
     const counterpartyNums = new Set(
       parsed
-        .map(t => t.counterparty_account?.match(/^(\d+)\/\d+/)?.[1])
+        .map(t => t.counterparty_account?.replace(/\s/g, ''))
         .filter(Boolean)
     );
     const userAccounts = db.prepare('SELECT * FROM accounts WHERE user_id = ? ORDER BY name ASC').all(req.dataUserId);

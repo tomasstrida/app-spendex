@@ -11,9 +11,14 @@ test('L0 interní převod (protistrana = vlastní účet) → Převody, přebíj
   assert.equal(applyRules(tx, acc('1679014023'), rules).category, 'Převody');
 });
 
-test('L0 normalizace: leading zeros a mezery v čísle protistrany', () => {
-  const tx = { counterparty_account: ' 0001679014074 / 2010 ', ab_category: 'Doprava', description: '', note: '' };
-  assert.equal(applyRules(tx, acc('1679014023'), rules).category, 'Převody');
+test('L0 normalizace: mezery se ořežou, porovnává se kompletní číslo vč. kódu banky', () => {
+  const tx = { counterparty_account: ' 1679014074 / 3030 ', ab_category: 'Doprava', description: '', note: '' };
+  assert.equal(applyRules(tx, acc('1679014023/3030'), rules).category, 'Převody');
+});
+
+test('L0: stejné číslo s JINÝM kódem banky NENÍ vlastní účet (kompletní identita)', () => {
+  const tx = { counterparty_account: '1679014074/2010', ab_category: 'Doprava', description: '', note: '' };
+  assert.notEqual(applyRules(tx, acc('1679014023/3030'), rules).category, 'Převody');
 });
 
 test('L3 text-override přebíjí účet i AB kategorii', () => {
@@ -28,7 +33,7 @@ test('L3 PrEP override z note', () => {
 
 test('L1 účetní pravidlo (Licence účet) když není L0/L3', () => {
   const tx = { counterparty_account: 'EXTERNAL999', ab_category: 'Nezařazeno', description: 'Apple', note: '' };
-  assert.equal(applyRules(tx, acc('1679014111'), rules).category, 'Licence');
+  assert.equal(applyRules(tx, acc('1679014111/3030'), rules).category, 'Licence');
 });
 
 test('L2 AB kategorie když není L0/L3/L1', () => {

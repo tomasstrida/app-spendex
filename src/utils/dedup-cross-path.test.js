@@ -6,8 +6,9 @@ const { parseAirBankCSV } = require('./csvParser');
 const { buildExternalId } = require('./externalId');
 
 // Zdrojový účet, který by uživatel vybral při CSV importu (accounts.account_number,
-// formát bez kódu banky) — shodný s tím, co e-mail parser vytáhne jako source_account.
-const SOURCE_ACCOUNT = '1679014023';
+// KOMPLETNÍ formát vč. kódu banky) — shodný s tím, co e-mail parser vytáhne
+// jako source_account. buildExternalId z něj interně dělá legacy klíč bez kódu.
+const SOURCE_ACCOUNT = '1679014023/3030';
 
 const EMAIL = `zůstatek na účtu Společný číslo 1679014023/3030 se snížil o částku 10,00 CZK. Dostupný zůstatek k 07.06.2026 v 17:47 je 4 934,46 CZK.
 Odchozí úhrada na účet Tomáš Střída číslo 1679014138/3030
@@ -33,7 +34,8 @@ test('cross-path dedup: e-mail a CSV téže transakce dají identický external_
   // E-mail vytáhne zdrojový účet přímo; u CSV ho volí uživatel (resolvedAccountNumber)
   assert.equal(emailTx.source_account, SOURCE_ACCOUNT);
 
-  // Kanonické external_id musí být identické z obou cest
+  // Kanonické external_id musí být identické z obou cest — a STABILNÍ vůči
+  // historickým řádkům (legacy formát bez kódu banky), jinak se rozbije dedup.
   const emailExtId = buildExternalId(emailTx.external_id, emailTx.source_account);
   const csvExtId = buildExternalId(csvTx.external_id, SOURCE_ACCOUNT);
   assert.equal(emailExtId, csvExtId);

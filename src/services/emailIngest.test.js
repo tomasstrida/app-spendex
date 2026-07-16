@@ -25,7 +25,7 @@ function seed(db) {
   db.prepare("INSERT INTO categories (id, user_id, name) VALUES (5, 1, 'Převody')").run();
   db.prepare("INSERT INTO categories (id, user_id, name) VALUES (6, 1, 'Ostatní')").run();
   // zdrojový účet
-  db.prepare("INSERT INTO accounts (id, user_id, name, account_number, role) VALUES (10, 1, 'Společný', '1679014023', 'spending')").run();
+  db.prepare("INSERT INTO accounts (id, user_id, name, account_number, role) VALUES (10, 1, 'Společný', '1679014023/3030', 'spending')").run();
 }
 
 const INTERNAL = `zůstatek na účtu Společný číslo 1679014023/3030 se snížil o částku 10,00 CZK. Dostupný zůstatek k 07.06.2026 v 17:47 je 4 934,46 CZK.
