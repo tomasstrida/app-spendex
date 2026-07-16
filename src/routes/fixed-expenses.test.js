@@ -145,6 +145,15 @@ test('POST se špatným formátem valid_from → 400', async () => {
   server.close();
 });
 
+test('POST s valid_from s nesmyslným měsícem (2026-13) → 400', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const res = await fetch(`${base}/api/fixed-expenses`, { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ name:'X', amount:1, match_pattern:'X', valid_from:'2026-13' }) });
+  assert.equal(res.status, 400);
+  server.close();
+});
+
 test('POST s valid_from > valid_to → 400', async () => {
   const { app } = setup();
   const { server, base } = await listen(app);

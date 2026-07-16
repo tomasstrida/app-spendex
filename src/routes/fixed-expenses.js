@@ -15,6 +15,8 @@ function parsePeriodField(raw, label) {
   if (raw == null || String(raw).trim() === '') return { value: null };
   const v = String(raw).trim();
   if (!PERIOD_RE.test(v)) return { error: `${label} musí být ve formátu RRRR-MM.` };
+  const month = parseInt(v.slice(5), 10);
+  if (month < 1 || month > 12) return { error: `${label}: měsíc musí být 01–12.` };
   return { value: v };
 }
 
