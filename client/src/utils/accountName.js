@@ -1,13 +1,10 @@
 // Mapování bankovního čísla účtu na lidský název interního účtu.
-// counterparty_account má formát "1679014082/3030" (s kódem banky), případně
-// s předčíslím "19-1679014082/3030". V tabulce accounts je holé "1679014082".
+// Identita účtu = KOMPLETNÍ číslo "[předčíslí-]číslo/kódbanky" — porovnává se
+// celý string, ořezávají se jen mezery. Tabulka accounts drží plná čísla.
 
 export function normalizeAccountNumber(raw) {
   if (!raw) return '';
-  let s = String(raw).trim();
-  s = s.split('/')[0];            // odřízni /kód banky
-  if (s.includes('-')) s = s.split('-').pop(); // odřízni předčíslí (19-…)
-  return s.trim();
+  return String(raw).replace(/\s/g, '');
 }
 
 export function buildAccountNameMap(accounts) {

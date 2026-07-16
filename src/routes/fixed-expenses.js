@@ -7,6 +7,7 @@ const { requireAuth } = require('../middleware/auth');
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
 const { fixedExpensesForPeriod } = require('../utils/fixed-expenses');
+const { parseAccountNumberField } = require('../utils/account-number');
 
 const PERIOD_RE = /^\d{4}-\d{2}$/;
 // Normalizuje vstup okna platnosti: '' / null / undefined → null, jinak trimovaný
@@ -30,7 +31,9 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
   const { name, amount, note, sort_order, match_pattern, match_counterparty_account, amount_min, amount_max, frequency_months, valid_from, valid_to } = req.body;
   if (!name || amount == null) return res.status(400).json({ error: 'Název a částka jsou povinné.' });
   const pattern = match_pattern && match_pattern.trim() ? match_pattern.trim() : null;
-  const cpAccount = match_counterparty_account && String(match_counterparty_account).trim() ? String(match_counterparty_account).trim() : null;
+  const cpParsed = parseAccountNumberField(match_counterparty_account, 'Číslo účtu příjemce');
+  if (cpParsed.error) return res.status(400).json({ error: cpParsed.error });
+  const cpAccount = cpParsed.value;
   if (!pattern && !cpAccount) return res.status(400).json({ error: 'Zadej text v popisu nebo číslo účtu příjemce.' });
   const min = amount_min != null ? parseFloat(amount_min) : null;
   const max = amount_max != null ? parseFloat(amount_max) : null;
@@ -57,9 +60,12 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
   const max = amount_max !== undefined ? (amount_max != null ? parseFloat(amount_max) : null) : row.amount_max;
   if (min != null && max != null && min > max) return res.status(400).json({ error: 'Min nesmí být větší než max.' });
   const pattern = match_pattern !== undefined ? (match_pattern && match_pattern.trim() ? match_pattern.trim() : null) : row.match_pattern;
-  const cpAccount = match_counterparty_account !== undefined
-    ? (match_counterparty_account && String(match_counterparty_account).trim() ? String(match_counterparty_account).trim() : null)
-    : row.match_counterparty_account;
+  let cpAccount = row.match_counterparty_account;
+  if (match_counterparty_account !== undefined) {
+    const cpParsed = parseAccountNumberField(match_counterparty_account, 'Číslo účtu příjemce');
+    if (cpParsed.error) return res.status(400).json({ error: cpParsed.error });
+    cpAccount = cpParsed.value;
+  }
   if (!pattern && !cpAccount) return res.status(400).json({ error: 'Zadej text v popisu nebo číslo účtu příjemce.' });
   let vfValue = row.valid_from;
   if (valid_from !== undefined) {

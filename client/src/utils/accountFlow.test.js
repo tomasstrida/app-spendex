@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { accountFlow } from './accountFlow.js';
 
 const accountById = new Map([[1, 'Hlavní'], [2, 'Společný']]);
-const accountNameMap = new Map([['1679014082', 'Spořicí účet 1']]);
+const accountNameMap = new Map([['1679014082/3030', 'Spořicí účet 1']]);
 const ctx = { accountById, accountNameMap };
 
 test('odchozí na interní účet → náš → název interního', () => {

@@ -101,14 +101,25 @@ test('POST bez matcheru → 400', async () => {
   server.close();
 });
 
-test('POST s counterparty → 201 a uloží číslo účtu', async () => {
+test('POST s counterparty → 201 a uloží kompletní číslo účtu', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const res = await fetch(`${base}/api/fixed-expenses`, { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ name:'Splátka', amount:5000, match_counterparty_account:'1679014999/0300' }) });
+  assert.equal(res.status, 201);
+  const row = await res.json();
+  assert.equal(row.match_counterparty_account, '1679014999/0300');
+  server.close();
+});
+
+test('POST s nekompletním číslem účtu (bez kódu banky) → 400', async () => {
   const { app } = setup();
   const { server, base } = await listen(app);
   const res = await fetch(`${base}/api/fixed-expenses`, { method:'POST', headers:{'content-type':'application/json'},
     body: JSON.stringify({ name:'Splátka', amount:5000, match_counterparty_account:'1679014999' }) });
-  assert.equal(res.status, 201);
-  const row = await res.json();
-  assert.equal(row.match_counterparty_account, '1679014999');
+  assert.equal(res.status, 400);
+  const body = await res.json();
+  assert.match(body.error, /kódu banky/);
   server.close();
 });
 

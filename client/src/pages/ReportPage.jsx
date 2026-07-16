@@ -235,7 +235,7 @@ export default function ReportPage() {
   });
 
   // Account numbers used in bilance row links (musí sedět s recurring.js v backendu)
-  const VARIABLE_ACCOUNT_NUM = '1679014074';
+  const VARIABLE_ACCOUNT_NUM = '1679014074/3030';
   const typ1CatIds = byCategory.filter(c => c.type === 1).map(c => c.id).join(',');
   const typ3CatIds = byCategory.filter(c => c.type === 3).map(c => c.id).join(',');
   function txLink(extra) {

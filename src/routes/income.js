@@ -5,6 +5,7 @@ const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
 const { getUserBillingDay, currentPeriodKey } = require('../utils/period');
 const { incomeSourcesForPeriod } = require('../utils/income');
+const { parseAccountNumberField } = require('../utils/account-number');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
@@ -36,6 +37,8 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
     const acc = Number.isFinite(id) && db.prepare('SELECT id FROM accounts WHERE id = ? AND user_id = ?').get(id, req.dataUserId);
     if (!acc) return res.status(400).json({ error: 'Neplatný cílový účet.' });
   }
+  const cpParsed = parseAccountNumberField(match_counterparty_account, 'Číslo protiúčtu');
+  if (cpParsed.error) return res.status(400).json({ error: cpParsed.error });
   const result = db.prepare(
     'INSERT INTO income_sources (user_id, person, planned_amount, match_pattern, match_counterparty_account, account_id, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)'
   ).run(
@@ -43,7 +46,7 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
     person.trim(),
     parseFloat(planned_amount) || 0,
     match_pattern && match_pattern.trim() ? match_pattern.trim() : null,
-    match_counterparty_account && String(match_counterparty_account).trim() ? String(match_counterparty_account).trim() : null,
+    cpParsed.value,
     resolveAccountId(db, req.dataUserId, account_id, null),
     sort_order ?? 0
   );
@@ -55,13 +58,17 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
   const row = db.prepare('SELECT * FROM income_sources WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
   if (!row) return res.status(404).json({ error: 'Záznam nenalezen.' });
   const { person, planned_amount, match_pattern, match_counterparty_account, account_id, sort_order } = req.body;
+  let cpAccount = row.match_counterparty_account;
+  if (match_counterparty_account !== undefined) {
+    const cpParsed = parseAccountNumberField(match_counterparty_account, 'Číslo protiúčtu');
+    if (cpParsed.error) return res.status(400).json({ error: cpParsed.error });
+    cpAccount = cpParsed.value;
+  }
   db.prepare('UPDATE income_sources SET person = ?, planned_amount = ?, match_pattern = ?, match_counterparty_account = ?, account_id = ?, sort_order = ? WHERE id = ?').run(
     person && person.trim() ? person.trim() : row.person,
     planned_amount != null ? parseFloat(planned_amount) : row.planned_amount,
     match_pattern !== undefined ? (match_pattern && match_pattern.trim() ? match_pattern.trim() : null) : row.match_pattern,
-    match_counterparty_account !== undefined
-      ? (match_counterparty_account && String(match_counterparty_account).trim() ? String(match_counterparty_account).trim() : null)
-      : row.match_counterparty_account,
+    cpAccount,
     resolveAccountId(db, req.dataUserId, account_id, row.account_id),
     sort_order ?? row.sort_order,
     row.id
