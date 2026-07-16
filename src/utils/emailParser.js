@@ -50,13 +50,15 @@ function parseEmailNotification(text) {
   // Protistrana + protiúčet:
   //  - odchozí: "Odchozí úhrada na účet <jméno> číslo <num>/<bank>"
   //  - příchozí: "Příchozí úhrada z účtu <jméno> číslo <num>/<bank>"  (reálný AirBank formát)
+  //  - bez jména: "Odchozí úhrada na účet číslo <num>/<bank>" (jméno příjemce je jen
+  //    ve "Zpráva pro příjemce") → jméno je volitelné, protiúčet se vytáhne i tak.
   let description = '';
   let counterparty_account = null;
   // Číslo účtu může mít předčíslí ve formátu "19-2235210247/0800" (typické pro inkasa/SIPO).
   // Bez nepovinné skupiny "(?:\d+-)?" by regex na předčíslí selhal a protistrana zůstala prázdná.
-  const cpM = body.match(/úhrada\s+(?:na\s+ú[cč]et|z\s+ú[cč]tu|od)\s+(.+?)\s+[cč]íslo\s*((?:\d+-)?\d+\/\d+)/i);
+  const cpM = body.match(/úhrada\s+(?:na\s+ú[cč]et|z\s+ú[cč]tu|od)\s+(?:(.+?)\s+)?[cč]íslo\s*((?:\d+-)?\d+\/\d+)/i);
   if (cpM) {
-    description = cpM[1].trim();
+    description = (cpM[1] || '').trim();  // jméno je volitelná skupina → může být undefined
     counterparty_account = cpM[2];
   }
 

@@ -68,6 +68,23 @@ Kód transakce: 160610999999`);
   assert.equal(tx.counterparty_account, '19-2235210247/0800');
 });
 
+test('odchozí úhrada na účet BEZ jména příjemce v řádku úhrady: protiúčet se stejně vytáhne', () => {
+  const tx = parseEmailNotification(`zůstatek na účtu Tom - OSVC číslo 1679014031/3030 se snížil o částku 13 255,00 CZK. Dostupný zůstatek k 25.06.2026 v 01:26 je 5 266,19 CZK.
+
+Odchozí úhrada na účet číslo 1000451009/3500
+Částka: 13 255,00 CZK
+Datum zaúčtování: 25.06.2026
+Variabilní symbol: 200232644
+Konstantní symbol: 0308
+Zpráva pro plátce: Toyota - RAV4 - splátka
+Zpráva pro příjemce: Tomáš Střída
+Kód transakce: 162182232012`);
+  assert.equal(tx.counterparty_account, '1000451009/3500');
+  assert.equal(tx.source_account, '1679014031');
+  // jméno chybí v řádku úhrady → description fallbackuje na "Zpráva pro plátce"
+  assert.equal(tx.description, 'Toyota - RAV4 - splátka');
+});
+
 test('bez kódu transakce → null (unparsed)', () => {
   assert.equal(parseEmailNotification('nějaký marketingový e-mail bez transakce'), null);
 });
