@@ -331,6 +331,7 @@ function initSchema() {
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_subcat_user_cat_name ON subcategories(user_id, category_id, name)',
     'ALTER TABLE transactions ADD COLUMN subcategory_id INTEGER REFERENCES subcategories(id) ON DELETE SET NULL',
     'ALTER TABLE category_rules ADD COLUMN subcategory_id INTEGER REFERENCES subcategories(id) ON DELETE SET NULL',
+    'ALTER TABLE transactions ADD COLUMN variable_symbol TEXT',
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* sloupec/index/tabulka již existuje nebo nelze aplikovat */ }

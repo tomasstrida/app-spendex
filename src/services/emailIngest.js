@@ -7,15 +7,15 @@ const loadUserRules = require('../utils/load-user-rules');
 
 const TX_INSERT = `INSERT OR IGNORE INTO transactions
     (user_id, category_id, subcategory_id, amount, currency, date, description, note, source, external_id,
-     tx_time, tx_type, counterparty_account, entered_by, place, account_id, ab_category)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'airbank-email', ?, ?, ?, ?, ?, ?, ?, ?)`;
+     tx_time, tx_type, counterparty_account, entered_by, place, account_id, ab_category, variable_symbol)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'airbank-email', ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 function insertTx(db, userId, tx, categoryId, extId, subcategoryId) {
   return db.prepare(TX_INSERT).run(
     userId, categoryId || null, subcategoryId ?? null, tx.amount, tx.currency, tx.date, tx.description, tx.note || '',
     extId || null, tx.tx_time || null, tx.tx_type || null,
     tx.counterparty_account || null, tx.entered_by || null, tx.place || null,
-    tx.account_id ?? null, tx.ab_category || null);
+    tx.account_id ?? null, tx.ab_category || null, tx.variable_symbol || null);
 }
 
 // Rozhodne kategorii. account = řádek accounts ({id, account_number}) nebo null.

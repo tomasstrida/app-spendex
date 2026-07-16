@@ -90,16 +90,26 @@ function parseEmailNotification(text) {
     }
   }
 
-  // Zpráva pro plátce/příjemce → note
-  const msgM = body.match(/Zpráva pro (?:plátce|p[rř]íjemce):\s*(.+)/i);
-  const note = msgM ? msgM[1].trim() : '';
+  // Zpráva pro plátce i příjemce → note (obě zachovat; e-mail může mít obě —
+  // "plátce" = účel platby, "příjemce" = jméno/identifikace protistrany).
+  const payerM = body.match(/Zpráva pro plátce:\s*(.+)/i);
+  const payeeM = body.match(/Zpráva pro p[rř]íjemce:\s*(.+)/i);
+  const payerMsg = payerM ? payerM[1].trim() : '';
+  const payeeMsg = payeeM ? payeeM[1].trim() : '';
+  const note = [payerMsg, payeeMsg].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(' · ');
+
+  // Variabilní symbol (identifikuje platbu — splátka, faktura, SIPO).
+  const vsM = body.match(/Variabiln[ií] symbol:\s*(\d+)/i);
+  const variable_symbol = vsM ? vsM[1] : null;
 
   // `description` zůstává prázdné u: kartových plateb (řádek "úhrada na účet … číslo"
   // chybí → obchodník je jen v `place`) a převodů bez jména protistrany (popisný údaj
   // je jen ve `note` = "Zpráva pro příjemce"). Fallback na `place`, jinak `note`, ať je
   // popis vidět ve výchozím sloupci "Popis", ve vyhledávání i pro textová category_rules
   // (match_patterns matchují description).
-  if (!description) description = place || note || '';
+  // Fallback bere čistou zprávu (plátce přednostně = účel platby), ne spojené `note`,
+  // ať Popis nezobrazuje "účel · jméno příjemce".
+  if (!description) description = place || payerMsg || payeeMsg || '';
 
   // Datum: primárně "Datum zaúčtování", fallback "Datum provedení" (kartové platby), fallback z hlavičky "k 07.06.2026 v ..."
   const date =
@@ -127,6 +137,7 @@ function parseEmailNotification(text) {
     place,
     card_last4,
     source_account,
+    variable_symbol,
   };
 }
 

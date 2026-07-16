@@ -83,6 +83,10 @@ Kód transakce: 162182232012`);
   assert.equal(tx.source_account, '1679014031');
   // jméno chybí v řádku úhrady → description fallbackuje na "Zpráva pro plátce"
   assert.equal(tx.description, 'Toyota - RAV4 - splátka');
+  // Variabilní symbol se uloží
+  assert.equal(tx.variable_symbol, '200232644');
+  // Obě zprávy (plátce i příjemce) se zachovají v note, oddělené " · "
+  assert.equal(tx.note, 'Toyota - RAV4 - splátka · Tomáš Střída');
 });
 
 test('bez kódu transakce → null (unparsed)', () => {
