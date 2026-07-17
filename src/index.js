@@ -68,6 +68,7 @@ app.use('/api/push', require('./routes/push'));
 app.use('/api/household', require('./routes/household'));
 app.use('/api/accounts', require('./routes/accounts'));
 app.use('/api/rules', require('./routes/rules'));
+app.use('/api/review', require('./routes/review'));
 app.use('/api/backup', require('./routes/backup'));
 app.use('/api/admin', require('./routes/admin'));
 

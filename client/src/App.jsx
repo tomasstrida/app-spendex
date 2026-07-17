@@ -12,6 +12,7 @@ import ImportPage from './pages/ImportPage';
 import SettingsPage from './pages/SettingsPage';
 import ReportPage from './pages/ReportPage';
 import SavingsPage from './pages/SavingsPage';
+import ReviewPage from './pages/ReviewPage';
 import AnnualBudgetsPage from './pages/AnnualBudgetsPage';
 import DuplicatesPage from './pages/DuplicatesPage';
 import AccountsPage from './pages/AccountsPage';
@@ -97,6 +98,7 @@ export default function App() {
             <Route path="/accounts"     element={<R el={<AccountsPage />} />} />
             <Route path="/import"       element={<R el={<ImportPage />} />} />
             <Route path="/duplicates"  element={<R el={<DuplicatesPage />} />} />
+            <Route path="/review"      element={<R el={<ReviewPage />} />} />
             <Route path="/settings"     element={<R el={<SettingsPage />} />} />
           </Routes>
         </PeriodProvider>

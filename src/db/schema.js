@@ -336,6 +336,8 @@ function initSchema() {
     // Okno platnosti fixní platby (periodKey "YYYY-MM"; NULL = odjakživa/navždy)
     'ALTER TABLE fixed_expenses ADD COLUMN valid_from TEXT',
     'ALTER TABLE fixed_expenses ADD COLUMN valid_to TEXT',
+    // „Revize zařazení": 1 = uživatel odložil (výdaj na neobvyklém účtu je OK/vyřešený)
+    'ALTER TABLE transactions ADD COLUMN review_dismissed INTEGER NOT NULL DEFAULT 0',
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* sloupec/index/tabulka již existuje nebo nelze aplikovat */ }

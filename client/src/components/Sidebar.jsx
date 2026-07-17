@@ -17,6 +17,7 @@ import {
   Wallet,
   ListFilter,
   Receipt,
+  SearchCheck,
 } from 'lucide-react';
 
 const navGroups = [
@@ -41,6 +42,7 @@ const navGroups = [
       { to: '/accounts',   icon: Wallet,    label: t.nav.accounts },
       { to: '/import',     icon: Upload,    label: t.nav.import },
       { to: '/duplicates', icon: CopyX,     label: t.nav.duplicates },
+      { to: '/review',     icon: SearchCheck, label: t.nav.review },
       { to: '/settings',   icon: Settings,  label: t.nav.settings },
     ],
   },

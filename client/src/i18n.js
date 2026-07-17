@@ -12,6 +12,7 @@ const cs = {
     accounts: 'Účty',
     import: 'Import',
     duplicates: 'Duplicity',
+    review: 'Revize zařazení',
     settings: 'Nastavení',
     sectionReports: 'Přehledy',
     sectionConfig: 'Konfigurace',
