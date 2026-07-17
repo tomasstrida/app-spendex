@@ -145,6 +145,9 @@ router.get('/overview', requireAuth, (req, res) => {
   `).get(req.dataUserId, start, end, mainAccount, variableAccount);
 
   // Jednotlivé položky drahých věcí (Typ 3) v zobrazeném období – seznam transakcí.
+  // Stejný SPENDING_FILTER jako součet „Drahé věci celkem" (by_category), aby seznam
+  // seděl na součet — jinak sem padaly i drahé věci z ignorovaných účtů, které se
+  // do součtu nepočítají.
   const expensiveItems = db.prepare(`
     SELECT t.id, t.date, t.description, t.amount, t.note,
            c.id AS category_id, c.name AS category_name, c.color AS category_color
@@ -152,6 +155,7 @@ router.get('/overview', requireAuth, (req, res) => {
     JOIN categories c ON c.id = t.category_id AND c.user_id = t.user_id
     WHERE t.user_id = ? AND c.type = 3
       AND t.date >= ? AND t.date <= ?
+      ${SPENDING_FILTER}
     ORDER BY t.date DESC, t.id DESC
   `).all(req.dataUserId, start, end);
 
