@@ -8,42 +8,45 @@ const { ownsSubcategory } = require('../utils/subcategory-ownership');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
-// GET /api/transactions?from=...&to=...&category_id=&category_ids=1,2,none&amount_min=&amount_max=&counterparty=&limit=&offset=
-router.get('/', requireAuth, (req, res) => {
-  const { from, to, category_id, category_ids, subcategory_id, amount_min, amount_max, q, counterparty, direction, limit = 200, offset = 0 } = req.query;
-  let query = 'SELECT t.*, c.name as category_name, c.color as category_color, sc.name as subcategory_name FROM transactions t LEFT JOIN categories c ON t.category_id = c.id LEFT JOIN subcategories sc ON t.subcategory_id = sc.id AND sc.user_id = t.user_id WHERE t.user_id = ?';
-  const params = [req.dataUserId];
+// Sdílené sestavení WHERE podmínek z query filtrů (bez SELECT/ORDER/LIMIT).
+// Používá GET / (stránkovaný seznam) i GET /export (CSV bez limitu), aby export
+// respektoval přesně stejné filtry jako to, co uživatel vidí v seznamu.
+// Vrací { where, params }; `where` začíná ' AND …' (nebo je prázdné).
+function buildTxWhere(query) {
+  const { from, to, category_id, category_ids, subcategory_id, amount_min, amount_max, q, counterparty, direction } = query;
+  let where = '';
+  const params = [];
 
-  if (from) { query += ' AND t.date >= ?'; params.push(from); }
-  if (to)   { query += ' AND t.date <= ?'; params.push(to); }
-  if (direction === 'in')  query += ' AND t.amount > 0';
-  if (direction === 'out') query += ' AND t.amount < 0';
+  if (from) { where += ' AND t.date >= ?'; params.push(from); }
+  if (to)   { where += ' AND t.date <= ?'; params.push(to); }
+  if (direction === 'in')  where += ' AND t.amount > 0';
+  if (direction === 'out') where += ' AND t.amount < 0';
 
   // Přesný filtr: protistrana začíná zadaným číslem účtu (např. „1679014082"
   // matchne „1679014082/3030"). Užívá Schůzka pro klik na „Skutečně naspořeno".
   if (counterparty !== undefined && String(counterparty).trim() !== '') {
-    query += ' AND t.counterparty_account LIKE ? || \'%\'';
+    where += ' AND t.counterparty_account LIKE ? || \'%\'';
     params.push(String(counterparty).trim());
   }
 
   // spending_only=1 → ignoruj tx z účtů s rolí jinou než „spending"
   // (replikuje SPENDING_FILTER, který stats.js používá pro by_category).
-  if (req.query.spending_only === '1') {
-    query += ` AND (t.account_id IS NULL OR EXISTS (
+  if (query.spending_only === '1') {
+    where += ` AND (t.account_id IS NULL OR EXISTS (
       SELECT 1 FROM accounts a WHERE a.id = t.account_id AND a.role = 'spending'
     ))`;
   }
 
   // match_patterns=A,B,C → pattern LIKE přes description/note/place (stejná
   // sémantika jako matcher fixních plateb). Užívá Schůzka pro klik na „Fixní platby".
-  if (req.query.match_patterns !== undefined && String(req.query.match_patterns).trim() !== '') {
-    const patterns = String(req.query.match_patterns)
+  if (query.match_patterns !== undefined && String(query.match_patterns).trim() !== '') {
+    const patterns = String(query.match_patterns)
       .split(',').map(s => s.trim()).filter(Boolean);
     if (patterns.length > 0) {
       const ors = patterns.map(() =>
         '(t.description LIKE ? OR t.note LIKE ? OR t.place LIKE ?)'
       ).join(' OR ');
-      query += ` AND (${ors})`;
+      where += ` AND (${ors})`;
       for (const p of patterns) params.push(`%${p}%`, `%${p}%`, `%${p}%`);
     }
   }
@@ -52,7 +55,7 @@ router.get('/', requireAuth, (req, res) => {
   if (q !== undefined && String(q).trim() !== '') {
     // necitlivé na velikost písmen i diakritiku (unaccent_lower – viz db/connection.js)
     const like = `%${String(q).trim()}%`;
-    query += ` AND (
+    where += ` AND (
       unaccent_lower(t.description) LIKE unaccent_lower(?) OR unaccent_lower(t.note) LIKE unaccent_lower(?) OR unaccent_lower(t.place) LIKE unaccent_lower(?)
       OR unaccent_lower(t.counterparty_account) LIKE unaccent_lower(?) OR unaccent_lower(t.ab_category) LIKE unaccent_lower(?)
       OR unaccent_lower(t.tx_type) LIKE unaccent_lower(?) OR unaccent_lower(t.entered_by) LIKE unaccent_lower(?) OR unaccent_lower(t.external_id) LIKE unaccent_lower(?)
@@ -76,34 +79,88 @@ router.get('/', requireAuth, (req, res) => {
       params.push(...numericIds);
     }
     if (conditions.length > 0) {
-      query += ` AND (${conditions.join(' OR ')})`;
+      where += ` AND (${conditions.join(' OR ')})`;
     }
   } else if (category_id === 'none') {
-    query += ' AND t.category_id IS NULL';
+    where += ' AND t.category_id IS NULL';
   } else if (category_id) {
-    query += ' AND t.category_id = ?';
+    where += ' AND t.category_id = ?';
     params.push(category_id);
   }
 
   if (subcategory_id !== undefined && String(subcategory_id).trim() !== '') {
     const v = parseInt(subcategory_id, 10);
-    if (Number.isFinite(v)) { query += ' AND t.subcategory_id = ?'; params.push(v); }
+    if (Number.isFinite(v)) { where += ' AND t.subcategory_id = ?'; params.push(v); }
   }
 
   if (amount_min !== undefined && amount_min !== '') {
     const v = parseFloat(amount_min);
-    if (Number.isFinite(v)) { query += ' AND ABS(t.amount) >= ?'; params.push(v); }
+    if (Number.isFinite(v)) { where += ' AND ABS(t.amount) >= ?'; params.push(v); }
   }
   if (amount_max !== undefined && amount_max !== '') {
     const v = parseFloat(amount_max);
-    if (Number.isFinite(v)) { query += ' AND ABS(t.amount) <= ?'; params.push(v); }
+    if (Number.isFinite(v)) { where += ' AND ABS(t.amount) <= ?'; params.push(v); }
   }
 
-  query += ' ORDER BY t.date DESC, t.id DESC LIMIT ? OFFSET ?';
-  params.push(Number(limit), Number(offset));
+  return { where, params };
+}
 
-  const rows = db.prepare(query).all(...params);
+// GET /api/transactions?from=...&to=...&category_id=&category_ids=1,2,none&amount_min=&amount_max=&counterparty=&limit=&offset=
+router.get('/', requireAuth, (req, res) => {
+  const { limit = 200, offset = 0 } = req.query;
+  const { where, params } = buildTxWhere(req.query);
+  const query = `SELECT t.*, c.name as category_name, c.color as category_color, sc.name as subcategory_name
+    FROM transactions t
+    LEFT JOIN categories c ON t.category_id = c.id
+    LEFT JOIN subcategories sc ON t.subcategory_id = sc.id AND sc.user_id = t.user_id
+    WHERE t.user_id = ?${where}
+    ORDER BY t.date DESC, t.id DESC LIMIT ? OFFSET ?`;
+  const rows = db.prepare(query).all(req.dataUserId, ...params, Number(limit), Number(offset));
   res.json(rows);
+});
+
+// GET /api/transactions/export?... — CSV export (stejné filtry jako GET /, bez limitu).
+// Musí být PŘED parametrickými routami. Oddělovač ';' + UTF-8 BOM kvůli českému Excelu.
+router.get('/export', requireAuth, (req, res) => {
+  const { where, params } = buildTxWhere(req.query);
+  const query = `SELECT t.*, c.name as category_name, sc.name as subcategory_name, a.name as account_name
+    FROM transactions t
+    LEFT JOIN categories c ON t.category_id = c.id
+    LEFT JOIN subcategories sc ON t.subcategory_id = sc.id AND sc.user_id = t.user_id
+    LEFT JOIN accounts a ON a.id = t.account_id AND a.user_id = t.user_id
+    WHERE t.user_id = ?${where}
+    ORDER BY t.date DESC, t.id DESC`;
+  const rows = db.prepare(query).all(req.dataUserId, ...params);
+
+  const cols = [
+    ['Datum', r => r.date],
+    ['Čas', r => r.tx_time],
+    ['Popis', r => r.description],
+    ['Obchodní místo', r => r.place],
+    ['Kategorie', r => r.category_name],
+    ['Subkategorie', r => r.subcategory_name],
+    ['Částka', r => (r.amount == null ? '' : String(r.amount).replace('.', ','))],
+    ['Měna', r => r.currency],
+    ['Účet', r => r.account_name],
+    ['Protistrana', r => r.counterparty_account],
+    ['Variabilní symbol', r => r.variable_symbol],
+    ['Poznámka', r => r.note],
+    ['Typ', r => r.tx_type],
+    ['Karta', r => r.card_last4],
+    ['Zdroj', r => r.source],
+  ];
+  const esc = v => {
+    if (v == null) return '';
+    const s = String(v);
+    return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const header = cols.map(c => c[0]).join(';');
+  const lines = rows.map(r => cols.map(([, get]) => esc(get(r))).join(';'));
+  const csv = '\uFEFF' + [header, ...lines].join('\r\n');
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="transakce.csv"');
+  res.send(csv);
 });
 
 // GET /api/transactions/duplicates

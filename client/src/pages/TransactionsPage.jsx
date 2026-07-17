@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Pencil, Trash2, Check, X, Columns3, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Pencil, Trash2, Check, X, Columns3, Search, Download } from 'lucide-react';
 import Layout from '../components/Layout';
 import { formatCurrency, formatPeriod, addPeriods, t } from '../i18n';
 import { usePeriod } from '../contexts/PeriodContext';
@@ -224,6 +224,17 @@ export default function TransactionsPage() {
   }, [loadingMore, hasMore, transactions.length, customMode, customFrom, customTo, periodStart, periodEnd, buildFilterParams]);
 
   useEffect(() => { loadTransactions(); }, [loadTransactions]);
+
+  // Export CSV: stejné filtry i období jako aktuální seznam, ale bez limitu
+  // (backend vrátí všechny odpovídající). Prohlížeč stáhne díky Content-Disposition.
+  function handleExportCsv() {
+    const baseParams = customMode && customFrom && customTo
+      ? { from: customFrom, to: customTo }
+      : (periodStart && periodEnd ? { from: periodStart, to: periodEnd } : {});
+    const params = buildFilterParams(new URLSearchParams(baseParams));
+    params.delete('limit');
+    window.location.href = `/api/transactions/export?${params.toString()}`;
+  }
 
   // Po načtení transakcí scroll na zvýrazněný řádek (z push notifikace ?highlight=<id>)
   useEffect(() => {
@@ -486,6 +497,14 @@ export default function TransactionsPage() {
             title={customMode ? 'Přepnout na billing období' : 'Vlastní rozsah dat'}
           >
             {customMode ? 'Billing období' : 'Vlastní rozsah'}
+          </button>
+          {/* Export CSV – respektuje aktuální filtry i období */}
+          <button
+            className="btn btn-ghost"
+            onClick={handleExportCsv}
+            title="Stáhnout zobrazené transakce jako CSV (respektuje filtry a období)"
+          >
+            <Download size={16} /> Export CSV
           </button>
           {/* Přepínač sloupců */}
           <div className="col-picker-wrap" ref={pickerRef}>

@@ -154,3 +154,31 @@ test('GET: subcategory_id filtruje jen transakce dané subkategorie', async () =
   assert.equal(rows[0].description, 'OPENAI');
   server.close();
 });
+
+test('GET /export vrátí CSV s hlavičkou, BOM a respektuje filtr', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description) VALUES (1,5,-500,'2026-07-01','OPENAI'),(1,5,-200,'2026-07-02','NETFLIX'),(1,5,-100,'2026-06-15','STARE')").run();
+  const res = await fetch(`${base}/api/transactions/export?from=2026-07-01&to=2026-07-31`);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /text\/csv/);
+  assert.match(res.headers.get('content-disposition'), /attachment/);
+  // arrayBuffer, ne text() — fetch().text() podle WHATWG spec strippuje úvodní BOM
+  const buf = Buffer.from(await res.arrayBuffer());
+  assert.deepEqual([buf[0], buf[1], buf[2]], [0xEF, 0xBB, 0xBF], 'CSV musí začínat UTF-8 BOM');
+  const body = buf.toString('utf8');
+  assert.match(body, /Datum;Čas;Popis/);        // hlavička
+  assert.ok(body.includes('OPENAI') && body.includes('NETFLIX'), 'obě červencové tx');
+  assert.ok(!body.includes('STARE'), 'červnová tx je mimo filtr from/to');
+  server.close();
+});
+
+test('GET /export: středník/uvozovky v hodnotě se escapují', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description) VALUES (1,5,-500,'2026-07-01','A ; B \"C\"')").run();
+  const res = await fetch(`${base}/api/transactions/export?from=2026-07-01&to=2026-07-31`);
+  const body = await res.text();
+  assert.ok(body.includes('"A ; B ""C"""'), 'hodnota se středníkem/uvozovkami je obalená a uvozovky zdvojené');
+  server.close();
+});
