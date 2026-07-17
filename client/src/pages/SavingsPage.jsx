@@ -95,19 +95,19 @@ export default function SavingsPage() {
 
             <div style={{ borderTop: '1px solid var(--border)', marginTop: 12, paddingTop: 12 }}>
               <div className="report-bilance-row">
-                <span>Plán (Schůzka)</span>
+                <span>Na spořicí (přebytek)</span>
                 <span>{surplus >= 0 ? '+' : '−'} {formatCurrency(Math.abs(surplus))}</span>
               </div>
               <div className="report-bilance-row">
-                <span>Rozdíl (skutečnost − plán)</span>
+                <span>Rozdíl (skutečnost − přebytek)</span>
                 <span className={diff === 0 ? 'text-muted' : (diff > 0 ? 'text-success' : 'text-danger')}>
                   {diff >= 0 ? '+' : '−'} {formatCurrency(Math.abs(diff))}
                 </span>
               </div>
             </div>
             <div className="text-muted" style={{ fontSize: 12, marginTop: 8 }}>
-              „Plán" = přebytek ze Schůzky (příjmy minus výdaje). „Skutečnost" = net skutečných převodů
-              přes spořicí účet za období. Malý rozdíl je normální.
+              „Na spořicí (přebytek)" = přebytek ze Schůzky (příjmy minus výdaje). „Skutečnost" = net
+              skutečných převodů přes spořicí účet za období. Malý rozdíl je normální.
             </div>
           </section>
 
