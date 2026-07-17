@@ -7,6 +7,7 @@ const cs = {
     fixedExpenses: 'Fixní platby',
     budgets: 'Rozpočty',
     report: 'Schůzka',
+    savings: 'Spořicí účet',
     annualBudgets: 'Roční budgety',
     accounts: 'Účty',
     import: 'Import',

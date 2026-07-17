@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Check, X } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
-import { fixedActualTotal, surplusToSavings } from '../utils/meetingBalance';
+import { fixedActualTotal, computeMeetingSurplus } from '../utils/meetingBalance';
 
 // ── Status budgetu ────────────────────────────────────────────────────────────
 
@@ -205,34 +205,30 @@ export default function ReportPage() {
   const byCategory = stats?.by_category || [];
   const bySubcategory = stats?.by_subcategory || [];
   const accounting = stats?.accounting || [];
-  const type3Spent = byCategory.filter(c => c.type === 3 && c.spent > 0);
   const expensiveItems = stats?.expensive_items || [];
 
   function toggleSubcatExpand(categoryId) {
     setExpandedSubcats(prev => ({ ...prev, [categoryId]: !prev[categoryId] }));
   }
 
-  const totalFixed   = fixedActualTotal(fixedExpenses);
   // Striktní whitelist: do bilance i sekce Příjmy vstupují jen ručně aliasované zdroje
   const aliasedSources   = incomeSources.filter(s => s.id != null);
-  const totalIncome      = aliasedSources.reduce((s, i) => s + (i.actual || 0), 0);
   const totalPlanned = aliasedSources.reduce((s, i) => s + (i.planned_amount || 0), 0);
-  const totalDiff    = Math.round(totalIncome - totalPlanned);
-  const totalType1       = budgets.reduce((s, b) => s + b.spent, 0);
   const totalType1Budget = budgets.reduce((s, b) => s + b.amount, 0);
-  const totalType3   = type3Spent.reduce((s, c) => s + c.spent, 0);
   // Očekávaný měsíční příspěvek do fondů (Typ 3)
   const type3MonthlyBudget = funds.reduce((s, f) => s + (f.monthly_contribution || 0), 0);
-  const variablePoolFunded = stats?.variable_pool_funded || 0;
   // „Na spořicí" = přebytek za období (příjmy − všechny výdaje). Skutečné pohyby
-  // na spořicím účtu Schůzka nezobrazuje — jsou v Transakcích.
-  const surplus = surplusToSavings({
-    totalIncome,
-    totalFixed,
-    variablePoolFunded,
-    totalType1,
-    totalType3,
+  // na spořicím účtu Schůzka nezobrazuje — jsou v Transakcích. Mezisoučty i přebytek
+  // skládá sdílený helper (stejná pravda jako stránka Spořicí účet).
+  const { totalIncome, totalFixed, totalType1, totalType3, surplus } = computeMeetingSurplus({
+    incomeSources,
+    fixedExpenses,
+    budgetsType1: budgets,
+    byCategory,
+    variablePoolFunded: stats?.variable_pool_funded || 0,
   });
+  const totalDiff    = Math.round(totalIncome - totalPlanned);
+  const variablePoolFunded = stats?.variable_pool_funded || 0;
 
   // Account numbers used in bilance row links (musí sedět s recurring.js v backendu)
   const VARIABLE_ACCOUNT_NUM = '1679014074/3030';
