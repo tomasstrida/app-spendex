@@ -92,11 +92,13 @@ router.get('/overview', requireAuth, (req, res) => {
   // zdrojového účtu: záporné = vklad na spořicí (peníze odešly), kladné = výběr
   // ze spořicího zpět na provoz. is_regular = standardní měsíční vklad 25 000.
   const savingsTransfers = db.prepare(`
-    SELECT id, date, description, amount, counterparty_account, note
-    FROM transactions
-    WHERE user_id = ? AND counterparty_account LIKE ? || '%'
-      AND date >= ? AND date <= ?
-    ORDER BY date DESC, id DESC
+    SELECT t.id, t.date, t.description, t.amount, t.counterparty_account, t.note,
+           a.name AS account_name, a.account_number AS account_number
+    FROM transactions t
+    LEFT JOIN accounts a ON a.id = t.account_id AND a.user_id = t.user_id
+    WHERE t.user_id = ? AND t.counterparty_account LIKE ? || '%'
+      AND t.date >= ? AND t.date <= ?
+    ORDER BY t.date DESC, t.id DESC
   `).all(req.dataUserId, savingsAccount, start, end).map(t => ({
     ...t,
     is_regular: t.amount === -25000,

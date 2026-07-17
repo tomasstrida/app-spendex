@@ -118,6 +118,14 @@ export default function SavingsPage() {
                   // amount je z pohledu zdrojového účtu: záporné = vklad na spořicí
                   // (na spoření přibylo), kladné = výběr zpět na provoz.
                   const onSavings = -tr.amount;   // z pohledu spořicího účtu
+                  // Odkud → kam: vlastní účet (account_name), na kterém převod proběhl,
+                  // vs. protistrana (spořicí účet, description). Vklad = běžný → spořicí,
+                  // výběr = spořicí → běžný.
+                  const savingsName = tr.description || 'Spořicí účet';
+                  const ownName = tr.account_name;
+                  const flow = ownName
+                    ? (onSavings >= 0 ? `${ownName} → ${savingsName}` : `${savingsName} → ${ownName}`)
+                    : savingsName;
                   return (
                     <Link key={tr.id} to={txLink(`highlight=${tr.id}`)}
                       className="report-budget-row"
@@ -126,7 +134,7 @@ export default function SavingsPage() {
                         <span className="text-muted" style={{ marginRight: 8 }}>
                           {`${+tr.date.slice(8, 10)}. ${+tr.date.slice(5, 7)}.`}
                         </span>
-                        {tr.description || (onSavings >= 0 ? 'Vklad na spořicí' : 'Výběr ze spořicího')}
+                        {flow}
                         {tr.is_regular && (
                           <span className="text-muted" style={{ fontSize: 11, marginLeft: 6 }}>· pravidelný</span>
                         )}
