@@ -47,7 +47,6 @@ export default function SavingsPage() {
     byCategory: stats?.by_category || [],
     variablePoolFunded: stats?.variable_pool_funded || 0,
   });
-  const diff = Math.round(savings.net - surplus);
 
   function txLink(extra) {
     const base = period ? `period=${period}` : '';
@@ -98,16 +97,9 @@ export default function SavingsPage() {
                 <span>Na spořicí (přebytek)</span>
                 <span>{surplus >= 0 ? '+' : '−'} {formatCurrency(Math.abs(surplus))}</span>
               </div>
-              <div className="report-bilance-row">
-                <span>Rozdíl (skutečnost − přebytek)</span>
-                <span className={diff === 0 ? 'text-muted' : (diff > 0 ? 'text-success' : 'text-danger')}>
-                  {diff >= 0 ? '+' : '−'} {formatCurrency(Math.abs(diff))}
-                </span>
-              </div>
             </div>
             <div className="text-muted" style={{ fontSize: 12, marginTop: 8 }}>
-              „Na spořicí (přebytek)" = přebytek ze Schůzky (příjmy minus výdaje). „Skutečnost" = net
-              skutečných převodů přes spořicí účet za období. Malý rozdíl je normální.
+              „Na spořicí (přebytek)" = přebytek ze Schůzky (příjmy minus výdaje).
             </div>
           </section>
 
