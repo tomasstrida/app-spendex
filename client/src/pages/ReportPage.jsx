@@ -351,6 +351,71 @@ export default function ReportPage() {
             </div>
           </section>
 
+          {/* ── KAM ŠLY PENÍZE ZA MĚSÍC (kompletní výdaje z výdajových účtů) ── */}
+          {stats?.outflow && (() => {
+            const outflow = stats.outflow;
+            const savingsNet = stats?.savings?.net || 0;
+            const meloZustat = Math.round(totalIncome - outflow.total);
+            const rozdil = Math.round(meloZustat - savingsNet);
+            return (
+              <section className="report-section">
+                <div className="report-section-header">
+                  <h2 className="report-section-title">Kam šly peníze za měsíc</h2>
+                </div>
+                <Link to={txLink('direction=in')} className="report-bilance-row"
+                  style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                  title="Klik: všechny příchozí transakce v období">
+                  <span>Příjmy</span>
+                  <span>{formatCurrency(totalIncome)}</span>
+                </Link>
+                <div className="report-bilance-row">
+                  <span>Výdaje z výdajových účtů</span>
+                  <span>− {formatCurrency(outflow.total)}</span>
+                </div>
+                {outflow.by_category.length > 0 && (
+                  <div className="report-budget-list" style={{ marginTop: 4 }}>
+                    {outflow.by_category.map(c => (
+                      <Link
+                        key={c.category_id ?? 'none'}
+                        to={txLink((c.category_id != null ? `category_id=${c.category_id}&` : '') + 'spending_only=1')}
+                        className="report-budget-row"
+                        style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                        title="Klik: transakce této kategorie z výdajových účtů v období">
+                        <span className="report-budget-dot" style={{ background: c.color || '#6366f1' }} />
+                        <span className="report-budget-name">{c.name || 'Nezařazené'}</span>
+                        <span className="report-budget-spent">− {formatCurrency(c.sum)}</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+                <div className={`report-bilance-row report-bilance-result ${meloZustat >= 0 ? '' : 'text-danger'}`}
+                  style={{ marginTop: 8 }}>
+                  <span>Zůstalo (mělo jít na spořicí)</span>
+                  <span>{meloZustat >= 0 ? '+' : '−'} {formatCurrency(Math.abs(meloZustat))}</span>
+                </div>
+                <Link to="/savings" className="report-bilance-row"
+                  style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                  title="Klik: detail převodů na spořicí účet">
+                  <span>Skutečně na spořicí (net)</span>
+                  <span className={savingsNet >= 0 ? 'text-success' : 'text-danger'}>
+                    {savingsNet >= 0 ? '+' : '−'} {formatCurrency(Math.abs(savingsNet))}
+                  </span>
+                </Link>
+                <div className="report-bilance-row">
+                  <span>Rozdíl → zůstalo na běžném / přelévání</span>
+                  <span className="text-muted">
+                    {rozdil >= 0 ? '+' : '−'} {formatCurrency(Math.abs(rozdil))}
+                  </span>
+                </div>
+                <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
+                  Výdaje jsou všechny reálné platby z výdajových účtů (bez převodů mezi vlastními účty),
+                  seřazené podle kategorie. Poslední řádek není chyba — jsou to peníze, které zůstaly na
+                  běžném účtu nebo se přelily mezi účty (fondy, OSVČ), místo aby šly na spořicí.
+                </div>
+              </section>
+            );
+          })()}
+
           {/* ── PŘÍJMY ── */}
           <section className="report-section">
             <div className="report-section-header">

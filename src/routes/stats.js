@@ -4,6 +4,7 @@ const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
 const { getPeriodDates, getUserBillingDay, currentPeriodKey } = require('../utils/period');
 const { savingsNet, reserveBalance, savingsAccount, reserveAccount, reservePaidPatterns, mainAccount, variableAccount } = require('../utils/recurring');
+const { normCounterparty } = require('../utils/income');
 
 // GET /api/stats/overview?period=2026-04
 router.get('/overview', requireAuth, (req, res) => {
@@ -153,6 +154,47 @@ router.get('/overview', requireAuth, (req, res) => {
     ORDER BY t.date DESC, t.id DESC
   `).all(req.dataUserId, start, end);
 
+  // „Kam šly peníze za měsíc": kompletní výdaje z výdajových (spending) účtů,
+  // BEZ ohledu na typ kategorie, MIMO interní převody (counterparty = vlastní účet),
+  // agregováno SUM(-amount) po kategoriích (refund stejnou kategorií se odečte).
+  // Poslední řádek na Schůzce (příjmy − outflow.total vs skutečně na spořicí) poctivě
+  // ukáže zbytek jdoucí na zůstatek běžného účtu / přelévání mezi účty.
+  const ownNums = new Set(
+    db.prepare('SELECT account_number FROM accounts WHERE user_id = ?')
+      .all(req.dataUserId)
+      .map(a => normCounterparty(a.account_number))
+      .filter(Boolean)
+  );
+  const outflowTxs = db.prepare(`
+    SELECT t.amount, t.counterparty_account, t.category_id,
+           c.name AS category_name, c.color AS category_color
+    FROM transactions t
+    LEFT JOIN categories c ON c.id = t.category_id AND c.user_id = t.user_id
+    WHERE t.user_id = ? AND t.date >= ? AND t.date <= ?
+      AND (t.account_id IS NULL OR EXISTS (
+        SELECT 1 FROM accounts a WHERE a.id = t.account_id AND a.role = 'spending'
+      ))
+  `).all(req.dataUserId, start, end);
+  const outflowMap = new Map();
+  let outflowTotal = 0;
+  for (const t of outflowTxs) {
+    const cp = normCounterparty(t.counterparty_account);
+    if (cp && ownNums.has(cp)) continue; // interní převod mezi vlastními účty — není výdaj
+    const val = -t.amount;
+    outflowTotal += val;
+    const key = t.category_id == null ? 'null' : t.category_id;
+    let g = outflowMap.get(key);
+    if (!g) {
+      g = { category_id: t.category_id ?? null, name: t.category_name ?? null, color: t.category_color ?? null, sum: 0 };
+      outflowMap.set(key, g);
+    }
+    g.sum += val;
+  }
+  const outflow = {
+    total: outflowTotal,
+    by_category: [...outflowMap.values()].sort((a, b) => b.sum - a.sum),
+  };
+
   res.json({
     period: periodKey,
     period_start: start,
@@ -167,6 +209,7 @@ router.get('/overview', requireAuth, (req, res) => {
     variable_pool_funded: variablePoolDotace.amount,
     expensive_items: expensiveItems,
     accounting,
+    outflow,
   });
 });
 
