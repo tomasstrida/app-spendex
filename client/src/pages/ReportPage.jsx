@@ -329,11 +329,34 @@ export default function ReportPage() {
               </Link>
             )}
             <div className={`report-bilance-row report-bilance-result ${surplus >= 0 ? '' : 'text-danger'}`}>
-              <span>Na spořicí</span>
+              <span>Na spořicí (plán)</span>
               <span>{surplus >= 0 ? '+' : '−'} {formatCurrency(Math.abs(surplus))}</span>
             </div>
+            {(() => {
+              const savingsNet = stats?.savings?.net || 0;
+              const savingsDiff = Math.round(savingsNet - surplus);
+              return (
+                <>
+                  <Link to="/savings" className="report-bilance-row"
+                    style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                    title="Klik: detail převodů na spořicí účet">
+                    <span>Skutečně převedeno</span>
+                    <span className={savingsNet >= 0 ? 'text-success' : 'text-danger'}>
+                      {savingsNet >= 0 ? '+' : '−'} {formatCurrency(Math.abs(savingsNet))}
+                    </span>
+                  </Link>
+                  <div className="report-bilance-row">
+                    <span>Rozdíl (skutečnost − plán)</span>
+                    <span className={savingsDiff === 0 ? 'text-muted' : (savingsDiff > 0 ? 'text-success' : 'text-danger')}>
+                      {savingsDiff >= 0 ? '+' : '−'} {formatCurrency(Math.abs(savingsDiff))}
+                    </span>
+                  </div>
+                </>
+              );
+            })()}
             <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
-              „Na spořicí" = přebytek za období (příjmy minus výdaje). Skutečné pohyby na spořicím účtu najdeš v Transakcích.
+              „Na spořicí (plán)" = přebytek za období (příjmy minus výdaje). „Skutečně převedeno" = net
+              skutečných pohybů na spořicím účtu (vklady minus výběry). Malý rozdíl je normální.
             </div>
           </section>
 
