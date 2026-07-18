@@ -4,6 +4,7 @@ const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
 const { getPeriodDates, getUserBillingDay, currentPeriodKey } = require('../utils/period');
 const { savingsNet, reserveBalance, savingsAccount, reserveAccount, reservePaidPatterns, mainAccount, variableAccount } = require('../utils/recurring');
+const { SPENDING_AND } = require('../utils/spending-filter');
 
 // GET /api/stats/overview?period=2026-04
 router.get('/overview', requireAuth, (req, res) => {
@@ -11,11 +12,9 @@ router.get('/overview', requireAuth, (req, res) => {
   const periodKey = req.query.period || currentPeriodKey(billingDay);
   const { start, end } = getPeriodDates(billingDay, periodKey);
 
-  const SPENDING_FILTER = `
-    AND (t.account_id IS NULL OR EXISTS (
-      SELECT 1 FROM accounts a WHERE a.id = t.account_id AND a.role = 'spending'
-    ))
-  `;
+  // Fáze A: „výdaj domácnosti" = spending účet, NULL účet, NEBO reálná kategorie
+  // (typ 1/2/3) na ignorovaném účtu. Sdílený fragment (viz utils/spending-filter).
+  const SPENDING_FILTER = SPENDING_AND;
 
   const total = db.prepare(`
     SELECT COALESCE(SUM(-t.amount), 0) as total_spent
@@ -32,9 +31,7 @@ router.get('/overview', requireAuth, (req, res) => {
     LEFT JOIN transactions t ON t.category_id = c.id
       AND t.user_id = ?
       AND t.date >= ? AND t.date <= ?
-      AND (t.account_id IS NULL OR EXISTS (
-        SELECT 1 FROM accounts a WHERE a.id = t.account_id AND a.role = 'spending'
-      ))
+      ${SPENDING_FILTER}
     WHERE c.user_id = ?
     GROUP BY c.id
     ORDER BY spent DESC
@@ -71,9 +68,7 @@ router.get('/overview', requireAuth, (req, res) => {
       COALESCE(SUM(-t.amount), 0) as spent
     FROM transactions t
     WHERE t.user_id = ?
-    AND (t.account_id IS NULL OR EXISTS (
-      SELECT 1 FROM accounts a WHERE a.id = t.account_id AND a.role = 'spending'
-    ))
+    ${SPENDING_FILTER}
     GROUP BY strftime('%Y-%m', t.date)
     ORDER BY month_key DESC
     LIMIT 12

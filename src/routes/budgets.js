@@ -4,6 +4,7 @@ const rateLimit = require('express-rate-limit');
 const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
 const { getPeriodDates, getUserBillingDay, currentPeriodKey } = require('../utils/period');
+const { SPENDING_AND } = require('../utils/spending-filter');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
@@ -30,9 +31,7 @@ router.get('/', requireAuth, (req, res) => {
         WHERE t.user_id = db.user_id
           AND t.category_id = db.category_id
           AND t.date >= ? AND t.date <= ?
-          AND (t.account_id IS NULL OR EXISTS (
-            SELECT 1 FROM accounts a WHERE a.id = t.account_id AND a.role = 'spending'
-          ))
+          ${SPENDING_AND}
       ), 0) as spent
     FROM budgets db
     JOIN categories c ON c.id = db.category_id AND c.user_id = db.user_id

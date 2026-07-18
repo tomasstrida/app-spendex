@@ -5,6 +5,7 @@ const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
 const { findDuplicates, wouldEmptyDuplicateGroup } = require('../utils/duplicates');
 const { ownsSubcategory } = require('../utils/subcategory-ownership');
+const { SPENDING_AND } = require('../utils/spending-filter');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
@@ -29,12 +30,11 @@ function buildTxWhere(query) {
     params.push(String(counterparty).trim());
   }
 
-  // spending_only=1 → ignoruj tx z účtů s rolí jinou než „spending"
-  // (replikuje SPENDING_FILTER, který stats.js používá pro by_category).
+  // spending_only=1 → jen výdaje domácnosti (fáze A: spending + NULL účet +
+  // reálná kategorie na ignorovaném účtu). Stejný fragment jako stats/budgets,
+  // aby proklik ze Schůzky seděl s čísly.
   if (query.spending_only === '1') {
-    where += ` AND (t.account_id IS NULL OR EXISTS (
-      SELECT 1 FROM accounts a WHERE a.id = t.account_id AND a.role = 'spending'
-    ))`;
+    where += SPENDING_AND;
   }
 
   // match_patterns=A,B,C → pattern LIKE přes description/note/place (stejná

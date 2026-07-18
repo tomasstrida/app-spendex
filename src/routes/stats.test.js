@@ -54,3 +54,20 @@ test('accounting: kategorie type 1/2/3 se v accounting neobjeví', async () => {
   assert.equal((stats.accounting || []).length, 0);
   server.close();
 });
+
+test('fáze A: reálná kategorie (typ 3) na ignorovaném účtu se počítá do výdajů', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type) VALUES (20,1,'Drahé věci',3),(21,1,'Mimo systém',1)").run();
+  const ignId = db.prepare("INSERT INTO accounts (user_id,account_number,name,role) VALUES (1,'700/3030','zz','ignored')").run().lastInsertRowid;
+  const incId = db.prepare("INSERT INTO accounts (user_id,account_number,name,role) VALUES (1,'800/3030','OSVC','income')").run().lastInsertRowid;
+  db.prepare("INSERT INTO transactions (user_id,category_id,account_id,amount,date,description,counterparty_account) VALUES \
+    (1,20,?,-4000,'2026-07-05','Drahá věc z ignored','999/0800'), \
+    (1,21,?,-1000,'2026-07-06','Mimo systém z ignored','888/0800'), \
+    (1,20,?,-9000,'2026-07-07','Drahá věc z OSVC','777/0800')").run(ignId, ignId, incId);
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-07`)).json();
+  const drahe = (stats.by_category || []).find(c => c.id === 20);
+  assert.equal(drahe.spent, 4000, 'drahá věc z ignored účtu se počítá; z OSVC ne; Mimo systém ne');
+  assert.equal(stats.total_spent, 4000, 'total zahrne jen reálnou kategorii z ignored (ne Mimo systém, ne OSVC)');
+  server.close();
+});
