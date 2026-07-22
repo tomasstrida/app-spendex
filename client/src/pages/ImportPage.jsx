@@ -1,10 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Upload, Check, AlertCircle, Plus, Pencil, Trash2, X, Download, Inbox, Mail } from 'lucide-react';
 import Layout from '../components/Layout';
 import { formatCurrency } from '../i18n';
 import { CategoryIcon } from '../categoryIcons';
 import { fireConfetti, playPopSound } from '../utils/celebrate';
+import { buildAccountNameMap } from '../utils/accountName';
+import { accountFlow } from '../utils/accountFlow';
 
 const STEP = { UPLOAD: 'upload', MAPPING: 'mapping', DONE: 'done' };
 
@@ -202,22 +204,29 @@ function EmailInbox() {
   const [items, setItems] = useState([]);
   const [cats, setCats] = useState([]);
   const [people, setPeople] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [busy, setBusy] = useState(null);
   const [celebratingId, setCelebratingId] = useState(null);
+
+  // Mapy pro překlad čísel/id účtů na lidské názvy (řádek „z účtu → na účet").
+  const accountNameMap = useMemo(() => buildAccountNameMap(accounts), [accounts]);
+  const accountById = useMemo(() => new Map((accounts || []).map(a => [a.id, a.name])), [accounts]);
 
   const [searchParams] = useSearchParams();
   const focusId = searchParams.get('focus');
   const focusedRef = useRef(false);
 
   const load = useCallback(async () => {
-    const [ri, rc, rp] = await Promise.all([
+    const [ri, rc, rp, ra] = await Promise.all([
       fetch('/api/email-inbox'),
       fetch('/api/categories'),
       fetch('/api/household/cards'),
+      fetch('/api/accounts'),
     ]);
     if (ri.ok) setItems(await ri.json());
     if (rc.ok) setCats(await rc.json());
     if (rp.ok) { const j = await rp.json(); setPeople(j.people || []); }
+    if (ra.ok) setAccounts(await ra.json());
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -275,6 +284,20 @@ function EmailInbox() {
     } finally { setBusy(null); }
   }
 
+  // Řádek „odkud → kam" pro importovanou platbu. U převodu ukáže oba účty,
+  // u karetního nákupu náš účet → obchodníka. Skryje se, když nevíme ani jednu stranu.
+  function flowLine(tx) {
+    const { from, to } = accountFlow(tx, { accountById, accountNameMap });
+    if (from === '—' && to === '—') return null;
+    return (
+      <div className="review-flow">
+        <span className="flow-node">{from}</span>
+        <span className="flow-arrow">→</span>
+        <span className="flow-node">{to}</span>
+      </div>
+    );
+  }
+
   const awaiting = items.filter(i => i.status === 'awaiting_card');
   const pending = items.filter(i => i.status === 'pending');
   const unparsed = items.filter(i => i.status === 'unparsed');
@@ -304,6 +327,7 @@ function EmailInbox() {
               <span>{tx.date} {tx.tx_time || ''}</span>
               <span className="who">💳 neznámá ••{last4}</span>
             </div>
+            {flowLine(tx)}
             {tx.note && (tx.description || tx.place) && (
               <div className="review-note">📝 {tx.note}</div>
             )}
@@ -352,6 +376,7 @@ function EmailInbox() {
                 </span>
               )}
             </div>
+            {flowLine(tx)}
             {tx.note && (tx.description || tx.place) && (
               <div className="review-note">📝 {tx.note}</div>
             )}

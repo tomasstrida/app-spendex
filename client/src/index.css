@@ -104,6 +104,9 @@ input, button, select, textarea { font: inherit; }
 .review-amt { font-size: 13px; color: var(--text2); font-weight: 600; white-space: nowrap; flex: none; }
 .review-sub { color: var(--text2); font-size: 12px; margin-top: 3px; display: flex; align-items: center; gap: 6px; }
 .review-note { color: var(--text2); font-size: 13px; margin-top: 6px; word-break: break-word; }
+.review-flow { color: var(--text2); font-size: 12px; margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.review-flow .flow-node { font-weight: 600; color: var(--text); word-break: break-word; }
+.review-flow .flow-arrow { opacity: 0.55; flex: none; }
 .who { display: inline-flex; align-items: center; gap: 5px; background: var(--bg3); border: 1px solid var(--border);
        border-radius: 999px; padding: 2px 8px; color: var(--text); font-weight: 600; }
 .who-av { width: 14px; height: 14px; border-radius: 50%; color: #fff; font-size: 9px;
