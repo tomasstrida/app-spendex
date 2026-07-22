@@ -72,6 +72,7 @@ module.exports = {
     { pattern: 'T-Mobile', category: 'Pravidelné platby' },
     { pattern: 'Nordic Telecom', category: 'Pravidelné platby' },
     { pattern: 'ČESKÁ TELEVIZE', category: 'Pravidelné platby' },
+    { pattern: 'TV poplatek', category: 'Pravidelné platby' },
     // Digitální předplatné → Licence (Typ 2, roční)
     { pattern: 'OPENAI', category: 'Licence' },
     { pattern: 'Google Workspace', category: 'Licence' },
