@@ -95,29 +95,32 @@ function IncomeSourceForm({ initial, onSave, onCancel }) {
           </span>
         </div>
 
-        <div>
-          <label style={labelStyle}>Pattern v popisu transakce (volitelné)</label>
-          <input className="input" value={matchPattern} onChange={e => setMatchPattern(e.target.value)}
-            placeholder="např. Bísek" />
-          <span style={hintStyle}>
-            Hledá tento podřetězec v <strong>popisu</strong> příchozí transakce. Použij, když nemáš
-            číslo protiúčtu (např. Martinova výplata má v popisu „Bísek Libor"). Velikost písmen
-            i diakritika musí přesně sedět.
-          </span>
-        </div>
+        <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: 'var(--bg2)' }}>
+          <div style={{ ...labelStyle, fontSize: 13, marginBottom: 12 }}>Odkud → kam očekáváme platbu</div>
 
-        <div>
-          <label style={labelStyle}>Číslo protiúčtu (volitelné)</label>
+          <label style={labelStyle}>Odkud — účet odesílatele</label>
           <input className="input" value={matchCounterparty} onChange={e => setMatchCounterparty(e.target.value)}
-            placeholder="např. 1679014031" style={{ maxWidth: 220 }} />
+            placeholder="např. 1812270019/3030" style={{ maxWidth: 260 }} />
+          {accounts.some(a => a.account_number) && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, alignItems: 'center' }}>
+              <span style={{ fontSize: 11, color: 'var(--text2)' }}>rychlý výběr z tvých účtů:</span>
+              {accounts.filter(a => a.account_number).map(a => (
+                <button key={a.id} type="button" className="btn btn-ghost btn-sm"
+                  style={{ fontSize: 11, padding: '2px 8px' }}
+                  onClick={() => setMatchCounterparty(a.account_number)}>
+                  {a.name}
+                </button>
+              ))}
+            </div>
+          )}
           <span style={hintStyle}>
-            Přesná shoda na číslo účtu odesílatele. <strong>Má přednost před patternem v popisu.</strong>
-            Spolehlivější, protože popis banka může měnit, číslo účtu ne.
+            Číslo účtu, ze kterého platba přijde. Spolehlivější než text — popis banka mění, číslo účtu ne.
+            Externí zdroj (nájemník, partner) napiš ručně; vlastní účet vyber tlačítkem výše.
           </span>
-        </div>
 
-        <div>
-          <label style={labelStyle}>Cílový účet (volitelné)</label>
+          <div style={{ textAlign: 'center', color: 'var(--text2)', fontSize: 18, margin: '10px 0 6px' }}>↓</div>
+
+          <label style={labelStyle}>Kam — na tvůj účet</label>
           <select className="input" value={accountId} onChange={e => setAccountId(e.target.value)}
             style={{ maxWidth: 280 }}>
             <option value="">— libovolný účet —</option>
@@ -126,12 +129,24 @@ function IncomeSourceForm({ initial, onSave, onCancel }) {
             ))}
           </select>
           <span style={hintStyle}>
-            Omezí alias jen na převody, které <strong>dorazily na tento konkrétní účet</strong>.
-            Užitečné, když ti odesílatel posílá na víc tvých účtů a chceš započítat jen jeden
-            (např. OSVČ → Hlavní jako příjem, OSVČ → Spořicí ignorovat).
-            „— libovolný účet —" znamená matchnout libovolnou destinaci.
+            Na který tvůj účet má platba dorazit (např. OSVČ → Hlavní jako příjem).
+            „— libovolný účet —" = na cíli nezáleží.
           </span>
         </div>
+
+        <details>
+          <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--text2)' }}>
+            Pokročilé: shoda podle textu v popisu (fallback)
+          </summary>
+          <div style={{ marginTop: 8 }}>
+            <input className="input" value={matchPattern} onChange={e => setMatchPattern(e.target.value)}
+              placeholder="např. Bísek" />
+            <span style={hintStyle}>
+              Jen pro zdroje bez stabilního čísla účtu. Hledá podřetězec v popisu; velikost písmen
+              i diakritika musí přesně sedět. <strong>Číslo účtu má vždy přednost.</strong>
+            </span>
+          </div>
+        </details>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
