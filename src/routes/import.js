@@ -9,6 +9,7 @@ const { buildExternalId } = require('../utils/externalId');
 const applyRules = require('../utils/apply-rules');
 const seedRules = require('../../scripts/seed/rules');
 const loadUserRules = require('../utils/load-user-rules');
+const transferCategoryName = require('../utils/transfer-category');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
@@ -125,8 +126,11 @@ router.post('/confirm', requireAuth, writeLimiter, (req, res) => {
       }
     }
   }
+  const transferName = transferCategoryName(db, req.dataUserId);
   const effectiveRules = {
     ...seedRules,
+    // type=4 marker, ne hardcoded název → odolné vůči přejmenování kategorie převodů
+    ...(transferName ? { internalTransferCategory: transferName } : {}),
     textOverrides: loadUserRules(db, req.dataUserId),
     abCategoryMap: { ...seedRules.abCategoryMap, ...userMapName },
   };

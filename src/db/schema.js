@@ -378,6 +378,14 @@ function initSchema() {
     }
   }
 
+  // Kategorie interních převodů drží identitu na type=4 (účetní kategorie), NE na
+  // názvu. Jednorázově (idempotentně) povýší existující „Převody"/„Převody interní"
+  // na type=4, aby L0 detekce převodů fungovala i po přejmenování kategorie v UI
+  // a aby se převody nezapočítávaly do výdajů (SPENDING_FILTER bere jen type 1–3).
+  try {
+    db.prepare("UPDATE categories SET type = 4 WHERE type != 4 AND name IN ('Převody', 'Převody interní')").run();
+  } catch { /* sloupec type ještě neexistuje při prvním pořadí migrací – ignoruj */ }
+
   // Seed textových pravidel do category_rules pro uživatele, kteří ještě žádná nemají
   // (idempotentní — běží jen pro uživatele s prázdnou sadou pravidel).
   const usersWithoutRules = db.prepare(

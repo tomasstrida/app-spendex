@@ -4,6 +4,7 @@ const { buildExternalId } = require('../utils/externalId');
 const applyRules = require('../utils/apply-rules');
 const seedRules = require('../../scripts/seed/rules');
 const loadUserRules = require('../utils/load-user-rules');
+const transferCategoryName = require('../utils/transfer-category');
 
 const TX_INSERT = `INSERT OR IGNORE INTO transactions
     (user_id, category_id, subcategory_id, amount, currency, date, description, note, source, external_id,
@@ -21,6 +22,10 @@ function insertTx(db, userId, tx, categoryId, extId, subcategoryId) {
 // Rozhodne kategorii. account = řádek accounts ({id, account_number}) nebo null.
 function categorize(db, userId, tx, account) {
   const rules = { ...seedRules, textOverrides: loadUserRules(db, userId) };
+  // Kategorie interních převodů se identifikuje přes type=4, ne přes název —
+  // aby přejmenování kategorie v UI nerozbilo L0 detekci převodů.
+  const transferName = transferCategoryName(db, userId);
+  if (transferName) rules.internalTransferCategory = transferName;
   const { category: catName, subcategory_id } = applyRules(tx, account ? { account_number: account.account_number } : null, rules);
   const row = db.prepare('SELECT id FROM categories WHERE user_id = ? AND name = ?').get(userId, catName);
   const categoryId = row ? row.id : null;
@@ -132,4 +137,29 @@ function releaseHeldCard(db, dataOwnerId, last4) {
   return released;
 }
 
-module.exports = { ingestEmail, releaseHeldCard, categorize };
+// Znovu projede pending frontu a co je nově „jisté" (např. po zavedení type=4
+// u kategorie převodů, nebo po doplnění pravidla) přesune do transactions.
+// Nejisté položky nechá pending, jen zpřesní suggested_category_id. Vrací počet
+// přesunutých. Idempotentní: OR IGNORE na external_id chrání před duplikáty.
+function recategorizePending(db, dataOwnerId) {
+  const rows = db.prepare("SELECT * FROM email_inbox WHERE user_id = ? AND status = 'pending'").all(dataOwnerId);
+  let moved = 0;
+  for (const row of rows) {
+    if (!row.parsed_json) continue;
+    const tx = JSON.parse(row.parsed_json);
+    const account = tx.account_id != null
+      ? db.prepare('SELECT id, account_number FROM accounts WHERE id = ?').get(tx.account_id)
+      : null;
+    const { categoryId, subcategory_id, confident } = categorize(db, dataOwnerId, tx, account);
+    if (confident) {
+      insertTx(db, dataOwnerId, tx, categoryId, row.external_id, subcategory_id);
+      db.prepare("UPDATE email_inbox SET status = 'imported' WHERE id = ?").run(row.id);
+      moved++;
+    } else if (categoryId !== row.suggested_category_id) {
+      db.prepare('UPDATE email_inbox SET suggested_category_id = ? WHERE id = ?').run(categoryId, row.id);
+    }
+  }
+  return moved;
+}
+
+module.exports = { ingestEmail, releaseHeldCard, categorize, recategorizePending };

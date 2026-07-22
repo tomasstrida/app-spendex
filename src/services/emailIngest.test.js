@@ -293,3 +293,57 @@ test('result pending nese inboxId', () => {
   assert.ok(row);
   cleanup(db, tmp);
 });
+
+test('interní převod s PŘEJMENOVANOU kategorií (type=4, „Převody interní") → imported, ne pending', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'tom@example.com')").run();
+  // Kategorie interních převodů NENÍ jménem „Převody" (seed default), ale přejmenovaná.
+  // Identita drží na type=4 → L0 se musí trefit i tak.
+  db.prepare("INSERT INTO categories (id, user_id, name, type) VALUES (5, 1, 'Převody interní', 4)").run();
+  db.prepare("INSERT INTO categories (id, user_id, name) VALUES (6, 1, 'Ostatní')").run();
+  db.prepare("INSERT INTO accounts (id, user_id, name, account_number, role) VALUES (10, 1, 'Společný', '1679014023/3030', 'spending')").run();
+  const { ingestEmail } = require('./emailIngest');
+  const r = ingestEmail(db, { userEmail: 'tom@example.com', fromHeader: 'info@airbank.cz', text: INTERNAL });
+  const tx = db.prepare("SELECT * FROM transactions WHERE user_id = 1").get();
+  const inboxCount = db.prepare("SELECT COUNT(*) c FROM email_inbox").get();
+  cleanup(db, tmp);
+  assert.equal(r.status, 'imported');
+  assert.equal(tx.category_id, 5, 'zařadí přes type=4, ne přes hardcoded název „Převody"');
+  assert.equal(inboxCount.c, 0);
+});
+
+test('recategorizePending: dřív uvázlý interní převod se po zavedení type=4 zařadí', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'tom@example.com')").run();
+  db.prepare("INSERT INTO categories (id, user_id, name, type) VALUES (5, 1, 'Převody interní', 4)").run();
+  db.prepare("INSERT INTO categories (id, user_id, name) VALUES (6, 1, 'Ostatní')").run();
+  // Simulace uvázlé fronty: převod na vlastní účet zůstal pending se suggested=NULL.
+  const parsed = JSON.stringify({ amount: -5000, currency: 'CZK', date: '2026-07-20', description: 'Tomáš Střída', note: '', place: null, counterparty_account: '1679014023/3030', account_id: null });
+  db.prepare("INSERT INTO email_inbox (user_id, raw_text, parsed_json, external_id, suggested_category_id, status) VALUES (1, '', ?, 'stuck-1', NULL, 'pending')").run(parsed);
+  const { recategorizePending } = require('./emailIngest');
+  const n1 = recategorizePending(db, 1);
+  const n2 = recategorizePending(db, 1); // idempotence — podruhé už nic
+  const tx = db.prepare("SELECT * FROM transactions WHERE user_id = 1").get();
+  const inbox = db.prepare("SELECT status FROM email_inbox WHERE external_id = 'stuck-1'").get();
+  cleanup(db, tmp);
+  assert.equal(n1, 1);
+  assert.equal(n2, 0);
+  assert.equal(tx.category_id, 5);
+  assert.equal(inbox.status, 'imported');
+});
+
+test('recategorizePending: platba, co je pořád nejistá, zůstává pending', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'tom@example.com')").run();
+  db.prepare("INSERT INTO categories (id, user_id, name) VALUES (6, 1, 'Ostatní')").run();
+  const parsed = JSON.stringify({ amount: -300, currency: 'CZK', date: '2026-07-20', description: 'NEZNÁMÝ ESHOP', note: '', place: null, counterparty_account: '2222222222/0800', account_id: null });
+  db.prepare("INSERT INTO email_inbox (user_id, raw_text, parsed_json, external_id, suggested_category_id, status) VALUES (1, '', ?, 'stuck-2', NULL, 'pending')").run(parsed);
+  const { recategorizePending } = require('./emailIngest');
+  const n = recategorizePending(db, 1);
+  const txCount = db.prepare("SELECT COUNT(*) c FROM transactions").get();
+  const inbox = db.prepare("SELECT status FROM email_inbox WHERE external_id = 'stuck-2'").get();
+  cleanup(db, tmp);
+  assert.equal(n, 0);
+  assert.equal(txCount.c, 0);
+  assert.equal(inbox.status, 'pending');
+});
