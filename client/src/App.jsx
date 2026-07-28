@@ -19,6 +19,7 @@ import AccountsPage from './pages/AccountsPage';
 import RulesPage from './pages/RulesPage';
 import FixedExpensesPage from './pages/FixedExpensesPage';
 import { PeriodProvider } from './contexts/PeriodContext';
+import { syncPush } from './push';
 
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
@@ -75,12 +76,24 @@ function SwNavigationBridge() {
   return null;
 }
 
+// Po přihlášení znovu ohlásí push odběr serveru. Server ho může zahodit (410 z Apple)
+// a zařízení by dál mlčky předpokládalo, že notifikace chodí.
+function PushResync() {
+  const { user } = useAuth();
+  useEffect(() => {
+    if (!user) return;
+    syncPush().catch(() => { /* offline nebo bez odběru — nevadí, zkusí se příště */ });
+  }, [user]);
+  return null;
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <PeriodProvider>
           <SwNavigationBridge />
+          <PushResync />
           <Routes>
             <Route path="/login"    element={<GuestOnly><LoginPage /></GuestOnly>} />
             <Route path="/register" element={<GuestOnly><RegisterPage /></GuestOnly>} />

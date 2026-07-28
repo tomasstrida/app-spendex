@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Trash2, ChevronDown } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatPeriod } from '../i18n';
-import { pushSupported, isStandalone, enablePush, disablePush, currentSubscription, sendTestPush } from '../push';
+import { pushSupported, isStandalone, enablePush, disablePush, currentSubscription, sendTestPush, fetchPushStatus, syncPush } from '../push';
+import { resolvePushState } from '../utils/pushStatus';
 import { isCelebrationSoundEnabled, setCelebrationSoundEnabled, playPopSound } from '../utils/celebrate';
 import { useAuth } from '../App';
 
@@ -291,7 +292,8 @@ export default function SettingsPage() {
   const [error, setError] = useState('');
   const [categories, setCategories] = useState([]);
   const [notifyScope, setNotifyScope] = useState('pending_only');
-  const [pushState, setPushState] = useState('unknown'); // 'on' | 'off' | 'denied' | 'unsupported'
+  const [pushState, setPushState] = useState('unknown'); // 'on' | 'off' | 'desync' | 'denied' | 'unsupported'
+  const [pushDevice, setPushDevice] = useState(null); // řádek z /api/push/status pro toto zařízení
   const [testMsg, setTestMsg] = useState('');
   const [celebSound, setCelebSound] = useState(isCelebrationSoundEnabled());
   const [household, setHousehold] = useState(null);
@@ -311,14 +313,30 @@ export default function SettingsPage() {
     });
   }, []);
 
-  useEffect(() => {
-    (async () => {
-      if (!pushSupported()) { setPushState('unsupported'); return; }
-      if (Notification.permission === 'denied') { setPushState('denied'); return; }
-      const sub = await currentSubscription();
-      setPushState(sub ? 'on' : 'off');
-    })();
-  }, []);
+  // Stav se určuje porovnáním prohlížeče se serverem — jinak by zařízení hlásilo
+  // „zapnuto" i ve chvíli, kdy server jeho odběr dávno zahodil a push mizí do prázdna.
+  async function refreshPushState() {
+    if (!pushSupported()) { setPushState('unsupported'); return; }
+    const sub = await currentSubscription();
+    const status = await fetchPushStatus();
+    const localEndpoint = sub ? sub.endpoint : null;
+    setPushState(resolvePushState({
+      supported: true,
+      permission: Notification.permission,
+      localEndpoint,
+      serverEndpoints: status ? status.subscriptions.map(s => s.endpoint) : null,
+    }));
+    setPushDevice(status && localEndpoint
+      ? status.subscriptions.find(s => s.endpoint === localEndpoint) || null
+      : null);
+  }
+  useEffect(() => { refreshPushState(); }, []);
+
+  async function handleReconnectPush() {
+    await syncPush();
+    await refreshPushState();
+    setTestMsg('');
+  }
 
   async function loadHousehold() {
     const r = await fetch('/api/household', { credentials: 'include' });
@@ -374,7 +392,7 @@ export default function SettingsPage() {
   async function handleEnablePush() {
     try {
       const r = await enablePush();
-      if (r === 'granted') { setPushState('on'); setTestMsg(''); }
+      if (r === 'granted') { await refreshPushState(); setTestMsg(''); }
       else if (r === 'denied') setPushState('denied');
       else if (r === 'unsupported') setPushState('unsupported');
     } catch (e) { setTestMsg(e.message); }
@@ -383,7 +401,8 @@ export default function SettingsPage() {
   async function handleDisablePush() {
     try {
       await disablePush();
-      setPushState('off');
+      await refreshPushState();
+      setPushDevice(null);
       setTestMsg('');
     } catch (e) {
       setTestMsg(e.message);
@@ -494,9 +513,27 @@ export default function SettingsPage() {
               {t.settings.notifications_enable}
             </button>
           )}
+          {pushState === 'desync' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+              <p className="form-hint" style={{ margin: 0 }}>⚠️ {t.settings.notifications_desync}</p>
+              <div>
+                <button className="btn btn-primary" onClick={handleReconnectPush}>
+                  {t.settings.notifications_reconnect}
+                </button>
+              </div>
+            </div>
+          )}
           {pushState === 'on' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
               <p style={{ fontSize: 13, margin: 0 }}>{t.settings.notifications_enabled}</p>
+              {pushDevice && (
+                <p className="form-hint" style={{ margin: 0 }}>
+                  {pushDevice.last_success_at
+                    ? t.settings.notifications_last_delivery.replace('{when}', fmtUtc(pushDevice.last_success_at))
+                    : t.settings.notifications_never_delivered}
+                  {pushDevice.last_error && ` · ${t.settings.notifications_last_error.replace('{err}', pushDevice.last_error)}`}
+                </p>
+              )}
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn btn-secondary" onClick={handleDisablePush}>
                   {t.settings.notifications_disable}

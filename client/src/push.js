@@ -57,6 +57,39 @@ export async function enablePush() {
   return 'granted';
 }
 
+// Stav registrace podle serveru. Vrací null, když se server nepodařilo zeptat.
+export async function fetchPushStatus() {
+  try {
+    const r = await fetch('/api/push/status', { credentials: 'include' });
+    if (!r.ok) return null;
+    return r.json(); // { count, subscriptions: [{ endpoint, last_success_at, last_error, ... }] }
+  } catch (_e) {
+    return null;
+  }
+}
+
+// Samoopravný resync: server může odběr zahodit (410 z Apple) a prohlížeč se to nikdy nedozví.
+// Při každém startu proto lokální subscription znovu ohlásíme — /subscribe je idempotentní.
+// Vrací true, když se odběr na server poslal.
+export async function syncPush() {
+  if (!pushSupported()) return false;
+  if (Notification.permission !== 'granted') return false;
+  const sub = await currentSubscription();
+  if (!sub) return false;
+  const json = sub.toJSON();
+  try {
+    const r = await fetch('/api/push/subscribe', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
+    });
+    return r.ok;
+  } catch (_e) {
+    return false;
+  }
+}
+
 export async function disablePush() {
   const sub = await currentSubscription();
   if (sub) {

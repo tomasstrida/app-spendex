@@ -18,11 +18,17 @@ async function sendToUser(db, userId, payload, client) {
     const sub = { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } };
     try {
       await sender.sendNotification(sub, body);
+      db.prepare(`UPDATE push_subscriptions
+                  SET last_success_at = datetime('now'), last_error = NULL, last_error_at = NULL
+                  WHERE id = ?`).run(s.id);
     } catch (err) {
       if (err && (err.statusCode === 404 || err.statusCode === 410)) {
         db.prepare('DELETE FROM push_subscriptions WHERE id = ?').run(s.id);
       } else {
-        console.error('[push] odeslání selhalo:', err && err.message);
+        const msg = `${err && err.statusCode ? err.statusCode + ': ' : ''}${(err && err.message) || 'neznámá chyba'}`;
+        console.error('[push] odeslání selhalo:', msg);
+        db.prepare(`UPDATE push_subscriptions SET last_error = ?, last_error_at = datetime('now') WHERE id = ?`)
+          .run(msg, s.id);
       }
     }
   }

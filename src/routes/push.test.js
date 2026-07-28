@@ -77,3 +77,29 @@ test('POST /api/push/test bez zařízení → ok, sent:0', async () => {
   assert.equal(j.ok, true);
   assert.equal(j.sent, 0);
 });
+
+test('GET /api/push/status vrací zařízení uživatele včetně stavu doručení', async () => {
+  const { app, db, tmp } = freshApp();
+  db.prepare(`INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent, last_success_at)
+              VALUES (1, 'https://x/ep1', 'k', 'a', 'iPhone', '2026-07-28 05:10:08')`).run();
+  const { server, base } = await listen(app);
+  const r = await fetch(`${base}/api/push/status`);
+  const j = await r.json();
+  server.close(); cleanup(db, tmp);
+  assert.equal(j.count, 1);
+  assert.equal(j.subscriptions[0].endpoint, 'https://x/ep1');
+  assert.equal(j.subscriptions[0].last_success_at, '2026-07-28 05:10:08');
+  assert.equal(j.subscriptions[0].user_agent, 'iPhone');
+});
+
+test('GET /api/push/status nevrací zařízení jiného uživatele', async () => {
+  const { app, db, tmp } = freshApp();
+  db.prepare("INSERT INTO users (id, email) VALUES (2, 'b@c.cz')").run();
+  db.prepare("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (2, 'https://x/cizi', 'k', 'a')").run();
+  const { server, base } = await listen(app);
+  const r = await fetch(`${base}/api/push/status`);
+  const j = await r.json();
+  server.close(); cleanup(db, tmp);
+  assert.equal(j.count, 0);
+  assert.deepEqual(j.subscriptions, []);
+});

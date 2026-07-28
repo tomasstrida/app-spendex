@@ -48,6 +48,34 @@ test('410 z push služby → subscription se smaže', async () => {
   assert.equal(cnt, 0);
 });
 
+test('úspěšné odeslání zapíše last_success_at a vyčistí last_error', async () => {
+  const { db, tmp } = freshDb();
+  seedUser(db, 'pending_only');
+  db.prepare("UPDATE push_subscriptions SET last_error = 'stará chyba', last_error_at = '2026-01-01 00:00:00' WHERE user_id = 1").run();
+  const fakeClient = { sendNotification: async () => ({ statusCode: 201 }) };
+  const { sendToUser } = require('./pushNotify');
+  await sendToUser(db, 1, { title: 'T', body: 'B', url: '/import' }, fakeClient);
+  const row = db.prepare("SELECT last_success_at, last_error, last_error_at FROM push_subscriptions WHERE user_id = 1").get();
+  cleanup(db, tmp);
+  assert.ok(row.last_success_at, 'last_success_at má být vyplněno');
+  assert.equal(row.last_error, null);
+  assert.equal(row.last_error_at, null);
+});
+
+test('selhání jiné než 404/410 zapíše last_error a odběr nechá být', async () => {
+  const { db, tmp } = freshDb();
+  seedUser(db, 'pending_only');
+  const fakeClient = { sendNotification: async () => { const e = new Error('VAPID mismatch'); e.statusCode = 403; throw e; } };
+  const { sendToUser } = require('./pushNotify');
+  await sendToUser(db, 1, { title: 'T', body: 'B', url: '/import' }, fakeClient);
+  const row = db.prepare("SELECT last_error, last_error_at, last_success_at FROM push_subscriptions WHERE user_id = 1").get();
+  cleanup(db, tmp);
+  assert.ok(row, 'odběr nesmí být smazán');
+  assert.match(row.last_error, /VAPID mismatch/);
+  assert.ok(row.last_error_at, 'last_error_at má být vyplněno');
+  assert.equal(row.last_success_at, null);
+});
+
 test('notifyForResult: pending + scope off → nic neodešle', async () => {
   const { db, tmp } = freshDb();
   seedUser(db, 'off');

@@ -338,6 +338,10 @@ function initSchema() {
     'ALTER TABLE fixed_expenses ADD COLUMN valid_to TEXT',
     // „Revize zařazení": 1 = uživatel odložil (výdaj na neobvyklém účtu je OK/vyřešený)
     'ALTER TABLE transactions ADD COLUMN review_dismissed INTEGER NOT NULL DEFAULT 0',
+    // Zdravotní stav push odběru — bez toho selhává doručování tiše a nikdo se to nedozví.
+    'ALTER TABLE push_subscriptions ADD COLUMN last_success_at TEXT',
+    'ALTER TABLE push_subscriptions ADD COLUMN last_error TEXT',
+    'ALTER TABLE push_subscriptions ADD COLUMN last_error_at TEXT',
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* sloupec/index/tabulka již existuje nebo nelze aplikovat */ }
