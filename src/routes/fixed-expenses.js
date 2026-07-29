@@ -28,7 +28,7 @@ router.get('/', requireAuth, (req, res) => {
 
 // POST /api/fixed-expenses
 router.post('/', requireAuth, writeLimiter, (req, res) => {
-  const { name, amount, note, sort_order, match_pattern, match_counterparty_account, amount_min, amount_max, frequency_months, valid_from, valid_to } = req.body;
+  const { name, amount, note, sort_order, match_pattern, match_counterparty_account, amount_min, amount_max, frequency_months, valid_from, valid_to, include_transfers } = req.body;
   if (!name || amount == null) return res.status(400).json({ error: 'Název a částka jsou povinné.' });
   const pattern = match_pattern && match_pattern.trim() ? match_pattern.trim() : null;
   const cpParsed = parseAccountNumberField(match_counterparty_account, 'Číslo účtu příjemce');
@@ -45,9 +45,9 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
   if (vt.error) return res.status(400).json({ error: vt.error });
   if (vf.value && vt.value && vf.value > vt.value) return res.status(400).json({ error: '„Platí od" nesmí být později než „Platí do".' });
   const result = db.prepare(
-    'INSERT INTO fixed_expenses (user_id, name, amount, note, sort_order, match_pattern, match_counterparty_account, amount_min, amount_max, frequency_months, valid_from, valid_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO fixed_expenses (user_id, name, amount, note, sort_order, match_pattern, match_counterparty_account, amount_min, amount_max, frequency_months, valid_from, valid_to, include_transfers) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).run(req.dataUserId, name.trim(), parseFloat(amount), note || null, sort_order ?? 0,
-    pattern, cpAccount, min, max, freq, vf.value, vt.value);
+    pattern, cpAccount, min, max, freq, vf.value, vt.value, include_transfers ? 1 : 0);
   res.status(201).json(db.prepare('SELECT * FROM fixed_expenses WHERE id = ?').get(result.lastInsertRowid));
 });
 
@@ -55,7 +55,7 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
 router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
   const row = db.prepare('SELECT * FROM fixed_expenses WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
   if (!row) return res.status(404).json({ error: 'Záznam nenalezen.' });
-  const { name, amount, note, sort_order, match_pattern, match_counterparty_account, amount_min, amount_max, frequency_months, valid_from, valid_to } = req.body;
+  const { name, amount, note, sort_order, match_pattern, match_counterparty_account, amount_min, amount_max, frequency_months, valid_from, valid_to, include_transfers } = req.body;
   const min = amount_min !== undefined ? (amount_min != null ? parseFloat(amount_min) : null) : row.amount_min;
   const max = amount_max !== undefined ? (amount_max != null ? parseFloat(amount_max) : null) : row.amount_max;
   if (min != null && max != null && min > max) return res.status(400).json({ error: 'Min nesmí být větší než max.' });
@@ -80,7 +80,7 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
     vtValue = vt.value;
   }
   if (vfValue && vtValue && vfValue > vtValue) return res.status(400).json({ error: '„Platí od" nesmí být později než „Platí do".' });
-  db.prepare('UPDATE fixed_expenses SET name = ?, amount = ?, note = ?, sort_order = ?, match_pattern = ?, match_counterparty_account = ?, amount_min = ?, amount_max = ?, frequency_months = ?, valid_from = ?, valid_to = ? WHERE id = ?').run(
+  db.prepare('UPDATE fixed_expenses SET name = ?, amount = ?, note = ?, sort_order = ?, match_pattern = ?, match_counterparty_account = ?, amount_min = ?, amount_max = ?, frequency_months = ?, valid_from = ?, valid_to = ?, include_transfers = ? WHERE id = ?').run(
     name ?? row.name,
     amount != null ? parseFloat(amount) : row.amount,
     note !== undefined ? (note || null) : row.note,
@@ -89,6 +89,7 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
     min, max,
     frequency_months !== undefined ? Math.max(1, parseInt(frequency_months, 10) || 1) : row.frequency_months,
     vfValue, vtValue,
+    include_transfers !== undefined ? (include_transfers ? 1 : 0) : row.include_transfers,
     row.id
   );
   res.json(db.prepare('SELECT * FROM fixed_expenses WHERE id = ?').get(row.id));

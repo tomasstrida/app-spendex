@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import { t } from '../i18n';
 
-const EMPTY = { name: '', amount: '', amount_min: '', amount_max: '', frequency_months: 1, match_pattern: '', match_counterparty_account: '', note: '', valid_from: '', valid_to: '' };
+const EMPTY = { name: '', amount: '', amount_min: '', amount_max: '', frequency_months: 1, match_pattern: '', match_counterparty_account: '', note: '', valid_from: '', valid_to: '', include_transfers: false };
 
 export default function FixedExpensesPage() {
   const [items, setItems] = useState([]);
@@ -30,6 +30,7 @@ export default function FixedExpensesPage() {
       note: form.note || null,
       valid_from: form.valid_from || null,
       valid_to: form.valid_to || null,
+      include_transfers: form.include_transfers ? 1 : 0,
     };
     const url = editId ? `/api/fixed-expenses/${editId}` : '/api/fixed-expenses';
     const res = await fetch(url, {
@@ -56,6 +57,7 @@ export default function FixedExpensesPage() {
       note: it.note || '',
       valid_from: it.valid_from || '',
       valid_to: it.valid_to || '',
+      include_transfers: !!it.include_transfers,
     });
     setError('');
   };
@@ -175,8 +177,16 @@ export default function FixedExpensesPage() {
           onChange={e => setForm({ ...form, match_counterparty_account: e.target.value })}
         />
         <span className="text-muted" style={{ fontSize: 11 }}>
-          Vyplň aspoň jedno: text v popisu, nebo číslo účtu příjemce. Podle toho se pozná, jestli platba proběhla a v jaké částce. Číslo účtu je spolehlivější; když vyplníš obojí, platby se sčítají (užitečné, když tentýž výdaj chodí jednou převodem a jindy kartou). Interní převody mezi vlastními účty se do textové shody nepočítají.
+          Vyplň aspoň jedno: text v popisu, nebo číslo účtu příjemce. Podle toho se pozná, jestli platba proběhla a v jaké částce. Číslo účtu je spolehlivější; když vyplníš obojí, platby se sčítají (užitečné, když tentýž výdaj chodí jednou převodem a jindy kartou). Interní převody mezi vlastními účty se do textové shody nepočítají — pokud tahle platba převodem je, zaškrtni to níž.
         </span>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+          <input
+            type="checkbox"
+            checked={!!form.include_transfers}
+            onChange={e => setForm({ ...form, include_transfers: e.target.checked })}
+          />
+          Tato platba je převod mezi vlastními účty (účelová dotace)
+        </label>
         <input
           className="input"
           placeholder="Poznámka"

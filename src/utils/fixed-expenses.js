@@ -39,10 +39,13 @@ function fixedExpensesForPeriod(db, userId, period) {
   // kategorizace (apply-rules). Např. splátka půjčky má description jen
   // „Air Bank" a rozlišení nese poznámka; karetní platby mají obchodníka v place.
   //
-  // Interní převody (kategorie type=4) textová větev vynechává: platba
+  // Interní převody (kategorie type=4) textová větev standardně vynechává: platba
   // identifikovaná POUZE textem je skutečný výdaj, kdežto přesun mezi vlastními
-  // účty se identifikuje číslem účtu (větev níž). Bez toho sbíral řádek
-  // „T-Mobile" i převod s poznámkou „Dotace na T-mobile".
+  // účty se identifikuje číslem účtu. Bez toho sbíral řádek „T-Mobile" i převod
+  // s poznámkou „Dotace na T-mobile".
+  // Výjimka `include_transfers = 1`: řádek sám JE převodem (účelová dotace). Na
+  // jeden vlastní účet chodí víc dotací s různým účelem, takže je rozliší jen
+  // text v poznámce — číslo účtu by je sečetlo dohromady.
   const matchByDesc = db.prepare(`
     SELECT t.id, t.amount
     FROM transactions t
@@ -51,7 +54,7 @@ function fixedExpensesForPeriod(db, userId, period) {
       AND (t.description LIKE '%' || :pattern || '%'
         OR t.note LIKE '%' || :pattern || '%'
         OR t.place LIKE '%' || :pattern || '%')
-      AND COALESCE(c.type, 0) != 4
+      AND (:includeTransfers = 1 OR COALESCE(c.type, 0) != 4)
   `);
   // Číslo účtu se normalizuje v JS (SQLite neumí „číslice před /" čistě), proto
   // načteme odchozí transakce s protiúčtem v okně a porovnáme přes normCounterparty.
@@ -80,7 +83,8 @@ function fixedExpensesForPeriod(db, userId, period) {
       }
     }
     if (row.match_pattern) {
-      for (const t of matchByDesc.all(userId, windowStart, windowEnd, { pattern: row.match_pattern })) {
+      const params = { pattern: row.match_pattern, includeTransfers: row.include_transfers ? 1 : 0 };
+      for (const t of matchByDesc.all(userId, windowStart, windowEnd, params)) {
         hits.set(t.id, t.amount);
       }
     }

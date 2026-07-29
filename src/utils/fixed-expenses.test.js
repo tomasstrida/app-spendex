@@ -313,6 +313,27 @@ test('fixedExpensesForPeriod: větev přes číslo účtu interní převod zapo�
   assert.equal(m.actual, 14650);
 });
 
+// Opačný případ než předchozí test: řádek, který SÁM je interním převodem
+// (účelová dotace na vlastní účet). Na jeden účet chodí víc dotací s různým
+// účelem, takže je rozliší jen text v poznámce → include_transfers = 1.
+test('fixedExpensesForPeriod: include_transfers=1 pustí interní převody i do textové větve', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO categories (id, user_id, name, type) VALUES (110, 1, 'Převody interní', 4)").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_pattern, include_transfers) VALUES (1,'Dotace Nepravidelné',14650,14650,14650,'Dotace - Na nepravidelný účet',1)").run();
+  // tři účelové dotace na tentýž vlastní účet — rozlišuje je jen poznámka
+  db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description, note, counterparty_account) VALUES (1, 110, -14650, '2026-07-21', 'Tomáš Střída', 'Dotace - Na nepravidelný účet', '1679014074/3030')").run();
+  db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description, note, counterparty_account) VALUES (1, 110, -3000, '2026-07-22', 'Tomáš Střída', 'Dotace na T-mobile', '1679014074/3030')").run();
+  db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description, note, counterparty_account) VALUES (1, 110, -150, '2026-07-22', 'Tomáš Střída', 'Dotace - TV poplatek', '1679014074/3030')").run();
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const rows = fixedExpensesForPeriod(db, 1, '2026-07');
+  cleanup(db, tmp);
+  const m = rows.find(r => r.name === 'Dotace Nepravidelné');
+  assert.equal(m.tx_count, 1);
+  assert.equal(m.actual, 14650);
+  assert.equal(m.status, 'ok');
+});
+
 // Cíl platby není konzistentní (QR platba má protiúčet, karetní platba ho nemá).
 // Vyplněný účet i pattern se proto sčítají místo dřívějšího „účet přebíjí pattern".
 test('fixedExpensesForPeriod: účet a pattern se sčítají (union), společná shoda jen jednou', () => {
