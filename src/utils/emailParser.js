@@ -118,15 +118,21 @@ function parseEmailNotification(text) {
   // Bez něj by transakce neměla ŽÁDNÝ text → nešla by chytit textovým pravidlem
   // (L3 matchuje description+note+place) ani matcherem fixní platby na Schůzce.
   // Bere se první řádek bloku, který NENÍ ve tvaru „Klíč: hodnota" (tím odpadne
-  // Částka:/Datum …:/Karta:/Variabilní symbol:). Když kotva chybí, popis zůstane
-  // prázdný — parser radši nehádá, než aby vytáhl kus zdvořilostní omáčky.
+  // Částka:/Datum …:/Karta:/Variabilní symbol:) a který parser nezpracoval už
+  // strukturovaně („Odchozí/Příchozí úhrada … číslo …" → protiúčet výše; když
+  // z něj nevypadlo jméno protistrany, žádné tam není a holé číslo účtu by
+  // v Popisu jen duplikovalo sloupec `counterparty_account`).
+  // Když kotva chybí, popis zůstane prázdný — parser radši nehádá, než aby
+  // vytáhl kus zdvořilostní omáčky.
   if (!description) {
     const detailM = body.match(/Pro\s+[úu]plnost[^\n]*\n([\s\S]*?)K[óo]d\s+transakce:/i);
     if (detailM) {
       const line = detailM[1]
         .split('\n')
         .map(s => s.trim())
-        .find(s => s && !/^[^:,]{1,40}:\s/.test(s));
+        .find(s => s
+          && !/^[^:,]{1,40}:\s/.test(s)
+          && !/[úu]hrada\s+(?:na\s+[úu][cč]et|z\s+[úu][cč]tu|od)\b/i.test(s));
       if (line) description = line;
     }
   }

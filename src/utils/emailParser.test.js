@@ -272,3 +272,24 @@ Kód transakce: 164400000002
 Vaše Air Bank`);
   assert.equal(tx.description, '');
 });
+
+// Převod bez jména protistrany: hlavičkový řádek „Odchozí úhrada na účet číslo …"
+// parser zpracovává strukturovaně (protiúčet → counterparty_account). Když z něj
+// nevytáhne jméno, žádné tam není → generický fallback ho NESMÍ vzít jako popis,
+// jinak by v Popisu bylo duplicitní číslo účtu místo prázdna.
+test('fallback nebere strukturovaně zpracovaný řádek „úhrada na účet … číslo"', () => {
+  const tx = parseEmailNotification(`Dobrý den,
+
+zůstatek na účtu Společný číslo 1679014023/3030 se snížil o částku 230,00 CZK. Dostupný zůstatek k 25.07.2026 v 12:00 je 100,00 CZK.
+
+Pro úplnost uvádíme detaily této úhrady:
+
+Odchozí úhrada na účet číslo 201220675/0600
+Částka: 230,00 CZK
+Datum zaúčtování: 25.07.2026
+Kód transakce: 164400000003
+
+Vaše Air Bank`);
+  assert.equal(tx.counterparty_account, '201220675/0600');
+  assert.equal(tx.description, '');
+});
