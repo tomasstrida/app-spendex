@@ -170,12 +170,12 @@ export default function FixedExpensesPage() {
         />
         <input
           className="input"
-          placeholder="Číslo účtu příjemce (volitelné, má přednost)"
+          placeholder="Číslo účtu příjemce (volitelné)"
           value={form.match_counterparty_account}
           onChange={e => setForm({ ...form, match_counterparty_account: e.target.value })}
         />
         <span className="text-muted" style={{ fontSize: 11 }}>
-          Vyplň aspoň jedno: text v popisu, nebo číslo účtu příjemce. Podle toho se pozná, jestli platba proběhla a v jaké částce. Číslo účtu je spolehlivější a má přednost.
+          Vyplň aspoň jedno: text v popisu, nebo číslo účtu příjemce. Podle toho se pozná, jestli platba proběhla a v jaké částce. Číslo účtu je spolehlivější; když vyplníš obojí, platby se sčítají (užitečné, když tentýž výdaj chodí jednou převodem a jindy kartou). Interní převody mezi vlastními účty se do textové shody nepočítají.
         </span>
         <input
           className="input"

@@ -38,18 +38,25 @@ function fixedExpensesForPeriod(db, userId, period) {
   // Pattern se hledá v description + note + place — stejně jako L3 textová
   // kategorizace (apply-rules). Např. splátka půjčky má description jen
   // „Air Bank" a rozlišení nese poznámka; karetní platby mají obchodníka v place.
+  //
+  // Interní převody (kategorie type=4) textová větev vynechává: platba
+  // identifikovaná POUZE textem je skutečný výdaj, kdežto přesun mezi vlastními
+  // účty se identifikuje číslem účtu (větev níž). Bez toho sbíral řádek
+  // „T-Mobile" i převod s poznámkou „Dotace na T-mobile".
   const matchByDesc = db.prepare(`
-    SELECT COALESCE(SUM(ABS(amount)), 0) AS actual, COUNT(*) AS tx_count
-    FROM transactions
-    WHERE user_id = ? AND amount < 0 AND date >= ? AND date <= ?
-      AND (description LIKE '%' || :pattern || '%'
-        OR note LIKE '%' || :pattern || '%'
-        OR place LIKE '%' || :pattern || '%')
+    SELECT t.id, t.amount
+    FROM transactions t
+    LEFT JOIN categories c ON c.id = t.category_id
+    WHERE t.user_id = ? AND t.amount < 0 AND t.date >= ? AND t.date <= ?
+      AND (t.description LIKE '%' || :pattern || '%'
+        OR t.note LIKE '%' || :pattern || '%'
+        OR t.place LIKE '%' || :pattern || '%')
+      AND COALESCE(c.type, 0) != 4
   `);
   // Číslo účtu se normalizuje v JS (SQLite neumí „číslice před /" čistě), proto
   // načteme odchozí transakce s protiúčtem v okně a porovnáme přes normCounterparty.
   const outgoingWithCp = db.prepare(`
-    SELECT amount, counterparty_account
+    SELECT id, amount, counterparty_account
     FROM transactions
     WHERE user_id = ? AND amount < 0 AND date >= ? AND date <= ?
       AND counterparty_account IS NOT NULL
@@ -61,26 +68,29 @@ function fixedExpensesForPeriod(db, userId, period) {
     if (!hasMatcher) return row;  // po validaci nenastane; bezpečný fallback
     const freq = row.frequency_months > 0 ? row.frequency_months : 1;
     const windowStart = getPeriodDates(billingDay, shiftPeriod(period, -(freq - 1))).start;
-    // Číslo účtu příjemce má přednost před textovým patternem.
-    let m;
+    // Obě větve se SČÍTAJÍ (dřív číslo účtu pattern přebíjelo). Důvod: cíl platby
+    // nebývá konzistentní — tentýž měsíční výdaj přijde jednou jako převod
+    // s protiúčtem, jindy jako platba kartou, která protiúčet vůbec nemá.
+    // Dedup přes tx.id, ať se transakce sedící na obojí nepočítá dvakrát.
+    const hits = new Map();
     if (row.match_counterparty_account) {
       const target = normCounterparty(row.match_counterparty_account);
-      let actual = 0, tx_count = 0;
       for (const t of outgoingWithCp.all(userId, windowStart, windowEnd)) {
-        if (target && normCounterparty(t.counterparty_account) === target) {
-          actual += Math.abs(t.amount);
-          tx_count += 1;
-        }
+        if (target && normCounterparty(t.counterparty_account) === target) hits.set(t.id, t.amount);
       }
-      m = { actual, tx_count };
-    } else {
-      m = matchByDesc.get(userId, windowStart, windowEnd, { pattern: row.match_pattern });
     }
+    if (row.match_pattern) {
+      for (const t of matchByDesc.all(userId, windowStart, windowEnd, { pattern: row.match_pattern })) {
+        hits.set(t.id, t.amount);
+      }
+    }
+    const actual = [...hits.values()].reduce((sum, a) => sum + Math.abs(a), 0);
+    const tx_count = hits.size;
     return {
       ...row,
-      actual: m.actual,
-      tx_count: m.tx_count,
-      status: paymentStatus(row.amount_min, row.amount_max, m.actual, m.tx_count),
+      actual,
+      tx_count,
+      status: paymentStatus(row.amount_min, row.amount_max, actual, tx_count),
     };
   });
 

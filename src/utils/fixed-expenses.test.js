@@ -276,3 +276,57 @@ test('fixedExpensesForPeriod: ukončený řádek se nevrací a nevzniká z jeho 
   cleanup(db, tmp);
   assert.equal(rows.length, 0);
 });
+
+// Textový matcher nesmí sbírat interní převody: „Dotace na T-mobile" (přesun mezi
+// vlastními účty) nafukovala řádek T-Mobile o 3 000 Kč a shazovala ho do mismatch.
+// Platba identifikovaná POUZE textem = skutečný výdaj; převody se identifikují
+// číslem účtu (viz následující test).
+test('fixedExpensesForPeriod: textový pattern nezapočítá interní převod (kategorie type=4)', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO categories (id, user_id, name, type) VALUES (110, 1, 'Převody interní', 4), (5, 1, 'Pravidelné platby', 1)").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_pattern) VALUES (1,'T-Mobile',2580,2500,2650,'T-Mobile')").run();
+  db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description) VALUES (1, 5, -2579.9, '2026-07-16', 'T-Mobile CZ Praha 4')").run();
+  db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description, note) VALUES (1, 110, -3000, '2026-07-22', 'Tomáš Střída', 'Dotace na T-mobile')").run();
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const rows = fixedExpensesForPeriod(db, 1, '2026-07');
+  cleanup(db, tmp);
+  const m = rows.find(r => r.name === 'T-Mobile');
+  assert.equal(m.tx_count, 1);
+  assert.equal(m.actual, 2579.9);
+  assert.equal(m.status, 'ok');
+});
+
+// Protipól: fixní platba, která JE interním převodem (dotace na vlastní účet), se
+// identifikuje číslem účtu — tam se převody započítat musí.
+test('fixedExpensesForPeriod: větev přes číslo účtu interní převod započítá', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO categories (id, user_id, name, type) VALUES (110, 1, 'Převody interní', 4)").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_counterparty_account) VALUES (1,'Dotace Nepravidelné',14650,14650,14650,'1679014074/3030')").run();
+  db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account) VALUES (1, 110, -14650, '2026-07-05', 'Tomáš Střída', '1679014074/3030')").run();
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const rows = fixedExpensesForPeriod(db, 1, '2026-07');
+  cleanup(db, tmp);
+  const m = rows.find(r => r.name === 'Dotace Nepravidelné');
+  assert.equal(m.tx_count, 1);
+  assert.equal(m.actual, 14650);
+});
+
+// Cíl platby není konzistentní (QR platba má protiúčet, karetní platba ho nemá).
+// Vyplněný účet i pattern se proto sčítají místo dřívějšího „účet přebíjí pattern".
+test('fixedExpensesForPeriod: účet a pattern se sčítají (union), společná shoda jen jednou', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_pattern, match_counterparty_account) VALUES (1,'T-Mobile',2580,5000,5300,'T-Mobile','19-2235210247/0800')").run();
+  // QR platba: sedí na účet i na pattern → nesmí se počítat dvakrát
+  db.prepare("INSERT INTO transactions (user_id, amount, date, description, counterparty_account) VALUES (1, -2581.96, '2026-07-05', 'T-Mobile Czech Republic a.s.', '19-2235210247/0800')").run();
+  // karetní platba: protiúčet nemá, chytá ji jen pattern
+  db.prepare("INSERT INTO transactions (user_id, amount, date, description, place) VALUES (1, -2579.9, '2026-07-16', 'T-Mobile CZ Praha 4', 'T-Mobile CZ Praha 4')").run();
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const rows = fixedExpensesForPeriod(db, 1, '2026-07');
+  cleanup(db, tmp);
+  const m = rows.find(r => r.name === 'T-Mobile');
+  assert.equal(m.tx_count, 2);
+  assert.equal(Math.round(m.actual * 100) / 100, 5161.86);
+});
