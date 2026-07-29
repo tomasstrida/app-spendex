@@ -73,6 +73,9 @@ module.exports = {
     { pattern: 'Nordic Telecom', category: 'Pravidelné platby' },
     { pattern: 'ČESKÁ TELEVIZE', category: 'Pravidelné platby' },
     { pattern: 'TV poplatek', category: 'Pravidelné platby' },
+    // Inkasní splátka půjčky (e-mail bez protiúčtu, popis „Splátka půjčky Půjčka N")
+    // — bez čísla půjčky, ať pattern pokryje všechny běžící půjčky.
+    { pattern: 'Splátka půjčky', category: 'Pravidelné platby' },
     // Digitální předplatné → Licence (Typ 2, roční)
     { pattern: 'OPENAI', category: 'Licence' },
     { pattern: 'Google Workspace', category: 'Licence' },

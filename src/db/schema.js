@@ -407,6 +407,20 @@ function initSchema() {
       }
     }
   }
+
+  // Doplnění pravidla „Splátka půjčky → Pravidelné platby" i uživatelům, kteří už
+  // sadu pravidel mají (seed výše běží jen pro prázdnou sadu, takže nové patterny
+  // se existující instalaci nikdy nepřesypou). Idempotentní — hlídá si duplicitu.
+  try {
+    const catFor = db.prepare("SELECT id FROM categories WHERE user_id = ? AND name = 'Pravidelné platby'");
+    const hasRule = db.prepare("SELECT 1 FROM category_rules WHERE user_id = ? AND pattern = 'Splátka půjčky'");
+    const addRule = db.prepare("INSERT INTO category_rules (user_id, category_id, pattern) VALUES (?, ?, 'Splátka půjčky')");
+    for (const u of db.prepare('SELECT id FROM users').all()) {
+      if (hasRule.get(u.id)) continue;
+      const cat = catFor.get(u.id);
+      if (cat) addRule.run(u.id, cat.id);
+    }
+  } catch { /* tabulky/kategorie ještě neexistují při prvním běhu – ignoruj */ }
 }
 
 module.exports = { initSchema };

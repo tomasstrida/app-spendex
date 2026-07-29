@@ -203,3 +203,72 @@ test('korekce blokace: merchant s vnitřní čárkou se zachová celý', () => {
   assert.equal(tx.description, 'DEKUJEME, ROHLIK.CZ, Prague 8');
   assert.equal(tx.tx_type, 'Korekce blokace');
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Generický fallback: platby bez protiúčtu (inkaso, splátka půjčky, poplatek).
+// AirBank u nich neposílá řádek „úhrada na účet … číslo" ani „Platba kartou v …",
+// jen holý popisný řádek v bloku detailu → bez fallbacku zůstal popis prázdný,
+// transakce spadla do review fronty a nešla spárovat ani textovým pravidlem,
+// ani fixní platbou na Schůzce (obě matchují description+note+place).
+// ─────────────────────────────────────────────────────────────────────────────
+const LOAN_PAYMENT = `Dobrý den,
+
+zůstatek na účtu Tom - OSVC číslo 1679014031/3030 se snížil o částku 15 000,00 CZK. Dostupný zůstatek k 22.07.2026 v 00:58 je 23 617,19 CZK.
+
+Pro úplnost uvádíme detaily této úhrady:
+
+Splátka půjčky Půjčka 1
+Částka: 15 000,00 CZK
+Datum zaúčtování: 22.07.2026
+Kód transakce: 164468245922
+
+Nechceme, aby Vás naše upozornění jakkoliv obtěžovala.
+
+Vaše Air Bank`;
+
+test('splátka půjčky (inkaso bez protiúčtu): popisný řádek detailu → description', () => {
+  const tx = parseEmailNotification(LOAN_PAYMENT);
+  assert.equal(tx.description, 'Splátka půjčky Půjčka 1');
+  assert.equal(tx.amount, -15000);
+  assert.equal(tx.direction, 'Odchozí');
+  assert.equal(tx.date, '2026-07-22');
+  assert.equal(tx.source_account, '1679014031/3030');
+  assert.equal(tx.external_id, '164468245922');
+  assert.equal(tx.counterparty_account, null);
+});
+
+test('fallback přeskočí řádky „Klíč: hodnota" a nebere text mimo blok detailu', () => {
+  // Blok detailu začíná řádky s dvojtečkou → fallback nesmí sáhnout na „Dobrý den,"
+  // ani na závěrečný text; popisný řádek je až za nimi.
+  const tx = parseEmailNotification(`Dobrý den,
+
+zůstatek na účtu Společný číslo 1679014023/3030 se snížil o částku 349,00 CZK. Dostupný zůstatek k 10.07.2026 v 08:00 je 100,00 CZK.
+
+Pro úplnost uvádíme detaily této úhrady:
+
+Částka: 349,00 CZK
+Poplatek za vedení účtu
+Datum zaúčtování: 10.07.2026
+Kód transakce: 164400000001
+
+Vaše Air Bank`);
+  assert.equal(tx.description, 'Poplatek za vedení účtu');
+});
+
+test('fallback se NEuplatní u kartové platby (place má přednost)', () => {
+  const tx = parseEmailNotification(CARD);
+  assert.equal(tx.description, tx.place);
+  assert.notEqual(tx.description, '');
+});
+
+test('bez bloku „Pro úplnost" zůstane description prázdný (žádné hádání)', () => {
+  const tx = parseEmailNotification(`Dobrý den,
+
+zůstatek na účtu Společný číslo 1679014023/3030 se snížil o částku 12,00 CZK. Dostupný zůstatek k 10.07.2026 v 08:00 je 100,00 CZK.
+
+Datum zaúčtování: 10.07.2026
+Kód transakce: 164400000002
+
+Vaše Air Bank`);
+  assert.equal(tx.description, '');
+});

@@ -107,3 +107,30 @@ test('seed: idempotentní — druhý initSchema() nepřidá duplicity', () => {
 
   assert.equal(countAfterSecond, countAfterFirst, 'Druhý initSchema() nesmí přidat duplicitní pravidla');
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test 4: doplnění nového pravidla uživateli, který už sadu pravidel má.
+// Seed block běží jen pro uživatele s PRÁZDNOU sadou → nová pravidla by se
+// existující instalaci nikdy nepřesypala. Proto samostatná idempotentní migrace.
+// ─────────────────────────────────────────────────────────────────────────────
+test('migrace: „Splátka půjčky" se doplní i uživateli, který už pravidla má', () => {
+  const db = freshDb();
+  const { initSchema } = require('./schema');
+
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'loan@x.cz')").run();
+  db.prepare("INSERT INTO categories (user_id, name) VALUES (1, 'Pravidelné platby')").run();
+  const catId = db.prepare("SELECT id FROM categories WHERE user_id = 1").get().id;
+  // Uživatel už jedno pravidlo má → seed block ho přeskočí
+  db.prepare('INSERT INTO category_rules (user_id, category_id, pattern) VALUES (1, ?, ?)').run(catId, 'T-Mobile');
+
+  initSchema();
+
+  const rows = db.prepare("SELECT * FROM category_rules WHERE user_id = 1 AND pattern = 'Splátka půjčky'").all();
+  assert.equal(rows.length, 1, 'Pravidlo Splátka půjčky musí být doplněno právě jednou');
+  assert.equal(rows[0].category_id, catId);
+
+  // Druhý běh nesmí přidat duplicitu
+  initSchema();
+  const after = db.prepare("SELECT COUNT(*) AS n FROM category_rules WHERE user_id = 1 AND pattern = 'Splátka půjčky'").get().n;
+  assert.equal(after, 1, 'Migrace musí být idempotentní');
+});

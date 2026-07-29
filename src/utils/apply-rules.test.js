@@ -107,3 +107,10 @@ test('pravidlo bez subcategory → subcategory_id null', () => {
   const out = applyRules({ description: 'NĚCO', amount: -100 }, acc('9999'), rules);
   assert.equal(out.subcategory_id, null);
 });
+
+// Splátka půjčky přichází jen jako e-mailová notifikace bez protiúčtu — popis nese
+// řádek „Splátka půjčky <název>". Pattern je bez čísla půjčky, aby pokryl Půjčka 1..N.
+test('L3 Splátka půjčky → Pravidelné platby', () => {
+  const tx = { counterparty_account: '', ab_category: '', description: 'Splátka půjčky Půjčka 1', note: '', amount: -15000 };
+  assert.equal(applyRules(tx, acc('1679014031/3030'), rules).category, 'Pravidelné platby');
+});

@@ -112,6 +112,25 @@ function parseEmailNotification(text) {
   // ať Popis nezobrazuje "účel · jméno příjemce".
   if (!description) description = place || payerMsg || payeeMsg || '';
 
+  // Poslední fallback — platby bez protiúčtu (inkaso, splátka půjčky, poplatek):
+  // AirBank u nich neposílá ani „úhrada na účet … číslo", ani „Platba kartou v …",
+  // jen holý popisný řádek v bloku „Pro úplnost uvádíme detaily této úhrady:".
+  // Bez něj by transakce neměla ŽÁDNÝ text → nešla by chytit textovým pravidlem
+  // (L3 matchuje description+note+place) ani matcherem fixní platby na Schůzce.
+  // Bere se první řádek bloku, který NENÍ ve tvaru „Klíč: hodnota" (tím odpadne
+  // Částka:/Datum …:/Karta:/Variabilní symbol:). Když kotva chybí, popis zůstane
+  // prázdný — parser radši nehádá, než aby vytáhl kus zdvořilostní omáčky.
+  if (!description) {
+    const detailM = body.match(/Pro\s+[úu]plnost[^\n]*\n([\s\S]*?)K[óo]d\s+transakce:/i);
+    if (detailM) {
+      const line = detailM[1]
+        .split('\n')
+        .map(s => s.trim())
+        .find(s => s && !/^[^:,]{1,40}:\s/.test(s));
+      if (line) description = line;
+    }
+  }
+
   // Datum: primárně "Datum zaúčtování", fallback "Datum provedení" (kartové platby), fallback z hlavičky "k 07.06.2026 v ..."
   const date =
     parseCzDate((body.match(/Datum zaú[cč]tování:\s*([\d.]+)/i) || [])[1]) ||
