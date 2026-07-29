@@ -293,3 +293,23 @@ Vaše Air Bank`);
   assert.equal(tx.counterparty_account, '201220675/0600');
   assert.equal(tx.description, '');
 });
+
+// Protipól předchozího testu: „úhrada od" se vyskytuje i uprostřed normálního
+// popisu (odměny, úroky od banky). Vyloučení se proto váže na konkrétní shodu
+// regexu protistrany, ne na volný text — jinak by se tenhle popis zahodil.
+test('fallback vezme popisný řádek obsahující „úhrada od" bez čísla účtu', () => {
+  const tx = parseEmailNotification(`Dobrý den,
+
+zůstatek na účtu Společný číslo 1679014023/3030 se zvýšil o částku 24,50 CZK. Dostupný zůstatek k 08.06.2026 v 09:00 je 100,00 CZK.
+
+Pro úplnost uvádíme detaily této úhrady:
+
+Odměny za placení - úhrada od Air Bank
+Částka: 24,50 CZK
+Datum zaúčtování: 08.06.2026
+Kód transakce: 164400000004
+
+Vaše Air Bank`);
+  assert.equal(tx.description, 'Odměny za placení - úhrada od Air Bank');
+  assert.equal(tx.counterparty_account, null);
+});

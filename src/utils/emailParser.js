@@ -122,6 +122,9 @@ function parseEmailNotification(text) {
   // strukturovaně („Odchozí/Příchozí úhrada … číslo …" → protiúčet výše; když
   // z něj nevypadlo jméno protistrany, žádné tam není a holé číslo účtu by
   // v Popisu jen duplikovalo sloupec `counterparty_account`).
+  // Vyloučení se váže na KONKRÉTNÍ shodu `cpM`, ne na volný text — dřívější
+  // varianta hledala jen „úhrada od/na účet" a zbytečně zahodila i popisné
+  // řádky jako „Odměny za placení - úhrada od Air Bank".
   // Když kotva chybí, popis zůstane prázdný — parser radši nehádá, než aby
   // vytáhl kus zdvořilostní omáčky.
   if (!description) {
@@ -132,7 +135,7 @@ function parseEmailNotification(text) {
         .map(s => s.trim())
         .find(s => s
           && !/^[^:,]{1,40}:\s/.test(s)
-          && !/[úu]hrada\s+(?:na\s+[úu][cč]et|z\s+[úu][cč]tu|od)\b/i.test(s));
+          && !(cpM && s.includes(cpM[0])));
       if (line) description = line;
     }
   }
