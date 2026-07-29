@@ -240,13 +240,9 @@ export default function ReportPage() {
     fixedExpenses,
     budgetsType1: budgets,
     byCategory,
-    variablePoolFunded: stats?.variable_pool_funded || 0,
   });
   const totalDiff    = Math.round(totalIncome - totalPlanned);
-  const variablePoolFunded = stats?.variable_pool_funded || 0;
 
-  // Account numbers used in bilance row links (musí sedět s recurring.js v backendu)
-  const VARIABLE_ACCOUNT_NUM = '1679014074/3030';
   const typ1CatIds = byCategory.filter(c => c.type === 1).map(c => c.id).join(',');
   const typ3CatIds = byCategory.filter(c => c.type === 3).map(c => c.id).join(',');
   function txLink(extra) {
@@ -308,15 +304,9 @@ export default function ReportPage() {
                 </Link>
               );
             })()}
-            {variablePoolFunded > 0 && (
-              <Link to={txLink(`counterparty=${VARIABLE_ACCOUNT_NUM}&direction=out`)}
-                className="report-bilance-row"
-                style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
-                title="Součet plateb z Hlavního účtu na Nepravidelné v období. Pool, ze kterého se platí roční výdaje.">
-                <span>Dotace na nepravidelné</span>
-                <span>− {formatCurrency(variablePoolFunded)}</span>
-              </Link>
-            )}
+            {/* Řádek „Dotace na nepravidelné" odstraněn: dotace na Nepravidelné je
+                definovaná fixní platba, takže už je v součtu Fixních plateb výš.
+                Samostatný řádek počítaný z hardcoded čísla účtu ji přičítal podruhé. */}
             <Link to={txLink(typ1CatIds ? `category_ids=${typ1CatIds}&spending_only=1` : 'spending_only=1')}
               className="report-bilance-row"
               style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}

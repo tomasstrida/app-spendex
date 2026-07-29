@@ -12,7 +12,7 @@ export default function SavingsPage() {
   usePeriodKeys();
   const [periodStart, setPeriodStart] = useState(null);
   const [periodEnd, setPeriodEnd] = useState(null);
-  const [stats, setStats] = useState(null);            // savings + by_category + variable_pool_funded
+  const [stats, setStats] = useState(null);            // savings + by_category
   const [incomeSources, setIncomeSources] = useState([]);
   const [fixedExpenses, setFixedExpenses] = useState([]);
   const [budgets, setBudgets] = useState([]);           // Typ 1
@@ -45,7 +45,6 @@ export default function SavingsPage() {
     fixedExpenses,
     budgetsType1: budgets,
     byCategory: stats?.by_category || [],
-    variablePoolFunded: stats?.variable_pool_funded || 0,
   });
 
   function txLink(extra) {

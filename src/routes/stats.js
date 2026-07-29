@@ -128,17 +128,6 @@ router.get('/overview', requireAuth, (req, res) => {
     }),
   };
 
-  // Dotace Nepravidelné: součet odchozích plateb z Hlavního účtu na účet Nepravidelné v období
-  const variablePoolDotace = db.prepare(`
-    SELECT COALESCE(SUM(ABS(t.amount)), 0) AS amount
-    FROM transactions t
-    JOIN accounts a ON a.id = t.account_id
-    WHERE t.user_id = ? AND t.amount < 0
-      AND t.date >= ? AND t.date <= ?
-      AND a.account_number = ?
-      AND t.counterparty_account LIKE ? || '%'
-  `).get(req.dataUserId, start, end, mainAccount, variableAccount);
-
   // Jednotlivé položky drahých věcí (Typ 3) v zobrazeném období – seznam transakcí.
   // Stejný SPENDING_FILTER jako součet „Drahé věci celkem" (by_category), aby seznam
   // seděl na součet — jinak sem padaly i drahé věci z ignorovaných účtů, které se
@@ -165,7 +154,6 @@ router.get('/overview', requireAuth, (req, res) => {
     monthly_trend: trend,
     savings,
     reserve,
-    variable_pool_funded: variablePoolDotace.amount,
     expensive_items: expensiveItems,
     accounting,
   });

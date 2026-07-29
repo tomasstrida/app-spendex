@@ -6,24 +6,28 @@ export function fixedActualTotal(fixedExpenses) {
   );
 }
 
-// „Na spořicí" = přebytek za období = příjmy minus všechny výdaje (fixní, dotace na
-// nepravidelné, měsíční, drahé věci). Kolik by mělo jít na spoření. Skutečné pohyby
-// na spořicím účtu se NEpočítají — Schůzka je plánovací, pohyby jsou v Transakcích.
-export function surplusToSavings({ totalIncome, totalFixed, variablePoolFunded, totalType1, totalType3 }) {
-  return totalIncome - totalFixed - variablePoolFunded - totalType1 - totalType3;
+// „Na spořicí" = přebytek za období = příjmy minus výdaje (fixní, měsíční, drahé
+// věci). Kolik by mělo jít na spoření. Skutečné pohyby na spořicím účtu se
+// NEpočítají — Schůzka je plánovací, pohyby jsou v Transakcích.
+//
+// Dotace na účet „Nepravidelné" tu dřív byla čtvrtou položkou, počítaná ze všech
+// odchozích plateb na hardcoded číslo účtu. Teď do bilance vstupuje jen jako
+// definovaná fixní platba: jinak by se stejný přesun počítal dvakrát a bilance
+// by měla vstup, který není nikde v konfiguraci vidět.
+export function surplusToSavings({ totalIncome, totalFixed, totalType1, totalType3 }) {
+  return totalIncome - totalFixed - totalType1 - totalType3;
 }
 
 // Jediná pravda pro plánovaný přebytek Schůzky. Skládá mezisoučty z API odpovědí
-// (income, fixed-expenses, budgets typ 1, stats.by_category typ 3, variable_pool_funded)
-// a vrátí je i s výsledným přebytkem. Používá Schůzka (ReportPage) i stránka
-// Spořicí účet (SavingsPage) — aby „plán" na obou seděl na stejné číslo.
+// (income, fixed-expenses, budgets typ 1, stats.by_category typ 3) a vrátí je
+// i s výsledným přebytkem. Používá Schůzka (ReportPage) i stránka Spořicí účet
+// (SavingsPage) — aby „plán" na obou seděl na stejné číslo.
 // Vstup `budgetsType1` musí být budgets už přefiltrované na typ 1 (jako v ReportPage).
 export function computeMeetingSurplus({
   incomeSources = [],
   fixedExpenses = [],
   budgetsType1 = [],
   byCategory = [],
-  variablePoolFunded = 0,
 } = {}) {
   // Striktní whitelist: do bilance vstupují jen ručně aliasované zdroje (id != null).
   const totalIncome = incomeSources
@@ -34,6 +38,6 @@ export function computeMeetingSurplus({
   const totalType3 = byCategory
     .filter(c => c.type === 3 && c.spent > 0)
     .reduce((s, c) => s + c.spent, 0);
-  const surplus = surplusToSavings({ totalIncome, totalFixed, variablePoolFunded, totalType1, totalType3 });
-  return { totalIncome, totalFixed, totalType1, totalType3, variablePoolFunded, surplus };
+  const surplus = surplusToSavings({ totalIncome, totalFixed, totalType1, totalType3 });
+  return { totalIncome, totalFixed, totalType1, totalType3, surplus };
 }

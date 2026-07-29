@@ -21,20 +21,28 @@ test('fixedActualTotal: mix proběhlých a neproběhlých', () => {
   assert.equal(fixedActualTotal(rows), 41576);
 });
 
-test('surplusToSavings: přebytek = příjmy − 4 výdaje (bez pohybů na spořicím)', () => {
+test('surplusToSavings: přebytek = příjmy − 3 výdaje (bez pohybů na spořicím)', () => {
   const surplus = surplusToSavings({
-    totalIncome: 182000, totalFixed: 44653, variablePoolFunded: 5000,
+    totalIncome: 182000, totalFixed: 44653,
     totalType1: 34210, totalType3: 5400,
   });
-  assert.equal(surplus, 182000 - 44653 - 5000 - 34210 - 5400);
+  assert.equal(surplus, 182000 - 44653 - 34210 - 5400);
 });
 
 test('surplusToSavings: záporný přebytek (výdaje přesáhly příjmy)', () => {
   const surplus = surplusToSavings({
-    totalIncome: 50000, totalFixed: 44653, variablePoolFunded: 5000,
+    totalIncome: 50000, totalFixed: 44653,
     totalType1: 34210, totalType3: 5400,
   });
   assert.ok(surplus < 0);
+});
+
+// Dotace na Nepravidelné byla samostatnou položkou bilance počítanou z hardcoded
+// čísla účtu. Teď se do bilance dostane jen jako definovaná fixní platba, takže
+// se stejný přesun nepočítá dvakrát a bilance nemá skryté vstupy.
+test('surplusToSavings: variablePoolFunded se ignoruje (dotace patří do fixních plateb)', () => {
+  const base = { totalIncome: 100000, totalFixed: 20000, totalType1: 10000, totalType3: 0 };
+  assert.equal(surplusToSavings({ ...base, variablePoolFunded: 17800 }), 70000);
 });
 
 test('computeMeetingSurplus: složí mezisoučty a přebytek stejně jako Schůzka', () => {
@@ -55,14 +63,12 @@ test('computeMeetingSurplus: složí mezisoučty a přebytek stejně jako Schůz
       { type: 3, spent: 5400 },
       { type: 4, spent: 999 },         // účetní ignorováno
     ],
-    variablePoolFunded: 5000,
   });
   assert.equal(r.totalIncome, 182000);
   assert.equal(r.totalFixed, 44653);
   assert.equal(r.totalType1, 34210);
   assert.equal(r.totalType3, 5400);
-  assert.equal(r.variablePoolFunded, 5000);
-  assert.equal(r.surplus, 182000 - 44653 - 5000 - 34210 - 5400);
+  assert.equal(r.surplus, 182000 - 44653 - 34210 - 5400);
 });
 
 test('computeMeetingSurplus: do příjmů jdou jen aliasované zdroje (id != null)', () => {
@@ -75,7 +81,6 @@ test('computeMeetingSurplus: do příjmů jdou jen aliasované zdroje (id != nul
     fixedExpenses: [],
     budgetsType1: [],
     byCategory: [],
-    variablePoolFunded: 0,
   });
   assert.equal(r.totalIncome, 100000);
   assert.equal(r.surplus, 100000);
@@ -90,7 +95,6 @@ test('computeMeetingSurplus: typ 3 se počítá jen když spent > 0', () => {
       { type: 3, spent: 0 },
       { type: 3, spent: 3200 },
     ],
-    variablePoolFunded: 0,
   });
   assert.equal(r.totalType3, 3200);
 });
