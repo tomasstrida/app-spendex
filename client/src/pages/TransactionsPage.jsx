@@ -95,6 +95,8 @@ export default function TransactionsPage() {
   const [customTo, setCustomTo] = useState(urlTo || '');
   const [editId, setEditId] = useState(null);
   const [editData, setEditData] = useState({});
+  const [prepaidFor, setPrepaidFor] = useState(null);   // transakce, ze které zakládáme balíček
+  const [prepaidData, setPrepaidData] = useState({ name: '', category_id: '', units_total: '', valid_until: '' });
   const [editSubcats, setEditSubcats] = useState([]);
   const [addingSubcat, setAddingSubcat] = useState(false);
   const [newSubcatName, setNewSubcatName] = useState('');
@@ -447,6 +449,24 @@ export default function TransactionsPage() {
       ));
       setEditId(null);
     }
+  }
+
+  async function createPrepaid() {
+    const r = await fetch('/api/prepaid', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        transaction_id: prepaidFor.id,
+        name: prepaidData.name,
+        category_id: prepaidData.category_id,
+        units_total: prepaidData.units_total,
+        valid_until: prepaidData.valid_until || null,
+      }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) { alert(body.error || 'Balíček se nepodařilo založit.'); return; }
+    setPrepaidFor(null);
+    setEditId(null);
+    loadTransactions();   // stejné znovunačtení seznamu jako po CSV importu
   }
 
   const total = transactions.reduce((s, t) => s + t.amount, 0);
@@ -891,7 +911,62 @@ export default function TransactionsPage() {
                     />
                   </div>
                 </div>
+                {prepaidFor?.id === tx.id && (
+                  <div className="tx-edit-grid" style={{ marginTop: 8, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: 11 }}>Název balíčku</label>
+                      <input className="input" value={prepaidData.name}
+                        onChange={e => setPrepaidData(d => ({ ...d, name: e.target.value }))} />
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: 11 }}>Kategorie čerpání</label>
+                      <select className="input" value={prepaidData.category_id}
+                        onChange={e => setPrepaidData(d => ({ ...d, category_id: e.target.value }))}>
+                        <option value="">— vyber —</option>
+                        {categories.filter(c => c.type === 1 && !c.system_role).map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: 11 }}>Počet jednotek</label>
+                      <input className="input" type="number" min="1" step="1" value={prepaidData.units_total}
+                        onChange={e => setPrepaidData(d => ({ ...d, units_total: e.target.value }))}
+                        placeholder="10" style={{ maxWidth: 120 }} />
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: 11 }}>Platí do (nepovinné)</label>
+                      <input className="input" type="date" value={prepaidData.valid_until}
+                        onChange={e => setPrepaidData(d => ({ ...d, valid_until: e.target.value }))}
+                        style={{ maxWidth: 160 }} />
+                    </div>
+                    <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                      <button className="btn btn-ghost" type="button" onClick={() => setPrepaidFor(null)}>Zrušit balíček</button>
+                      <button className="btn btn-primary" type="button"
+                        disabled={!prepaidData.category_id || !(parseFloat(prepaidData.units_total) > 0)}
+                        onClick={createPrepaid}>Založit balíček</button>
+                    </div>
+                    <div className="text-muted" style={{ gridColumn: '1 / -1', fontSize: 11 }}>
+                      Platba se přesune do kategorie „Nákup předplacených balíčků" a v měsíčních
+                      rozpočtech se projeví až podle odtikaných jednotek.
+                    </div>
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+                  <button className="btn btn-ghost" type="button"
+                    disabled={!(tx.amount < 0)}
+                    title={tx.amount < 0 ? 'Z této platby udělat předplacený balíček' : 'Balíček lze založit jen z výdaje'}
+                    onClick={() => {
+                      setPrepaidFor(tx);
+                      setPrepaidData({
+                        name: tx.description || 'Předplacený balíček',
+                        category_id: tx.category_id || '',
+                        units_total: '',
+                        valid_until: '',
+                      });
+                    }}>
+                    Předplacený balíček
+                  </button>
                   <button className="btn btn-ghost" onClick={() => setEditId(null)}>
                     <X size={14} /> Zrušit
                   </button>
