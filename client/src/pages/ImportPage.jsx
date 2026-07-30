@@ -207,6 +207,7 @@ function EmailInbox() {
   const [accounts, setAccounts] = useState([]);
   const [busy, setBusy] = useState(null);
   const [celebratingId, setCelebratingId] = useState(null);
+  const [appleReceipts, setAppleReceipts] = useState([]);
 
   // Mapy pro překlad čísel/id účtů na lidské názvy (řádek „z účtu → na účet").
   const accountNameMap = useMemo(() => buildAccountNameMap(accounts), [accounts]);
@@ -230,6 +231,15 @@ function EmailInbox() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  function loadAppleReceipts() {
+    return fetch('/api/apple-receipts?status=all')
+      .then(r => r.json())
+      .then(d => setAppleReceipts(d.receipts || []))
+      .catch(() => setAppleReceipts([]));
+  }
+
+  useEffect(() => { loadAppleReceipts(); }, []);
 
   // Scroll a zvýraznění položky při deep-link ?focus=<id> z push notifikace
   useEffect(() => {
@@ -284,6 +294,26 @@ function EmailInbox() {
     } finally { setBusy(null); }
   }
 
+  async function matchReceipt(receiptId, transactionId) {
+    const r = await fetch(`/api/apple-receipts/${receiptId}/match`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ transaction_id: transactionId }),
+    });
+    if (!r.ok) { alert((await r.json().catch(() => ({}))).error || 'Přiřazení se nezdařilo.'); return; }
+    loadAppleReceipts();
+  }
+
+  async function unmatchReceipt(receiptId) {
+    await fetch(`/api/apple-receipts/${receiptId}/unmatch`, { method: 'POST' });
+    loadAppleReceipts();
+  }
+
+  async function rejectReceipt(receiptId) {
+    if (!confirm('Zahodit tuhle fakturu?')) return;
+    await fetch(`/api/apple-receipts/${receiptId}`, { method: 'DELETE' });
+    loadAppleReceipts();
+  }
+
   // Řádek „odkud → kam" pro importovanou platbu. U převodu ukáže oba účty,
   // u karetního nákupu náš účet → obchodníka. Skryje se, když nevíme ani jednu stranu.
   function flowLine(tx) {
@@ -301,8 +331,9 @@ function EmailInbox() {
   const awaiting = items.filter(i => i.status === 'awaiting_card');
   const pending = items.filter(i => i.status === 'pending');
   const unparsed = items.filter(i => i.status === 'unparsed');
+  const activeReceipts = appleReceipts.filter(r => r.status !== 'rejected');
 
-  if (items.length === 0) return null;
+  if (items.length === 0 && activeReceipts.length === 0) return null;
 
   return (
     <section style={{ marginBottom: 24 }}>
@@ -421,6 +452,56 @@ function EmailInbox() {
               </pre>
             </details>
           ))}
+        </div>
+      )}
+
+      {activeReceipts.length > 0 && (
+        <div className="card">
+          <h3 className="section-title">
+            <Inbox size={14} /> Apple faktury ({activeReceipts.length})
+          </h3>
+          <div className="apple-receipt-list">
+            {activeReceipts.map(r => (
+              <div key={r.id} className="apple-receipt">
+                <div className="apple-receipt-head">
+                  <span>
+                    {r.receipt_date || 'bez data'}
+                    {r.is_refund ? ' · dobropis' : ''}
+                    {r.total_amount != null && ` · ${formatCurrency(r.total_amount)}`}
+                    {r.card_last4 && ` · karta ${r.card_last4}`}
+                  </span>
+                  <span className={`apple-receipt-status apple-receipt-status--${r.status}`}>
+                    {r.status === 'matched' ? 'spárováno'
+                      : r.status === 'pending' ? 'čeká na platbu'
+                      : r.status === 'ambiguous' ? 'nejednoznačné'
+                      : 'nerozpoznáno'}
+                  </span>
+                </div>
+                <div className="text-muted" style={{ fontSize: 12 }}>
+                  {(r.items || []).map(i => [i.app, i.description].filter(Boolean).join(' — ')).join(' + ')
+                    || 'bez rozpoznaných položek'}
+                </div>
+                {(r.status === 'pending' || r.status === 'ambiguous') && (
+                  <div className="apple-receipt-candidates">
+                    {(r.candidates || []).length === 0
+                      ? <span className="text-muted">Žádná odpovídající platba.</span>
+                      : (r.candidates || []).map(c => (
+                        <button key={c.id} className="btn btn-ghost btn-sm"
+                          onClick={() => matchReceipt(r.id, c.id)}>
+                          {c.date} · {formatCurrency(Math.abs(c.amount))}
+                        </button>
+                      ))}
+                  </div>
+                )}
+                <div className="apple-receipt-actions">
+                  {r.status === 'matched' && (
+                    <button className="btn btn-ghost btn-sm" onClick={() => unmatchReceipt(r.id)}>Odpojit</button>
+                  )}
+                  <button className="btn btn-ghost btn-sm" onClick={() => rejectReceipt(r.id)}>Zahodit</button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </section>

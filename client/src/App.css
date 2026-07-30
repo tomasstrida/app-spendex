@@ -1424,3 +1424,13 @@ a.report-subcat-row:hover { background: var(--bg2); }
 .prepaid-card-draw-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
 .prepaid-card-draw-form .form-group { margin: 0; }
 .prepaid-card-draw-form .form-label { font-size: 11px; }
+
+/* ── Apple faktury na stránce Import ─────────────────────────────────────── */
+.apple-receipt-list { display: flex; flex-direction: column; gap: 10px; }
+.apple-receipt { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+.apple-receipt-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.apple-receipt-status { font-size: 12px; }
+.apple-receipt-status--matched { color: var(--success); }
+.apple-receipt-status--ambiguous { color: #f59e0b; }
+.apple-receipt-candidates { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.apple-receipt-actions { display: flex; gap: 6px; margin-top: 8px; }
