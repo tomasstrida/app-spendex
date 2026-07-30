@@ -4,7 +4,7 @@ const rateLimit = require('express-rate-limit');
 const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
 const { getPeriodDates, getUserBillingDay } = require('../utils/period');
-const { unitAmount, packageSummary } = require('../utils/prepaid');
+const { unitAmount, drawAmount, packageSummary } = require('../utils/prepaid');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
@@ -91,6 +91,51 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
 
   const pkg = db.prepare('SELECT * FROM prepaid_packages WHERE id = ?').get(info.lastInsertRowid);
   res.status(201).json(withSummary(pkg, null));
+});
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function loadPackage(id, userId) {
+  return db.prepare('SELECT * FROM prepaid_packages WHERE id = ? AND user_id = ?').get(id, userId);
+}
+
+// POST /api/prepaid/:id/draws — odtiknutí jedné (nebo více) jednotek
+router.post('/:id/draws', requireAuth, writeLimiter, (req, res) => {
+  const pkg = loadPackage(req.params.id, req.dataUserId);
+  if (!pkg) return res.status(404).json({ error: 'Balíček nenalezen.' });
+
+  const units = req.body.units == null ? 1 : parseFloat(req.body.units);
+  if (!(units > 0)) return res.status(400).json({ error: 'Počet jednotek musí být kladné číslo.' });
+
+  const date = req.body.date || todayISO();
+  if (!DATE_RE.test(date)) return res.status(400).json({ error: 'Datum musí být ve formátu RRRR-MM-DD.' });
+
+  const existing = db.prepare('SELECT * FROM prepaid_draws WHERE package_id = ? AND user_id = ?')
+    .all(pkg.id, req.dataUserId);
+  const summary = packageSummary(pkg, existing);
+  if (units > summary.remaining_units) {
+    return res.status(400).json({ error: `V balíčku zbývá jen ${summary.remaining_units} jednotek.` });
+  }
+
+  db.prepare(`
+    INSERT INTO prepaid_draws (user_id, package_id, date, units, amount, note)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(req.dataUserId, pkg.id, date, units, drawAmount(pkg.unit_amount, units), req.body.note || null);
+
+  res.status(201).json(withSummary(loadPackage(pkg.id, req.dataUserId), null));
+});
+
+// DELETE /api/prepaid/draws/:id — oprava omylem zapsaného čerpání
+router.delete('/draws/:id', requireAuth, writeLimiter, (req, res) => {
+  const row = db.prepare('SELECT * FROM prepaid_draws WHERE id = ? AND user_id = ?')
+    .get(req.params.id, req.dataUserId);
+  if (!row) return res.status(404).json({ error: 'Čerpání nenalezeno.' });
+  db.prepare('DELETE FROM prepaid_draws WHERE id = ?').run(row.id);
+  res.json({ ok: true });
 });
 
 module.exports = router;

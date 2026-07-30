@@ -97,3 +97,78 @@ test('GET s period vraci jen cerpani daneho obdobi, zbytek pocita ze vsech', asy
   assert.equal(packages[0].drawn_units, 2, 'zbytek se pocita ze vsech cerpani');
   server.close();
 });
+
+async function draw(base, pkgId, body = {}) {
+  return fetch(`${base}/api/prepaid/${pkgId}/draws`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+test('POST draws zapise cerpani s cenou jednotky a posune zbytek', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const pkg = await (await createPackage(base)).json();
+  const r = await draw(base, pkg.id, { date: '2026-04-02' });
+  assert.equal(r.status, 201);
+  const updated = await r.json();
+  assert.equal(updated.drawn_units, 1);
+  assert.equal(updated.drawn_amount, 500);
+  assert.equal(updated.remaining_units, 9);
+  assert.equal(updated.draws[0].amount, 500);
+  server.close();
+});
+
+test('POST draws umi vice jednotek najednou', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const pkg = await (await createPackage(base)).json();
+  const updated = await (await draw(base, pkg.id, { units: 3, date: '2026-04-02' })).json();
+  assert.equal(updated.drawn_amount, 1500);
+  assert.equal(updated.remaining_units, 7);
+  server.close();
+});
+
+test('POST draws odmitne prekroceni zbyvajicich jednotek', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const pkg = await (await createPackage(base)).json();
+  await draw(base, pkg.id, { units: 9, date: '2026-04-02' });
+  const r = await draw(base, pkg.id, { units: 2, date: '2026-04-03' });
+  assert.equal(r.status, 400);
+  assert.match((await r.json()).error, /zbývá/i);
+  server.close();
+});
+
+test('POST draws odmitne nekladne jednotky a spatny format data', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const pkg = await (await createPackage(base)).json();
+  assert.equal((await draw(base, pkg.id, { units: 0 })).status, 400);
+  assert.equal((await draw(base, pkg.id, { date: '2. 4. 2026' })).status, 400);
+  server.close();
+});
+
+test('DELETE draws smaze cerpani a vrati zbytek', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const pkg = await (await createPackage(base)).json();
+  const afterDraw = await (await draw(base, pkg.id, { date: '2026-04-02' })).json();
+  const drawId = afterDraw.draws[0].id;
+  const r = await fetch(`${base}/api/prepaid/draws/${drawId}`, { method: 'DELETE' });
+  assert.equal(r.status, 200);
+  const n = db.prepare('SELECT COUNT(*) AS n FROM prepaid_draws').get().n;
+  assert.equal(n, 0);
+  server.close();
+});
+
+test('cerpani cizim uzivatelem neprojde', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const pkgId = db.prepare(`
+    INSERT INTO prepaid_packages (user_id, category_id, name, total_amount, units_total, unit_amount)
+    VALUES (2, 9, 'Cizi balicek', 1000, 2, 500)
+  `).run().lastInsertRowid;
+  assert.equal((await draw(base, pkgId, {})).status, 404);
+  server.close();
+});
