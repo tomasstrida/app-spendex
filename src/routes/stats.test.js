@@ -71,3 +71,72 @@ test('fáze A: reálná kategorie (typ 3) na ignorovaném účtu se počítá do
   assert.equal(stats.total_spent, 4000, 'total zahrne jen reálnou kategorii z ignored (ne Mimo systém, ne OSVC)');
   server.close();
 });
+
+test('fund_topup: outflow bere jen odchozí nohy z NE-fondového účtu, saldo hlídá párovou nohu', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type,system_role) VALUES (40,1,'Nestandardní dobití ročního budgetu',4,'fund_topup')").run();
+  const hlavni = db.prepare("INSERT INTO accounts (user_id,account_number,name,role,is_fund) VALUES (1,'100/3030','Hlavní','ignored',0)").run().lastInsertRowid;
+  const fond   = db.prepare("INSERT INTO accounts (user_id,account_number,name,role,is_fund) VALUES (1,'200/3030','Licence','spending',1)").run().lastInsertRowid;
+  // obě nohy jednoho převodu: odchozí z Hlavní (počítá se), příchozí na fond (ne)
+  db.prepare("INSERT INTO transactions (user_id,category_id,account_id,amount,date,description) VALUES (1,40,?,-10500,'2026-07-22','Tomáš Střída'),(1,40,?,10500,'2026-07-22','Tomáš Střída')").run(hlavni, fond);
+  // mimo období
+  db.prepare("INSERT INTO transactions (user_id,category_id,account_id,amount,date,description) VALUES (1,40,?,-999,'2026-06-15','Starý')").run(hlavni);
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-07`)).json();
+  assert.equal(stats.fund_topup.category_id, 40);
+  assert.equal(stats.fund_topup.name, 'Nestandardní dobití ročního budgetu');
+  assert.equal(stats.fund_topup.outflow, 10500);
+  assert.equal(stats.fund_topup.tx_count, 1);
+  assert.equal(stats.fund_topup.saldo, 0, 'obě nohy označené → saldo 0');
+  server.close();
+});
+
+test('fund_topup: chybějící párová noha se pozná na saldu', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type,system_role) VALUES (40,1,'Nestandardní dobití',4,'fund_topup')").run();
+  const hlavni = db.prepare("INSERT INTO accounts (user_id,account_number,name,role,is_fund) VALUES (1,'100/3030','Hlavní','ignored',0)").run().lastInsertRowid;
+  db.prepare("INSERT INTO transactions (user_id,category_id,account_id,amount,date,description) VALUES (1,40,?,-10500,'2026-07-22','Tomáš Střída')").run(hlavni);
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-07`)).json();
+  assert.equal(stats.fund_topup.outflow, 10500);
+  assert.equal(stats.fund_topup.saldo, -10500, 'jen jedna noha → saldo != 0');
+  server.close();
+});
+
+test('fund_topup: bez kategorie fund_topup vrací nuly a category_id null', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-07`)).json();
+  assert.equal(stats.fund_topup.category_id, null);
+  assert.equal(stats.fund_topup.outflow, 0);
+  server.close();
+});
+
+test('annual_off_fund: null dokud není fondový účet, pak roční výdaje mimo fond', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type) VALUES (50,1,'Y_Licence',2)").run();
+  const spol = db.prepare("INSERT INTO accounts (user_id,account_number,name,role,is_fund) VALUES (1,'300/3030','Společný','spending',0)").run().lastInsertRowid;
+  db.prepare("INSERT INTO transactions (user_id,category_id,account_id,amount,date,description) VALUES (1,50,?,-2253,'2026-07-15','ANTHROPIC')").run(spol);
+  const before = await (await fetch(`${base}/api/stats/overview?period=2026-07`)).json();
+  assert.equal(before.annual_off_fund, null, 'bez fondového účtu je řádek vypnutý');
+
+  const fond = db.prepare("INSERT INTO accounts (user_id,account_number,name,role,is_fund) VALUES (1,'200/3030','Licence','spending',1)").run().lastInsertRowid;
+  db.prepare("INSERT INTO transactions (user_id,category_id,account_id,amount,date,description) VALUES (1,50,?,-399,'2026-07-04','APPLE.COM')").run(fond);
+  const after = await (await fetch(`${base}/api/stats/overview?period=2026-07`)).json();
+  assert.equal(after.annual_off_fund.spent, 2253, 'jen výdaj z NE-fondového účtu');
+  assert.equal(after.annual_off_fund.tx_count, 1);
+  server.close();
+});
+
+test('annual_off_fund: respektuje SPENDING_FILTER (roční výdaj z OSVČ účtu se nepočítá)', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type) VALUES (50,1,'Y_Licence',2)").run();
+  db.prepare("INSERT INTO accounts (user_id,account_number,name,role,is_fund) VALUES (1,'200/3030','Licence','spending',1)").run();
+  const osvc = db.prepare("INSERT INTO accounts (user_id,account_number,name,role,is_fund) VALUES (1,'400/3030','Tom-OSVC','income',0)").run().lastInsertRowid;
+  db.prepare("INSERT INTO transactions (user_id,category_id,account_id,amount,date,description) VALUES (1,50,?,-5000,'2026-07-10','Něco z OSVČ')").run(osvc);
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-07`)).json();
+  assert.equal(stats.annual_off_fund.spent, 0);
+  server.close();
+});

@@ -143,6 +143,51 @@ router.get('/overview', requireAuth, (req, res) => {
     ORDER BY t.date DESC, t.id DESC
   `).all(req.dataUserId, start, end);
 
+  // ── Nestandardní dobití ročního budgetu (kategorie se system_role='fund_topup') ──
+  // Do bilance jde JEN odchozí noha z provozního účtu; příchozí noha na fondovém
+  // účtu by ji vyrušila. `saldo` napříč všemi účty je kontrola pro uživatele:
+  // když označí jen jednu nohu převodu, nevyjde 0 (sekce Účetní to ukáže s ⚠).
+  const topupCat = db.prepare(
+    "SELECT id, name FROM categories WHERE user_id = ? AND system_role = 'fund_topup'"
+  ).get(req.dataUserId);
+  let fundTopup = { category_id: null, name: null, outflow: 0, tx_count: 0, saldo: 0 };
+  if (topupCat) {
+    const o = db.prepare(`
+      SELECT COALESCE(SUM(-t.amount), 0) AS outflow, COUNT(t.id) AS tx_count
+      FROM transactions t
+      WHERE t.user_id = ? AND t.category_id = ? AND t.amount < 0
+        AND t.date >= ? AND t.date <= ?
+        AND NOT EXISTS (SELECT 1 FROM accounts fa WHERE fa.id = t.account_id AND fa.is_fund = 1)
+    `).get(req.dataUserId, topupCat.id, start, end);
+    const s = db.prepare(`
+      SELECT COALESCE(SUM(t.amount), 0) AS saldo
+      FROM transactions t
+      WHERE t.user_id = ? AND t.category_id = ? AND t.date >= ? AND t.date <= ?
+    `).get(req.dataUserId, topupCat.id, start, end);
+    fundTopup = {
+      category_id: topupCat.id, name: topupCat.name,
+      outflow: o.outflow, tx_count: o.tx_count, saldo: s.saldo,
+    };
+  }
+
+  // ── Roční výdaje (typ 2) zaplacené mimo fondový účet ──
+  // null = uživatel nemá označený ani jeden fondový účet; řádek by pak ukázal
+  // celé roční čerpání (každý účet by byl „mimo fond") a mátl, proto se skryje.
+  const hasFundAccount = db.prepare(
+    'SELECT 1 FROM accounts WHERE user_id = ? AND is_fund = 1 LIMIT 1'
+  ).get(req.dataUserId);
+  let annualOffFund = null;
+  if (hasFundAccount) {
+    annualOffFund = db.prepare(`
+      SELECT COALESCE(SUM(-t.amount), 0) AS spent, COUNT(t.id) AS tx_count
+      FROM transactions t
+      JOIN categories c ON c.id = t.category_id AND c.user_id = t.user_id
+      WHERE t.user_id = ? AND c.type = 2 AND t.date >= ? AND t.date <= ?
+        AND NOT EXISTS (SELECT 1 FROM accounts fa WHERE fa.id = t.account_id AND fa.is_fund = 1)
+        ${SPENDING_FILTER}
+    `).get(req.dataUserId, start, end);
+  }
+
   res.json({
     period: periodKey,
     period_start: start,
@@ -156,6 +201,8 @@ router.get('/overview', requireAuth, (req, res) => {
     reserve,
     expensive_items: expensiveItems,
     accounting,
+    fund_topup: fundTopup,
+    annual_off_fund: annualOffFund,
   });
 });
 
