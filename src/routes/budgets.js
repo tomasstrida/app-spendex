@@ -32,19 +32,31 @@ router.get('/', requireAuth, (req, res) => {
           AND t.category_id = db.category_id
           AND t.date >= ? AND t.date <= ?
           ${SPENDING_AND}
-      ), 0) as spent
+      ), 0) as spent,
+      COALESCE((
+        SELECT SUM(d.amount)
+        FROM prepaid_draws d
+        JOIN prepaid_packages p ON p.id = d.package_id AND p.user_id = d.user_id
+        WHERE d.user_id = db.user_id
+          AND p.category_id = db.category_id
+          AND d.date >= ? AND d.date <= ?
+      ), 0) as prepaid_spent
     FROM budgets db
     JOIN categories c ON c.id = db.category_id AND c.user_id = db.user_id
     LEFT JOIN budgets pb
       ON pb.category_id = db.category_id AND pb.user_id = db.user_id AND pb.month = ?
     WHERE db.user_id = ? AND db.month = 'default'
     ORDER BY c.name ASC
-  `).all(start, end, periodKey, req.dataUserId);
+  `).all(start, end, start, end, periodKey, req.dataUserId);
 
   // id pro frontend = override_id pokud existuje, jinak default_id
+  // `spent` = jen transakce (čte ho Schůzka i Spořicí účet — cash-flow).
+  // `budget_spent` = co se počítá proti měsíčnímu rozpočtu, tedy včetně čerpání
+  // předplacených balíčků. Rozpočtové zobrazení musí sáhnout po `budget_spent`.
   const budgets = rows.map(r => ({
     ...r,
     id: r.override_id ?? r.default_id,
+    budget_spent: r.spent + r.prepaid_spent,
   }));
 
   res.json({ period: periodKey, period_start: start, period_end: end, billing_day: billingDay, budgets });
