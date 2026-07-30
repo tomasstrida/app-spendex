@@ -1,0 +1,74 @@
+Return-path: <no_reply@email.apple.com>
+Original-recipient: rfc822;user@example.com
+Authentication-Results: dmarc.icloud.com; dmarc=pass header.from=email.apple.com
+Date: Tue, 30 Jun 2026 23:54:33 +0000 (GMT)
+From: Apple <no_reply@email.apple.com>
+To: user@example.com
+Message-ID: <1449835718.73930197.1782863673149@email.apple.com>
+Subject: Your invoice from Apple.
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+	boundary="----=_Part_73930195_879309248.1782863673149"
+X-Business-Group: iTunes
+X-Country: US
+
+------=_Part_73930195_879309248.1782863673149
+Content-Type: text/html; charset=UTF-8
+Content-Transfer-Encoding: QUOTED-PRINTABLE
+Content-Disposition: inline
+
+<html><head><meta name=3D"format-detection" content=3D"telephone=3Dno, date=
+=3Dno, address=3Dno, email=3Dno, url=3Dno"/><style data-emotion=3D"custom w=
+wmbjm qrj5ky 1ago99h">.custom-wwmbjm{margin:20px 0px;font-family:system-ui,=
+-apple-system,BlinkMacSystemFont,SF Pro,Segoe UI,Helvetica Neue,Helvetica,A=
+rial,sans-serif;color:rgb(51, 51, 51);line-height:23px;padding:20px 15px;}.=
+custom-qrj5ky{max-width:750px;margin:0 auto;}.custom-1ago99h{width:100%;}.c=
+ustom-k8mnj0{display:inline-block;font-weight:550;line-height:32px;margin:0=
+;font-size:32px;color:#333333;}.custom-460tp8{font-size:14px;color:#333333;=
+margin:0;display:inline-block;line-height:20px;margin-bottom:10px;}</style>=
+</head><body class=3D"custom-wwmbjm"><div lang=3D"en-gb" dir=3D"ltr" class=
+=3D"ltr custom-qrj5ky" id=3D"email_container"><div id=3D"header_section" cl=
+ass=3D"custom-1ago99h"><div class=3D"header custom-1p2cbqg"><div class=3D"h=
+eader__container custom-m31y3a"><img height=3D"24" src=3D"https://s.mzstati=
+c.com/email/modern/logo/apple-134-70x84.png" alt=3D"Apple"/></div><div clas=
+s=3D"header__container"><h1 class=3D"custom-k8mnj0">Invoice</h1></div></div=
+></div><div id=3D"body_section" class=3D"custom-6ffxnu"><div class=3D"billi=
+ng-information"><p class=3D"custom-460tp8">30 June 2026</p><div><p class=3D=
+"custom-3f947x">Sequence:</p><p class=3D"custom-p1rp1y">1-13922898234<br/><=
+/p></div><div><p class=3D"custom-3f947x">Order ID:</p><p class=3D"custom-p1=
+rp1y">MQ9BQ86WV5<br/></p></div><div><p class=3D"custom-3f947x">Document:</p=
+><p class=3D"custom-p1rp1y">778154882998<br/></p></div><div><p class=3D"cus=
+tom-3f947x">Apple Account:</p><p class=3D"custom-p1rp1y">user@example.com<b=
+r/></p></div></div><table width=3D"100%" class=3D"lockup subscription-locku=
+p__container custom-rgm23z"><tr class=3D"subscription-lockup"><td valign=3D=
+"top" class=3D"custom-omvd4k"><img height=3D"60" alt=3D"" src=3D"https://is=
+1-ssl.mzstatic.com/image/thumb/Purple211/v4/f9/4a/07/logo_youtube.png/120x0=
+w.jpg" class=3D"custom-1skwja4"/></td><td valign=3D"top" class=3D"subscript=
+ion-lockup__content custom-vc9uxc"><p class=3D"custom-vl9saf">YouTube</p><p=
+ class=3D"custom-1qg5v8v">YouTube Premium (Monthly)<br/></p><p class=3D"cus=
+tom-1qg5v8v">Renews 1 August 2026<br/></p></td><td valign=3D"top" class=3D"=
+subscription-lockup__bottom-text__col custom-i8xbl3"><p class=3D"custom-toq=
+qp6">269,00=C2=A0CZK<br/></p><p class=3D"custom-1meb76d"><span>Inclusive of=
+ VAT at 21=C2=A0%</span><span class=3D"custom-vr1cqx">46,69=C2=A0CZK</span>=
+</p></td></tr></table><div class=3D"payment-information custom-rqct8w"><h2 =
+class=3D"custom-eateds">Billing and Payment</h2><div><div class=3D"payment-=
+information__col payment-information__left custom-9urhlu"><p class=3D"custo=
+m-o951b6">Jan Novak</p><p class=3D"custom-o951b6">Ulice 1</p><p class=3D"cu=
+stom-o951b6">10000 Praha</p><p class=3D"custom-o951b6">Czechia</p></div><di=
+v class=3D"payment-information__col custom-9urhlu"><div class=3D"payment-in=
+formation__subtotal-group custom-1deqyu"><p class=3D"custom-1y5v3n3">Subtot=
+al<!-- --> </p><div class=3D"custom-ixybl9"><p class=3D"custom-1s7arqf">222=
+,31=C2=A0CZK<!-- --> </p></div><p class=3D"custom-1y5v3n3">VAT charged at 2=
+1=C2=A0%<!-- --> </p><div class=3D"custom-ixybl9"><p class=3D"custom-1s7arq=
+f">46,69=C2=A0CZK<!-- --> </p></div></div><hr class=3D"custom-pozur9"/><p c=
+lass=3D"custom-xbqerm">MasterCard =E2=80=A2=E2=80=A2=E2=80=A2=E2=80=A2 4225=
+<br/></p><div class=3D"custom-ixybl9"><p class=3D"custom-1gutsid">269,00=C2=
+=A0CZK<br/></p></div></div></div></div></div><div id=3D"footer_section" cla=
+ss=3D"custom-1jcan1v"><p class=3D"custom-1cfbe7l">You can turn off renewal =
+receipts to stop getting emails for each subscription renewal or payment.<b=
+r/></p><div class=3D"footer-copy custom-1q2yoq2"><p class=3D"body custom-kl=
+8fta">TM and =C2=A9 2026 Apple Distribution International Ltd., Hollyhill I=
+ndustrial Estate, Hollyhill, Cork, Ireland<br/></p><p class=3D"body custom-=
+kl8fta">Ireland VAT Reg No. IE9700053D<br/></p></div></div></div></body></h=
+tml>
+------=_Part_73930195_879309248.1782863673149--
