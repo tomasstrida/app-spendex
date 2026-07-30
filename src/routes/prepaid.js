@@ -66,6 +66,16 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
     return res.status(400).json({ error: 'Čerpání lze účtovat jen do měsíční kategorie (typ 1).' });
   }
 
+  // `prepaid_spent` v /api/budgets se dopočítává jen k řádkům, které mají
+  // výchozí budget (budgets.month='default') — bez něj by čerpání balíčku
+  // nikde v rozpočtu ani teploměru neviselo (viz nález review).
+  const hasDefaultBudget = db.prepare(
+    "SELECT 1 FROM budgets WHERE user_id = ? AND category_id = ? AND month = 'default'"
+  ).get(req.dataUserId, cat.id);
+  if (!hasDefaultBudget) {
+    return res.status(400).json({ error: 'Kategorie nemá nastavený měsíční rozpočet — čerpání by se nikde nezobrazilo. Nejdřív jí nastav výchozí budget.' });
+  }
+
   const purchaseCat = db.prepare(
     "SELECT id FROM categories WHERE user_id = ? AND system_role = 'prepaid_purchase'"
   ).get(req.dataUserId);
@@ -131,12 +141,16 @@ router.post('/:id/draws', requireAuth, writeLimiter, (req, res) => {
 });
 
 // DELETE /api/prepaid/draws/:id — oprava omylem zapsaného čerpání
+// Vrací aktuální stav balíčku (ne jen {ok:true}) — díky tomu má odpověď `.id`,
+// takže ji klient (PrepaidPackageCard.call) předá do onChanged() jako platný
+// balíček a nespletě si "smazáno čerpání" se "smazán balíček" (to hlásí jen
+// DELETE /api/prepaid/:id, jehož odpověď {ok:true} žádné `.id` nemá).
 router.delete('/draws/:id', requireAuth, writeLimiter, (req, res) => {
   const row = db.prepare('SELECT * FROM prepaid_draws WHERE id = ? AND user_id = ?')
     .get(req.params.id, req.dataUserId);
   if (!row) return res.status(404).json({ error: 'Čerpání nenalezeno.' });
   db.prepare('DELETE FROM prepaid_draws WHERE id = ?').run(row.id);
-  res.json({ ok: true });
+  res.json(withSummary(loadPackage(row.package_id, req.dataUserId), null));
 });
 
 // POST /api/prepaid/:id/close — uzavření balíčku, volitelně s doúčtováním zbytku
@@ -150,7 +164,10 @@ router.post('/:id/close', requireAuth, writeLimiter, (req, res) => {
   const summary = packageSummary(pkg, draws);
 
   db.transaction(() => {
-    if (req.body.write_off && rest > 0) {
+    // Práh 0,005 Kč: na plně vyčerpaném balíčku s nedělitelnou cenou jednotky
+    // (např. 1000 / 3) zbyde po SUM(amount) floating-point smetí typu 1e-14 —
+    // bez prahu by vzniklo fantomové čerpání "0× 0 Kč" v historii.
+    if (req.body.write_off && rest > 0.005) {
       db.prepare(`
         INSERT INTO prepaid_draws (user_id, package_id, date, units, amount, note)
         VALUES (?, ?, ?, ?, ?, 'Doúčtování zbytku při uzavření')

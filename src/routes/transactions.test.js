@@ -232,3 +232,115 @@ test('tx_ids nesmí prolomit izolaci uživatele', async () => {
   server.close();
   assert.equal((res.transactions || res).length, 0, 'cizí transakce se nesmí vrátit');
 });
+
+// ── Předplacené balíčky: zdrojová platba nesmí jít přeřadit zpátky ──────────
+// Balíček přesune transakci do technické kategorie a čerpání se počítá zvlášť
+// (prepaid_spent v /api/budgets). Kdyby šlo kategorii vrátit ručně, částka by
+// se sečetla s čerpáním podruhé (viz nález review).
+
+test('PATCH odmítne změnu category_id u transakce patřící k předplacenému balíčku', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const purchaseCatId = db.prepare(
+    "INSERT INTO categories (user_id, name, type, system_role) VALUES (1,'Nákup předplacených balíčků',4,'prepaid_purchase')"
+  ).run().lastInsertRowid;
+  const txId = db.prepare(
+    "INSERT INTO transactions (user_id, category_id, amount, date, description) VALUES (1,?,-5000,'2026-07-01','Fitness 10x')"
+  ).run(purchaseCatId).lastInsertRowid;
+  db.prepare(`
+    INSERT INTO prepaid_packages
+      (user_id, transaction_id, category_id, original_category_id, name, total_amount, units_total, unit_amount)
+    VALUES (1, ?, 5, 5, 'Fitness 10x', 5000, 10, 500)
+  `).run(txId);
+
+  const res = await fetch(`${base}/api/transactions/${txId}`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ category_id: 5 }),
+  });
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /balíčk/i);
+  const stored = db.prepare('SELECT category_id FROM transactions WHERE id = ?').get(txId);
+  assert.equal(stored.category_id, purchaseCatId, 'kategorie zůstala beze změny');
+  server.close();
+});
+
+test('PATCH odmítne i vynulování category_id (category_id: null) u transakce s balíčkem', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const purchaseCatId = db.prepare(
+    "INSERT INTO categories (user_id, name, type, system_role) VALUES (1,'Nákup předplacených balíčků',4,'prepaid_purchase')"
+  ).run().lastInsertRowid;
+  const txId = db.prepare(
+    "INSERT INTO transactions (user_id, category_id, amount, date, description) VALUES (1,?,-5000,'2026-07-01','Fitness 10x')"
+  ).run(purchaseCatId).lastInsertRowid;
+  db.prepare(`
+    INSERT INTO prepaid_packages
+      (user_id, transaction_id, category_id, original_category_id, name, total_amount, units_total, unit_amount)
+    VALUES (1, ?, 5, 5, 'Fitness 10x', 5000, 10, 500)
+  `).run(txId);
+
+  const res = await fetch(`${base}/api/transactions/${txId}`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ category_id: null }),
+  });
+  assert.equal(res.status, 400);
+  const stored = db.prepare('SELECT category_id FROM transactions WHERE id = ?').get(txId);
+  assert.equal(stored.category_id, purchaseCatId);
+  server.close();
+});
+
+test('PATCH povolí editaci jiných polí u transakce s balíčkem, když category_id v požadavku zůstává stejné', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const purchaseCatId = db.prepare(
+    "INSERT INTO categories (user_id, name, type, system_role) VALUES (1,'Nákup předplacených balíčků',4,'prepaid_purchase')"
+  ).run().lastInsertRowid;
+  const txId = db.prepare(
+    "INSERT INTO transactions (user_id, category_id, amount, date, description) VALUES (1,?,-5000,'2026-07-01','Fitness 10x')"
+  ).run(purchaseCatId).lastInsertRowid;
+  db.prepare(`
+    INSERT INTO prepaid_packages
+      (user_id, transaction_id, category_id, original_category_id, name, total_amount, units_total, unit_amount)
+    VALUES (1, ?, 5, 5, 'Fitness 10x', 5000, 10, 500)
+  `).run(txId);
+
+  const res = await fetch(`${base}/api/transactions/${txId}`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ note: 'zaplaceno kartou' }),
+  });
+  assert.equal(res.status, 200, 'bez skutečné změny kategorie PATCH projde');
+  const patched = await res.json();
+  assert.equal(patched.note, 'zaplaceno kartou');
+  server.close();
+});
+
+test('GET a PATCH vrací prepaid_package_id u transakce patřící k balíčku, jinak null', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const purchaseCatId = db.prepare(
+    "INSERT INTO categories (user_id, name, type, system_role) VALUES (1,'Nákup předplacených balíčků',4,'prepaid_purchase')"
+  ).run().lastInsertRowid;
+  const txId = db.prepare(
+    "INSERT INTO transactions (user_id, category_id, amount, date, description) VALUES (1,?,-5000,'2026-07-01','Fitness 10x')"
+  ).run(purchaseCatId).lastInsertRowid;
+  db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description) VALUES (1,5,-100,'2026-07-02','Jiná')").run();
+  const pkgId = db.prepare(`
+    INSERT INTO prepaid_packages
+      (user_id, transaction_id, category_id, original_category_id, name, total_amount, units_total, unit_amount)
+    VALUES (1, ?, 5, 5, 'Fitness 10x', 5000, 10, 500)
+  `).run(txId).lastInsertRowid;
+
+  const list = await (await fetch(`${base}/api/transactions`)).json();
+  const rows = list.transactions || list;
+  const withPkg = rows.find(r => r.id === txId);
+  const withoutPkg = rows.find(r => r.id !== txId);
+  assert.equal(withPkg.prepaid_package_id, pkgId);
+  assert.equal(withoutPkg.prepaid_package_id, null);
+
+  const patched = await (await fetch(`${base}/api/transactions/${txId}`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ note: 'x' }),
+  })).json();
+  assert.equal(patched.prepaid_package_id, pkgId, 'odznak přežije PATCH, který kategorii nemění');
+  server.close();
+});

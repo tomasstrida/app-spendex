@@ -133,10 +133,17 @@ function buildTxWhere(query) {
 router.get('/', requireAuth, (req, res) => {
   const { limit = 200, offset = 0 } = req.query;
   const { where, params } = buildTxWhere(req.query);
-  const query = `SELECT t.*, c.name as category_name, c.color as category_color, sc.name as subcategory_name
+  // LEFT JOIN na prepaid_packages přes indexovaný transaction_id — vrací jen
+  // id balíčku (žádné další sloupce), ať frontend může u zdrojové platby
+  // zobrazit odznak (viz PATCH blokace přeřazení kategorie o pár řádků výš
+  // v tomto souboru). Cena je jedno levé spojení s rovností na indexovaném
+  // sloupci, seznam se tím prakticky nezpomalí.
+  const query = `SELECT t.*, c.name as category_name, c.color as category_color, sc.name as subcategory_name,
+      pp.id as prepaid_package_id
     FROM transactions t
     LEFT JOIN categories c ON t.category_id = c.id
     LEFT JOIN subcategories sc ON t.subcategory_id = sc.id AND sc.user_id = t.user_id
+    LEFT JOIN prepaid_packages pp ON pp.transaction_id = t.id AND pp.user_id = t.user_id
     WHERE t.user_id = ?${where}
     ORDER BY t.date DESC, t.id DESC LIMIT ? OFFSET ?`;
   const rows = db.prepare(query).all(req.dataUserId, ...params, Number(limit), Number(offset));
@@ -243,6 +250,23 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
     if (!owned) return res.status(400).json({ error: 'Neplatná kategorie.' });
   }
 
+  // Zdrojová platba předplaceného balíčku sedí v technické kategorii
+  // (prepaid_purchase); čerpání se počítá zvlášť do budgetu cílové kategorie
+  // (viz budget_spent v /api/budgets). Přeřazení zpět by tu částku sečetlo
+  // s čerpáním podruhé (dvojí započtení v teploměru) — a i přeřazení na null
+  // by tichem vytratilo nákup z bilance Schůzky. Platí bez ohledu na status
+  // balíčku — i uzavřený balíček dál nese svá čerpání do rozpočtu.
+  // (Number(null) === 0, takže se pokus o vynulování kategorie chytí taky.)
+  if (category_id !== undefined && Number(category_id) !== tx.category_id) {
+    const pkg = db.prepare('SELECT id FROM prepaid_packages WHERE transaction_id = ? AND user_id = ?')
+      .get(tx.id, req.dataUserId);
+    if (pkg) {
+      return res.status(400).json({
+        error: 'Tato platba patří k předplacenému balíčku. Kategorii změníš zrušením balíčku (stránka Předplacené).',
+      });
+    }
+  }
+
   // subcategory_id: '' / undefined / null → null; jinak celé číslo, ověřené proti
   // vlastníkovi A výsledné (effective) kategorii transakce — viz ownsSubcategory.
   let subId = tx.subcategory_id;
@@ -278,7 +302,15 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
     subId,
     tx.id
   );
-  res.json(db.prepare('SELECT * FROM transactions WHERE id = ?').get(tx.id));
+  // prepaid_package_id v odpovědi drží klientský stav konzistentní s GET / —
+  // jinak by po prostém uložení poznámky odznak balíčku ze seznamu zmizel
+  // (klient si tělo PATCH spread-uje do řádku, viz TransactionsPage.jsx).
+  res.json(db.prepare(`
+    SELECT t.*, pp.id as prepaid_package_id
+    FROM transactions t
+    LEFT JOIN prepaid_packages pp ON pp.transaction_id = t.id AND pp.user_id = t.user_id
+    WHERE t.id = ?
+  `).get(tx.id));
 });
 
 // DELETE /api/transactions/:id

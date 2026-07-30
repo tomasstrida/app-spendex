@@ -5,11 +5,14 @@ import PrepaidPackageCard from '../components/PrepaidPackageCard';
 import { t } from '../i18n';
 
 export default function PrepaidPage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [packages, setPackages] = useState([]);
-  const [status, setStatus] = useState('active');
   const [loading, setLoading] = useState(true);
 
+  // Stav filtru žije v URL (ne v lokálním state), ať proklik typu
+  // `/prepaid?...&status=all` z Dashboardu (uzavřené balíčky s doúčtováním)
+  // převáží nad výchozím „active" a přežije i reload.
+  const status = searchParams.get('status') || 'active';
   const category = searchParams.get('category') || '';
   const period = searchParams.get('period') || '';
 
@@ -30,10 +33,14 @@ export default function PrepaidPage() {
     <Layout>
       <div className="page-header">
         <h1 className="page-title">{t.nav.prepaid}</h1>
-        <div className="month-nav">
+        <div className="prepaid-status-nav">
           {['active', 'closed', 'all'].map(s => (
             <button key={s} className={`btn ${status === s ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => setStatus(s)}>
+              onClick={() => setSearchParams(prev => {
+                const next = new URLSearchParams(prev);
+                next.set('status', s);
+                return next;
+              })}>
               {s === 'active' ? 'Aktivní' : s === 'closed' ? 'Uzavřené' : 'Vše'}
             </button>
           ))}

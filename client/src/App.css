@@ -1416,3 +1416,11 @@ a.report-subcat-row:hover { background: var(--bg2); }
 .prepaid-card-header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
 .prepaid-card-name { font-weight: 600; }
 .prepaid-card-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+
+/* Přepínač Aktivní/Uzavřené/Vše — vlastní třída, ať nesdílí mobilní pravidla
+   .month-nav (ta poslednímu .btn-ghost roztahují šířku na 100 %, což by tu
+   vytrhlo tlačítko "Vše" na samostatný široký řádek). */
+.prepaid-status-nav { display: flex; align-items: center; gap: 8px; }
+.prepaid-card-draw-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.prepaid-card-draw-form .form-group { margin: 0; }
+.prepaid-card-draw-form .form-label { font-size: 11px; }

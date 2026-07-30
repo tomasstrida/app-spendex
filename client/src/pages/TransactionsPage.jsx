@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Pencil, Trash2, Check, X, Columns3, Search, Download } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Pencil, Trash2, Check, X, Columns3, Search, Download, Lock } from 'lucide-react';
 import Layout from '../components/Layout';
 import { formatCurrency, formatPeriod, addPeriods, t } from '../i18n';
 import { usePeriod } from '../contexts/PeriodContext';
@@ -1016,7 +1016,9 @@ export default function TransactionsPage() {
                         <span
                           className="tx-cat-cell"
                           onClick={() => setCatEditId(tx.id)}
-                          title="Klikněte pro změnu kategorie"
+                          title={tx.prepaid_package_id
+                            ? 'Platba patří k předplacenému balíčku — kategorii lze změnit jen zrušením balíčku (stránka Předplacené)'
+                            : 'Klikněte pro změnu kategorie'}
                         >
                           {tx.category_name ? (
                             <span className="tx-cat-badge" style={{
@@ -1027,6 +1029,9 @@ export default function TransactionsPage() {
                             </span>
                           ) : (
                             <span className="tx-cat-empty">— přiřadit —</span>
+                          )}
+                          {tx.prepaid_package_id && (
+                            <Lock size={11} style={{ marginLeft: 4, verticalAlign: 'middle', opacity: 0.55 }} />
                           )}
                         </span>
                       )

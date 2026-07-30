@@ -204,6 +204,13 @@ router.get('/overview', requireAuth, (req, res) => {
   // ── Nákup předplacených balíčků ──
   // Skutečný odliv za období. Čerpání balíčku se do bilance NEpromítá (to je
   // rozpočtový pohled v /api/budgets), takže se nic nezapočte dvakrát.
+  // POZOR: záměrně BEZ SPENDING_FILTER a bez filtru na fondové účty (na rozdíl
+  // od `annualOffFund` výše) — platba za balíček je vždy jednorázový odliv
+  // vlastní kategorie, ne matcher přes fixní platby/roční kategorie, takže
+  // riziko dvojího započtení, kterému SPENDING_FILTER předchází jinde, tu
+  // nevzniká. Důsledek: balíček zaplacený z OSVČ účtu (mimo scope SPENDING_
+  // FILTER) se PŘESTO odečte od přebytku, i když jeho zdroj do příjmů
+  // nevstupuje — čistě výdajová strana bilance ho tedy vidí, příjmová ne.
   const prepaidCat = db.prepare(
     "SELECT id, name FROM categories WHERE user_id = ? AND system_role = 'prepaid_purchase'"
   ).get(req.dataUserId);

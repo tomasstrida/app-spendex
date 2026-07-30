@@ -388,6 +388,9 @@ function initSchema() {
     'CREATE INDEX IF NOT EXISTS idx_prepaid_pkg_user ON prepaid_packages(user_id, status)',
     'CREATE INDEX IF NOT EXISTS idx_prepaid_draws_pkg ON prepaid_draws(package_id)',
     'CREATE INDEX IF NOT EXISTS idx_prepaid_draws_date ON prepaid_draws(user_id, date)',
+    // Podporuje LEFT JOIN v GET/PATCH /api/transactions (odznak "patří k balíčku")
+    // a lookup podle transaction_id v routes/prepaid.js a transactions.js.
+    'CREATE INDEX IF NOT EXISTS idx_prepaid_pkg_transaction ON prepaid_packages(transaction_id)',
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* sloupec/index/tabulka již existuje nebo nelze aplikovat */ }

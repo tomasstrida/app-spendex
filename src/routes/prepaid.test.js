@@ -14,6 +14,10 @@ function setup() {
   db.prepare("INSERT INTO users (id, email) VALUES (1,'o@x'),(2,'jiny@x')").run();
   db.prepare("INSERT INTO categories (id, user_id, name, type) VALUES (5,1,'Sport',1),(6,1,'Oblečení',2),(9,2,'Cizí',1)").run();
   db.prepare("INSERT INTO categories (id, user_id, name, type, system_role) VALUES (7,1,'Nákup předplacených balíčků',4,'prepaid_purchase')").run();
+  // Sport (5) má výchozí budget, jinak by POST /api/prepaid od verze s validací
+  // (nález review „čerpání v kategorii bez budgetu zmizí ze všech čísel") 400oval
+  // i test createPackage() se svými defaulty.
+  db.prepare("INSERT INTO budgets (user_id, category_id, month, amount) VALUES (1,5,'default',5000)").run();
   db.prepare("INSERT INTO transactions (id, user_id, category_id, amount, date, description) VALUES (100,1,5,-5000,'2026-03-04','Fitness 10x')").run();
   db.prepare("INSERT INTO transactions (id, user_id, category_id, amount, date, description) VALUES (101,2,9,-1000,'2026-03-04','Cizi platba')").run();
   const app = express(); app.use(express.json());
@@ -238,5 +242,45 @@ test('GET status=closed vraci uzavrene balicky', async () => {
   assert.equal((await (await fetch(`${base}/api/prepaid`)).json()).packages.length, 0);
   assert.equal((await (await fetch(`${base}/api/prepaid?status=closed`)).json()).packages.length, 1);
   assert.equal((await (await fetch(`${base}/api/prepaid?status=all`)).json()).packages.length, 1);
+  server.close();
+});
+
+test('POST odmitne kategorii bez vychoziho budgetu', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  // Kategorie typu 1 bez řádku v budgets (month='default') — čerpání by se
+  // v /api/budgets nikde nesečetlo (prepaid_spent visí na existenci budgetu).
+  db.prepare("INSERT INTO categories (id, user_id, name, type) VALUES (8,1,'Bez rozpoctu',1)").run();
+  const r = await createPackage(base, { category_id: 8 });
+  assert.equal(r.status, 400);
+  assert.match((await r.json()).error, /rozpočet/i);
+  server.close();
+});
+
+test('POST vraci 409, pokud z platby uz balicek existuje', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  assert.equal((await createPackage(base)).status, 201);
+  const r = await createPackage(base);
+  assert.equal(r.status, 409);
+  assert.match((await r.json()).error, /existuje/i);
+  server.close();
+});
+
+test('close s write_off na plne vycerpanem balicku s nedelitelnou cenou nevytvori fantomove cerpani', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  // 3000 / 7 = 428,571... — sečtené po jedné jednotce (jako u tlačítka +1)
+  // vznikne floating-point rest v řádu 1e-13, ne přesná nula.
+  db.prepare("INSERT INTO transactions (id, user_id, category_id, amount, date, description) VALUES (103,1,5,-3000,'2026-03-06','Masaze 7x')").run();
+  const pkg = await (await createPackage(base, { transaction_id: 103, units_total: 7 })).json();
+  for (let i = 0; i < 7; i++) {
+    const r = await draw(base, pkg.id, { units: 1, date: `2026-04-0${(i % 9) + 1}` });
+    assert.equal(r.status, 201);
+  }
+  const closed = await (await close(base, pkg.id, true)).json();
+  assert.equal(closed.status, 'closed');
+  assert.equal(closed.draws.length, 7, 'zadne fantomove doucetni cerpani nad prah');
+  assert.ok(closed.draws.every(d => d.units > 0), 'zadne cerpani s units=0');
   server.close();
 });

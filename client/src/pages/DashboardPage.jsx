@@ -82,7 +82,7 @@ function BudgetBar({ budget, period, periodStart, periodEnd, subcategories = [],
       <Thermometer spent={spent} amount={budget.amount} periodStart={periodStart} periodEnd={periodEnd} />
       {prepaid > 0 && (
         <div onClick={(e) => e.stopPropagation()}>
-          <Link to={`/prepaid?category=${budget.category_id}&period=${period}`}
+          <Link to={`/prepaid?category=${budget.category_id}&period=${period}&status=all`}
             className="budget-subcat-toggle" style={{ textDecoration: 'none' }}
             title="Klik: čerpání předplacených balíčků, ze kterých je částka">
             z toho předplacené: {formatCurrency(prepaid)}
