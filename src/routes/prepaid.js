@@ -1,0 +1,96 @@
+const express = require('express');
+const router = express.Router();
+const rateLimit = require('express-rate-limit');
+const db = require('../db/connection');
+const { requireAuth } = require('../middleware/auth');
+const { getPeriodDates, getUserBillingDay } = require('../utils/period');
+const { unitAmount, packageSummary } = require('../utils/prepaid');
+
+const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
+
+// Balíček + dopočtené hodnoty. `periodRange` (nepovinné) omezí vrácená čerpání
+// na jedno období; zbytek balíčku se ale VŽDY počítá ze všech čerpání, jinak by
+// v období bez čerpání vypadal balíček jako nedotčený.
+function withSummary(pkg, periodRange) {
+  const allDraws = db.prepare(
+    'SELECT * FROM prepaid_draws WHERE package_id = ? AND user_id = ? ORDER BY date ASC, id ASC'
+  ).all(pkg.id, pkg.user_id);
+  const draws = periodRange
+    ? allDraws.filter(d => d.date >= periodRange.start && d.date <= periodRange.end)
+    : allDraws;
+  return { ...pkg, ...packageSummary(pkg, allDraws), draws };
+}
+
+// GET /api/prepaid?status=active|closed|all&category=<id>&period=YYYY-MM
+router.get('/', requireAuth, (req, res) => {
+  const status = req.query.status || 'active';
+  const filters = ['p.user_id = ?'];
+  const params = [req.dataUserId];
+  if (status !== 'all') { filters.push('p.status = ?'); params.push(status); }
+  if (req.query.category) { filters.push('p.category_id = ?'); params.push(parseInt(req.query.category)); }
+
+  let periodRange = null;
+  if (req.query.period) {
+    const billingDay = getUserBillingDay(db, req.dataUserId);
+    periodRange = getPeriodDates(billingDay, req.query.period);
+  }
+
+  const rows = db.prepare(`
+    SELECT p.*, c.name AS category_name, c.color AS category_color
+    FROM prepaid_packages p
+    LEFT JOIN categories c ON c.id = p.category_id AND c.user_id = p.user_id
+    WHERE ${filters.join(' AND ')}
+    ORDER BY p.status ASC, p.created_at DESC
+  `).all(...params);
+
+  res.json({ packages: rows.map(p => withSummary(p, periodRange)) });
+});
+
+// POST /api/prepaid — z existující platby udělá balíček
+router.post('/', requireAuth, writeLimiter, (req, res) => {
+  const { transaction_id, name, category_id, units_total, valid_until, note } = req.body;
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'Název balíčku je povinný.' });
+
+  const units = parseFloat(units_total);
+  if (!(units > 0)) return res.status(400).json({ error: 'Počet jednotek musí být kladné číslo.' });
+
+  const tx = db.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?')
+    .get(transaction_id, req.dataUserId);
+  if (!tx) return res.status(404).json({ error: 'Transakce nenalezena.' });
+  if (!(tx.amount < 0)) return res.status(400).json({ error: 'Balíček lze založit jen z výdajové platby.' });
+
+  const cat = db.prepare('SELECT * FROM categories WHERE id = ? AND user_id = ?')
+    .get(category_id, req.dataUserId);
+  if (!cat) return res.status(404).json({ error: 'Kategorie nenalezena.' });
+  if (cat.type !== 1) {
+    return res.status(400).json({ error: 'Čerpání lze účtovat jen do měsíční kategorie (typ 1).' });
+  }
+
+  const purchaseCat = db.prepare(
+    "SELECT id FROM categories WHERE user_id = ? AND system_role = 'prepaid_purchase'"
+  ).get(req.dataUserId);
+  if (!purchaseCat) return res.status(500).json({ error: 'Chybí technická kategorie pro nákup balíčků.' });
+
+  const existing = db.prepare('SELECT id FROM prepaid_packages WHERE transaction_id = ? AND user_id = ?')
+    .get(tx.id, req.dataUserId);
+  if (existing) return res.status(409).json({ error: 'Z této platby už balíček existuje.' });
+
+  const total = Math.abs(tx.amount);
+  const info = db.transaction(() => {
+    const r = db.prepare(`
+      INSERT INTO prepaid_packages
+        (user_id, transaction_id, category_id, original_category_id, name,
+         total_amount, units_total, unit_amount, valid_until, note)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(req.dataUserId, tx.id, cat.id, tx.category_id, String(name).trim(),
+      total, units, unitAmount(total, units), valid_until || null, note || null);
+    db.prepare('UPDATE transactions SET category_id = ? WHERE id = ? AND user_id = ?')
+      .run(purchaseCat.id, tx.id, req.dataUserId);
+    return r;
+  })();
+
+  const pkg = db.prepare('SELECT * FROM prepaid_packages WHERE id = ?').get(info.lastInsertRowid);
+  res.status(201).json(withSummary(pkg, null));
+});
+
+module.exports = router;

@@ -58,6 +58,7 @@ app.use('/api/budgets', require('./routes/budgets'));
 app.use('/api/annual-budgets', require('./routes/annual-budgets'));
 app.use('/api/budget-items', require('./routes/budget-items'));
 app.use('/api/fixed-expenses', require('./routes/fixed-expenses'));
+app.use('/api/prepaid', require('./routes/prepaid'));
 app.use('/api/income', require('./routes/income'));
 app.use('/api/stats', require('./routes/stats'));
 app.use('/api/settings', require('./routes/settings'));
