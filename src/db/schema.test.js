@@ -227,3 +227,42 @@ test('prepaid: stejnojmenná uživatelská kategorie se povýší, nevznikne dup
   assert.equal(rows[0].system_role, 'prepaid_purchase');
   assert.equal(budgets.n, 0, 'mrtvý měsíční budget se smaže');
 });
+
+test('apple_receipts: tabulka existuje se spravnymi sloupci', () => {
+  const tmp = path.join(os.tmpdir(), `spendex-apple-cols-${Date.now()}.db`);
+  process.env.DB_PATH = tmp;
+  delete require.cache[require.resolve('../db/connection')];
+  delete require.cache[require.resolve('../db/schema')];
+  const db = require('../db/connection');
+  const { initSchema } = require('../db/schema');
+  initSchema();
+  const cols = db.prepare('PRAGMA table_info(apple_receipts)').all().map(c => c.name);
+  db.close();
+  fs.unlinkSync(tmp);
+  try { fs.unlinkSync(tmp + '-wal'); fs.unlinkSync(tmp + '-shm'); } catch { /* ok */ }
+  for (const col of ['id','user_id','order_id','receipt_date','total_amount','is_refund',
+                     'card_last4','items_json','raw_text','status','transaction_id',
+                     'matched_at','created_at']) {
+    assert.ok(cols.includes(col), `apple_receipts postrada sloupec ${col}`);
+  }
+});
+
+test('apple_receipts: order_id je unikatni per uzivatel, NULL se neomezuje', () => {
+  const tmp = path.join(os.tmpdir(), `spendex-apple-unique-${Date.now()}.db`);
+  process.env.DB_PATH = tmp;
+  delete require.cache[require.resolve('../db/connection')];
+  delete require.cache[require.resolve('../db/schema')];
+  const db = require('../db/connection');
+  require('../db/schema').initSchema();
+  db.prepare("INSERT INTO users (id, email) VALUES (1,'a@x')").run();
+  const ins = db.prepare("INSERT INTO apple_receipts (user_id, order_id, raw_text) VALUES (?,?,'raw')");
+  ins.run(1, 'ABC123');
+  assert.throws(() => ins.run(1, 'ABC123'), /UNIQUE/i, 'stejne order_id podruhe neprojde');
+  ins.run(1, null);
+  ins.run(1, null);
+  const n = db.prepare('SELECT COUNT(*) AS n FROM apple_receipts').get().n;
+  db.close();
+  fs.unlinkSync(tmp);
+  try { fs.unlinkSync(tmp + '-wal'); fs.unlinkSync(tmp + '-shm'); } catch { /* ok */ }
+  assert.equal(n, 3, 'dva zaznamy bez order_id vedle sebe smi existovat');
+});

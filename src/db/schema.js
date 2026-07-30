@@ -391,6 +391,26 @@ function initSchema() {
     // Podporuje LEFT JOIN v GET/PATCH /api/transactions (odznak "patří k balíčku")
     // a lookup podle transaction_id v routes/prepaid.js a transactions.js.
     'CREATE INDEX IF NOT EXISTS idx_prepaid_pkg_transaction ON prepaid_packages(transaction_id)',
+    `CREATE TABLE IF NOT EXISTS apple_receipts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      order_id TEXT,
+      receipt_date TEXT,
+      total_amount REAL,
+      is_refund INTEGER NOT NULL DEFAULT 0,
+      card_last4 TEXT,
+      items_json TEXT,
+      raw_text TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      transaction_id INTEGER,
+      matched_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE SET NULL
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_apple_receipt_order
+       ON apple_receipts(user_id, order_id) WHERE order_id IS NOT NULL`,
+    'CREATE INDEX IF NOT EXISTS idx_apple_receipt_status ON apple_receipts(user_id, status)',
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* sloupec/index/tabulka již existuje nebo nelze aplikovat */ }
