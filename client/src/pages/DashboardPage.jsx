@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { usePeriod } from '../contexts/PeriodContext';
 import { usePeriodKeys } from '../hooks/usePeriodKeys';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
 import { budgetFillColor, budgetState, BUDGET_ORANGE, BUDGET_RED_TEXT } from '../utils/budgetColor';
 import { sumExpensiveTotal } from '../utils/expensiveTotal.js';
+import PrepaidPackageCard from '../components/PrepaidPackageCard';
 
 // ── Teploměr Typ 1 ────────────────────────────────────────────────────────────
 
@@ -53,12 +54,16 @@ function Thermometer({ spent, amount, periodStart, periodEnd, showProjection = t
 
 function BudgetBar({ budget, period, periodStart, periodEnd, subcategories = [], expanded, onToggleExpand }) {
   const navigate = useNavigate();
-  const over = budget.spent > budget.amount;
-  const remaining = budget.amount - budget.spent;
-  const pct = budget.amount > 0 ? (budget.spent / budget.amount) * 100 : 0;
+  // `budget_spent` = transakce + čerpání předplacených balíčků. Fallback na
+  // `spent` drží komponentu funkční, kdyby API bylo starší (cache klienta).
+  const spent = budget.budget_spent ?? budget.spent;
+  const prepaid = budget.prepaid_spent || 0;
+  const over = spent > budget.amount;
+  const remaining = budget.amount - spent;
+  const pct = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
   const hasSubcategories = subcategories.length > 0;
   const { totalDays, daysPassed } = periodDays(periodStart, periodEnd);
-  const state = budgetState({ spent: budget.spent, amount: budget.amount, daysPassed, totalDays });
+  const state = budgetState({ spent, amount: budget.amount, daysPassed, totalDays });
   const amountColor = stateTextColor(state);
 
   return (
@@ -70,11 +75,20 @@ function BudgetBar({ budget, period, periodStart, periodEnd, subcategories = [],
           {budget.category_name}
         </div>
         <div className="budget-item-amounts">
-          <span style={amountColor ? { color: amountColor, fontWeight: 600 } : undefined}>{formatCurrency(budget.spent)}</span>
+          <span style={amountColor ? { color: amountColor, fontWeight: 600 } : undefined}>{formatCurrency(spent)}</span>
           <span className="text-muted"> / {formatCurrency(budget.amount)}</span>
         </div>
       </div>
-      <Thermometer spent={budget.spent} amount={budget.amount} periodStart={periodStart} periodEnd={periodEnd} />
+      <Thermometer spent={spent} amount={budget.amount} periodStart={periodStart} periodEnd={periodEnd} />
+      {prepaid > 0 && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <Link to={`/prepaid?category=${budget.category_id}&period=${period}`}
+            className="budget-subcat-toggle" style={{ textDecoration: 'none' }}
+            title="Klik: čerpání předplacených balíčků, ze kterých je částka">
+            z toho předplacené: {formatCurrency(prepaid)}
+          </Link>
+        </div>
+      )}
       <div className="budget-item-footer">
         {over
           ? <span style={{ color: amountColor || BUDGET_RED_TEXT, fontWeight: 600 }}>{formatCurrency(Math.abs(remaining))} {t.dashboard.over}</span>
@@ -110,7 +124,7 @@ function BudgetBar({ budget, period, periodStart, periodEnd, subcategories = [],
 // ── Souhrn všech provozních budgetů ─────────────────────────────────────────────
 
 function BudgetSummary({ budgets, periodStart, periodEnd }) {
-  const totalSpent = budgets.reduce((s, b) => s + b.spent, 0);
+  const totalSpent = budgets.reduce((s, b) => s + (b.budget_spent ?? b.spent), 0);
   const totalAmount = budgets.reduce((s, b) => s + b.amount, 0);
   if (totalAmount <= 0) return null;
 
@@ -164,6 +178,7 @@ export default function DashboardPage() {
   const [data, setData] = useState(null);
   const [budgets, setBudgets] = useState(null);
   const [categories, setCategories] = useState([]);
+  const [packages, setPackages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [noteDraft, setNoteDraft] = useState('');
@@ -195,6 +210,18 @@ export default function DashboardPage() {
     }
   }
 
+  // Balíčky i rozpočty se po odtiknutí jednotky musí načíst spolu — čerpání mění
+  // obojí (zbytek balíčku i `budget_spent` kategorie).
+  function loadPrepaidAndBudgets(p) {
+    return Promise.all([
+      fetch(`/api/prepaid?status=active&period=${p}`).then(r => r.json()),
+      fetch(`/api/budgets?period=${p}`).then(r => r.json()),
+    ]).then(([prep, buds]) => {
+      setPackages(prep.packages || []);
+      setBudgets((buds.budgets || []).filter(b => !b.category_type || b.category_type === 1));
+    });
+  }
+
   useEffect(() => {
     if (!period) return;
     setLoading(true);
@@ -202,13 +229,15 @@ export default function DashboardPage() {
       fetch(`/api/stats/overview?period=${period}`).then(r => r.json()),
       fetch(`/api/budgets?period=${period}`).then(r => r.json()),
       fetch('/api/categories').then(r => r.json()),
-    ]).then(([stats, buds, cats]) => {
+      fetch(`/api/prepaid?status=active&period=${period}`).then(r => r.json()),
+    ]).then(([stats, buds, cats, prep]) => {
       setData(stats);
       setPeriodStart(stats.period_start);
       setPeriodEnd(stats.period_end);
       // Měsíční rozpočty: jen Typ 1
       setBudgets((buds.budgets || []).filter(b => !b.category_type || b.category_type === 1));
       setCategories(cats);
+      setPackages(prep.packages || []);
     }).finally(() => setLoading(false));
   }, [period]);
 
@@ -267,6 +296,18 @@ export default function DashboardPage() {
               </div>
             )}
           </section>
+
+          {packages.length > 0 && (
+            <section className="section">
+              <h2 className="section-title">Předplacené balíčky</h2>
+              <div className="prepaid-list">
+                {packages.map(p => (
+                  <PrepaidPackageCard key={p.id} pkg={p} compact
+                    onChanged={() => loadPrepaidAndBudgets(period)} />
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Typ 3 – Drahé věci: seznam položek v zobrazeném období */}
           {type3Cats.length > 0 && (
