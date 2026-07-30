@@ -41,3 +41,11 @@ test('systémová type=4 kategorie (fund_topup) s nižším id se nesmí vzít m
   d.prepare("INSERT INTO categories (user_id, name, type) VALUES (1, 'Převody interní', 4)").run();
   assert.equal(transferCategoryName(d, 1), 'Převody interní');
 });
+
+test('tři systémové type=4 kategorie nepřebijí identitu kategorie převodu', () => {
+  const d = db();
+  d.prepare("INSERT INTO categories (user_id, name, type, system_role) VALUES (1, 'Nestandardní dobití ročního budgetu', 4, 'fund_topup')").run();
+  d.prepare("INSERT INTO categories (user_id, name, type, system_role) VALUES (1, 'Nákup předplacených balíčků', 4, 'prepaid_purchase')").run();
+  d.prepare("INSERT INTO categories (user_id, name, type) VALUES (1, 'Převody interní', 4)").run();
+  assert.equal(transferCategoryName(d, 1), 'Převody interní');
+});

@@ -352,6 +352,42 @@ function initSchema() {
     'ALTER TABLE categories ADD COLUMN system_role TEXT',
     // accounts.is_fund = účet, na kterém se kumulují peníze na roční výdaje
     'ALTER TABLE accounts ADD COLUMN is_fund INTEGER NOT NULL DEFAULT 0',
+    // Předplacené balíčky: koupím dopředu N jednotek (např. 10 tréninků), postupně
+    // čerpám. prepaid_packages = jeden nákup, prepaid_draws = jedno čerpání.
+    `CREATE TABLE IF NOT EXISTS prepaid_packages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      transaction_id INTEGER,
+      category_id INTEGER NOT NULL,
+      original_category_id INTEGER,
+      name TEXT NOT NULL,
+      total_amount REAL NOT NULL,
+      units_total REAL NOT NULL,
+      unit_amount REAL NOT NULL,
+      valid_until TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      note TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      closed_at TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE SET NULL,
+      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+    )`,
+    `CREATE TABLE IF NOT EXISTS prepaid_draws (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      package_id INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      units REAL NOT NULL DEFAULT 1,
+      amount REAL NOT NULL,
+      note TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (package_id) REFERENCES prepaid_packages(id) ON DELETE CASCADE
+    )`,
+    'CREATE INDEX IF NOT EXISTS idx_prepaid_pkg_user ON prepaid_packages(user_id, status)',
+    'CREATE INDEX IF NOT EXISTS idx_prepaid_draws_pkg ON prepaid_draws(package_id)',
+    'CREATE INDEX IF NOT EXISTS idx_prepaid_draws_date ON prepaid_draws(user_id, date)',
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* sloupec/index/tabulka již existuje nebo nelze aplikovat */ }
@@ -467,6 +503,32 @@ function initSchema() {
         deleteBudgets.run(o.user_id, existing.id);
       } else {
         insTopup.run(o.user_id, TOPUP_NAME);
+      }
+    } catch { /* selhání bootstrapu pro jednoho uživatele – ostatní pokračují */ }
+  }
+
+  // Bootstrap kategorie prepaid_purchase (Nákup předplacených balíčků). Stejná
+  // pravidla jako u fund_topup výš: jen pro uživatele, kteří UŽ MAJÍ kategorie
+  // (v household sharingu je má jen data owner), stejnojmenná uživatelská
+  // kategorie se povýší místo vkládání, idempotentní.
+  const PREPAID_NAME = 'Nákup předplacených balíčků';
+  const prepaidOwners = db.prepare(`
+    SELECT DISTINCT user_id FROM categories
+    WHERE user_id NOT IN (SELECT user_id FROM categories WHERE system_role = 'prepaid_purchase')
+  `).all();
+  const promotePrepaid = db.prepare("UPDATE categories SET type = 4, system_role = 'prepaid_purchase' WHERE id = ?");
+  const insPrepaid = db.prepare(`
+    INSERT INTO categories (user_id, name, type, color, icon, system_role)
+    VALUES (?, ?, 4, '#8b5cf6', 'Ticket', 'prepaid_purchase')
+  `);
+  for (const o of prepaidOwners) {
+    try {
+      const existing = findByName.get(o.user_id, PREPAID_NAME);
+      if (existing) {
+        promotePrepaid.run(existing.id);
+        deleteBudgets.run(o.user_id, existing.id);
+      } else {
+        insPrepaid.run(o.user_id, PREPAID_NAME);
       }
     } catch { /* selhání bootstrapu pro jednoho uživatele – ostatní pokračují */ }
   }
