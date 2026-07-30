@@ -319,35 +319,6 @@ export default function ReportPage() {
             {/* Řádek „Dotace na nepravidelné" odstraněn: dotace na Nepravidelné je
                 definovaná fixní platba, takže už je v součtu Fixních plateb výš.
                 Samostatný řádek počítaný z hardcoded čísla účtu ji přičítal podruhé. */}
-            {/* Dobití ročního fondu nad rámec standardní dotace. Odliv z provozního
-                účtu, který v bilanci dřív nebyl vůbec — roční kategorie (typ 2) do ní
-                nevstupují a dotace na Licence nebyla definovaná jako fixní platba. */}
-            {fundTopupRow?.category_id && fundTopupRow.outflow !== 0 && (
-              <Link to={txLink(`category_ids=${fundTopupRow.category_id}&direction=out&off_fund=1`)}
-                className="report-bilance-row"
-                style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
-                title="Klik: převody na fondové účty nad rámec standardní dotace">
-                <span>{fundTopupRow.name}</span>
-                <span>
-                  − {formatCurrency(fundTopupRow.outflow)}
-                  {Math.round(fundTopupRow.saldo) !== 0 && (
-                    <span className="text-danger" style={{ fontWeight: 400 }}
-                      title="U některého převodu chybí párová noha — zkontroluj sekci Účetní."> ⚠</span>
-                  )}
-                </span>
-              </Link>
-            )}
-            {/* Roční výdaje zaplacené mimo fondový účet (typicky Oblečení ze Společného).
-                Skryté, dokud uživatel neoznačí aspoň jeden fondový účet (API vrací null). */}
-            {annualOffFundRow && annualOffFundRow.spent !== 0 && (
-              <Link to={txLink(`${typ2CatIds ? `category_ids=${typ2CatIds}&` : ''}off_fund=1&spending_only=1`)}
-                className="report-bilance-row"
-                style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
-                title="Klik: roční výdaje (Typ 2) zaplacené mimo fondový účet">
-                <span>Roční výdaje mimo fond</span>
-                <span>{annualOffFundRow.spent >= 0 ? '−' : '+'} {formatCurrency(Math.abs(annualOffFundRow.spent))}</span>
-              </Link>
-            )}
             <Link to={txLink(typ1CatIds ? `category_ids=${typ1CatIds}&spending_only=1` : 'spending_only=1')}
               className="report-bilance-row"
               style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
@@ -370,6 +341,35 @@ export default function ReportPage() {
                   − {formatCurrency(totalType3)}
                   {type3MonthlyBudget > 0 && (
                     <span className="text-muted" style={{ fontWeight: 400 }}> / {formatCurrency(type3MonthlyBudget)}</span>
+                  )}
+                </span>
+              </Link>
+            )}
+            {/* Roční výdaje zaplacené mimo fondový účet (typicky Oblečení ze Společného).
+                Skryté, dokud uživatel neoznačí aspoň jeden fondový účet (API vrací null). */}
+            {annualOffFundRow && annualOffFundRow.spent !== 0 && (
+              <Link to={txLink(`${typ2CatIds ? `category_ids=${typ2CatIds}&` : ''}off_fund=1&spending_only=1`)}
+                className="report-bilance-row"
+                style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                title="Klik: roční výdaje (Typ 2) zaplacené mimo fondový účet">
+                <span>Roční výdaje mimo fond</span>
+                <span>{annualOffFundRow.spent >= 0 ? '−' : '+'} {formatCurrency(Math.abs(annualOffFundRow.spent))}</span>
+              </Link>
+            )}
+            {/* Dobití ročního fondu nad rámec standardní dotace. Odliv z provozního
+                účtu, který v bilanci dřív nebyl vůbec — roční kategorie (typ 2) do ní
+                nevstupují a dotace na Licence nebyla definovaná jako fixní platba. */}
+            {fundTopupRow?.category_id && fundTopupRow.outflow !== 0 && (
+              <Link to={txLink(`category_ids=${fundTopupRow.category_id}&direction=out&off_fund=1`)}
+                className="report-bilance-row"
+                style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                title="Klik: převody na fondové účty nad rámec standardní dotace">
+                <span>{fundTopupRow.name}</span>
+                <span>
+                  − {formatCurrency(fundTopupRow.outflow)}
+                  {Math.round(fundTopupRow.saldo) !== 0 && (
+                    <span className="text-danger" style={{ fontWeight: 400 }}
+                      title="U některého převodu chybí párová noha — zkontroluj sekci Účetní."> ⚠</span>
                   )}
                 </span>
               </Link>
