@@ -10,8 +10,8 @@ function setup() {
   for (const m of ['../db/connection','../db/schema','./appleReceipts']) delete require.cache[require.resolve(m)];
   const db = require('../db/connection'); require('../db/schema').initSchema();
   db.prepare("INSERT INTO users (id, email) VALUES (1,'o@x')").run();
-  db.prepare("INSERT INTO categories (id, user_id, name, type) VALUES (5,1,'Y_Licence',2)").run();
-  db.prepare("INSERT INTO subcategories (id, user_id, category_id, name) VALUES (11,1,5,'Apple'),(12,1,5,'ChatGPT')").run();
+  db.prepare("INSERT INTO categories (id, user_id, name, type) VALUES (5,1,'Y_Licence',2),(6,1,'Zabava',1)").run();
+  db.prepare("INSERT INTO subcategories (id, user_id, category_id, name) VALUES (11,1,5,'Apple'),(12,1,5,'ChatGPT'),(20,1,6,'Kino')").run();
   const svc = require('./appleReceipts');
   return { db, svc };
 }
@@ -111,6 +111,89 @@ test('vicepolozkova faktura nemeni subkategorii, jen dopise obe polozky do pozna
   assert.equal(tx.subcategory_id, 11, 'subkategorie zustava puvodni, ne 12 z pravidla');
   assert.ok(tx.note.includes('iCloud'), 'poznamka obsahuje prvni polozku');
   assert.ok(tx.note.includes('ChatGPT Plus'), 'poznamka obsahuje druhou polozku');
+});
+
+// C2: subkategorie z pravidla musí patřit kategorii cílové transakce.
+test('subkategorie z pravidla patrici jine kategorii se nepriradi', async () => {
+  const { db, svc } = setup();
+  db.prepare("INSERT INTO category_rules (user_id, pattern, category_id, subcategory_id) VALUES (1,'YOUTUBE',6,20)").run();
+  db.prepare(`INSERT INTO transactions (id, user_id, category_id, subcategory_id, amount, date, description)
+              VALUES (100,1,5,11,-269,'2026-06-30','APPLE.COM/BILL')`).run();
+  svc.ingestAppleInvoice(db, 1, await fixtureBody());
+  const tx = db.prepare('SELECT category_id, subcategory_id, note FROM transactions WHERE id = 100').get();
+  assert.equal(tx.subcategory_id, 11, 'cizi subkategorie (Zabava) se neprevezme');
+  assert.equal(tx.category_id, 5);
+  assert.ok(tx.note.includes('YouTube'), 'poznamka se doplni i tak');
+});
+
+test('poznamka se orezava na 500 znaku', async () => {
+  const { db, svc } = setup();
+  db.prepare(`INSERT INTO transactions (id, user_id, category_id, amount, date, description, note)
+              VALUES (100,1,5,-269,'2026-06-30','APPLE.COM/BILL',?)`).run('x'.repeat(600));
+  svc.ingestAppleInvoice(db, 1, await fixtureBody());
+  assert.equal(db.prepare('SELECT note FROM transactions WHERE id = 100').get().note.length, 500);
+});
+
+// I1: zahozenou fakturu musí jít přeposlat znovu (dedup ji nesmí brát jako duplicitu).
+test('zahozenou fakturu s order_id lze preposlat znovu', async () => {
+  const { db, svc } = setup();
+  const body = await fixtureBody();
+  const first = svc.ingestAppleInvoice(db, 1, body);
+  db.prepare("UPDATE apple_receipts SET status = 'rejected', transaction_id = NULL WHERE id = ?").run(first.receiptId);
+  const second = svc.ingestAppleInvoice(db, 1, body);
+  assert.notEqual(second.status, 'duplicate', 'zahozena faktura nesmi blokovat preposlani');
+  // UNIQUE index user_id+order_id → záznam se oživí na místě, nezakládá se druhý.
+  assert.equal(second.receiptId, first.receiptId);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM apple_receipts').get().n, 1);
+  assert.equal(db.prepare('SELECT status FROM apple_receipts WHERE id = ?').get(second.receiptId).status, 'pending');
+});
+
+// I2: jedna platba = jedna faktura.
+test('druha faktura se nepovesi na uz spa rovanou transakci', async () => {
+  const { db, svc } = setup();
+  db.prepare(`INSERT INTO transactions (id, user_id, category_id, amount, date, description)
+              VALUES (100,1,5,-269,'2026-06-30','APPLE.COM/BILL')`).run();
+  const first = svc.ingestAppleInvoice(db, 1, await fixtureBody());
+  assert.equal(first.status, 'matched');
+  // Jiná faktura (jiné order_id) se stejnou částkou i datem.
+  const html = '<html><body><h1>Invoice</h1><div class="billing-information"><p>30 June 2026</p>'
+    + '<p>Order ID:</p><p>DRUHA123</p></div>'
+    + '<div class="payment-information"><p>MasterCard •••• 4225</p><p>269,00 CZK</p></div></body></html>';
+  const second = svc.ingestAppleInvoice(db, 1, html);
+  assert.equal(second.status, 'pending', 'transakce je uz zabrana');
+  const note = db.prepare('SELECT note FROM transactions WHERE id = 100').get().note;
+  assert.ok(!note.includes('DRUHA'), 'poznamky se neslepi');
+});
+
+test('matchPendingForTransaction spa ruje nejvys jednu fakturu na platbu', async () => {
+  const { db, svc } = setup();
+  const a = svc.ingestAppleInvoice(db, 1, await fixtureBody());
+  const html = '<html><body><h1>Invoice</h1><div class="billing-information"><p>30 June 2026</p>'
+    + '<p>Order ID:</p><p>DRUHA123</p></div>'
+    + '<div class="payment-information"><p>MasterCard •••• 4225</p><p>269,00 CZK</p></div></body></html>';
+  const b = svc.ingestAppleInvoice(db, 1, html);
+  assert.equal(a.status, 'pending');
+  assert.equal(b.status, 'pending');
+  db.prepare(`INSERT INTO transactions (id, user_id, category_id, amount, date, description)
+              VALUES (100,1,5,-269,'2026-06-30','APPLE.COM/BILL')`).run();
+  assert.equal(svc.matchPendingForTransaction(db, 1, 100), 1);
+  assert.equal(svc.matchPendingForTransaction(db, 1, 100), 0, 'opakovany beh uz nic nespa ruje');
+  const statuses = db.prepare('SELECT status FROM apple_receipts ORDER BY id').all().map(r => r.status);
+  assert.deepEqual(statuses.filter(s => s === 'matched').length, 1);
+});
+
+// I3: ambiguous čeká na ruční rozhodnutí, import další platby ho nesmí vyřešit sám.
+test('ambiguous fakturu import dalsi platby nespa ruje', async () => {
+  const { db, svc } = setup();
+  db.prepare(`INSERT INTO transactions (id, user_id, category_id, amount, date, description)
+              VALUES (100,1,5,-269,'2026-06-30','APPLE.COM/BILL'),
+                     (101,1,5,-269,'2026-07-01','APPLE.COM/BILL')`).run();
+  const r = svc.ingestAppleInvoice(db, 1, await fixtureBody());
+  assert.equal(r.status, 'ambiguous');
+  db.prepare(`INSERT INTO transactions (id, user_id, category_id, amount, date, description)
+              VALUES (102,1,5,-269,'2026-06-29','APPLE.COM/BILL')`).run();
+  assert.equal(svc.matchPendingForTransaction(db, 1, 102), 0);
+  assert.equal(db.prepare('SELECT status FROM apple_receipts WHERE id = ?').get(r.receiptId).status, 'ambiguous');
 });
 
 test('bez odpovidajici transakce zustane faktura pending', async () => {

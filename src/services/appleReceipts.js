@@ -2,32 +2,26 @@
 const { parseAppleInvoice } = require('../utils/appleInvoiceParser');
 const { pickMatch } = require('../utils/appleMatch');
 const loadUserRules = require('../utils/load-user-rules');
-
-// Kandidáti na spárování: Apple platby uživatele. Okno je širší než párovací
-// (±10 dní), vlastní rozhodnutí dělá pickMatch.
-function candidateTransactions(db, userId, receipt) {
-  if (!receipt.receipt_date) return [];
-  return db.prepare(`
-    SELECT id, amount, date, card_last4, note, subcategory_id
-    FROM transactions
-    WHERE user_id = ?
-      AND (UPPER(COALESCE(description,'')) LIKE 'APPLE.COM%'
-        OR UPPER(COALESCE(place,'')) LIKE 'APPLE.COM%')
-      AND date >= date(?, '-10 days') AND date <= date(?, '+10 days')
-  `).all(userId, receipt.receipt_date, receipt.receipt_date);
-}
+const { appleCandidateTransactions, transactionAlreadyTaken } = require('../utils/apple-candidates');
+const { ownsSubcategory } = require('../utils/subcategory-ownership');
 
 // Text, proti kterému se zkoušejí uživatelská pravidla („YouTube YouTube Premium (Monthly)").
 function itemText(item) {
   return [item.app, item.description].filter(Boolean).join(' ');
 }
 
-function subcategoryForItem(db, userId, item) {
+// Subkategorie z prvního sedícího pravidla — ale jen když patří kategorii cílové
+// transakce. Bez té kontroly by platba v Y_Licence dostala subkategorii ze Zábavy
+// a rozpad `by_subcategory` (JOIN subcategories, sc.category_id) by přestal sedět.
+// Stejný guard používá i PATCH transakce a CRUD pravidel.
+function subcategoryForItem(db, userId, item, categoryId) {
   const text = itemText(item).toUpperCase();
-  if (!text) return null;
+  if (!text || categoryId == null) return null;
   for (const rule of loadUserRules(db, userId)) {
     if (rule.subcategory_id == null) continue;
-    if (text.includes(String(rule.pattern).toUpperCase())) return rule.subcategory_id;
+    if (!text.includes(String(rule.pattern).toUpperCase())) continue;
+    // Pravidlo sedí, ale míří jinam → chováme se, jako by žádné nesedlo.
+    return ownsSubcategory(db, userId, rule.subcategory_id, categoryId) ? rule.subcategory_id : null;
   }
   return null;
 }
@@ -46,7 +40,7 @@ function applyReceiptToTransaction(db, userId, receipt, transactionId) {
     ? items.map(i => itemText(i)).filter(Boolean).join(' + ')
     : null;
 
-  const tx = db.prepare('SELECT note, subcategory_id FROM transactions WHERE id = ? AND user_id = ?')
+  const tx = db.prepare('SELECT note, subcategory_id, category_id FROM transactions WHERE id = ? AND user_id = ?')
     .get(transactionId, userId);
   if (!tx) return { subcategory_id: null, note: null };
 
@@ -54,11 +48,12 @@ function applyReceiptToTransaction(db, userId, receipt, transactionId) {
   // subkategorie zamlčela zbytek, takže tam zůstane jen rozpis v poznámce.
   let subId = tx.subcategory_id;
   if (items.length === 1) {
-    const found = subcategoryForItem(db, userId, items[0]);
+    const found = subcategoryForItem(db, userId, items[0], tx.category_id);
     if (found != null) subId = found;
   }
 
-  const note = appendNote(tx.note, label);
+  // Stejný strop jako PATCH transakce — poznámka je sloupec, ne archiv mailu.
+  const note = appendNote(tx.note, label).slice(0, 500);
   db.prepare('UPDATE transactions SET subcategory_id = ?, note = ? WHERE id = ? AND user_id = ?')
     .run(subId ?? null, note, transactionId, userId);
   return { subcategory_id: subId ?? null, note };
@@ -81,8 +76,12 @@ function ingestAppleInvoice(db, userId, rawBody) {
 
   // Idempotence: primárně přes order_id, u dokladů bez něj přes trojici
   // datum + částka + karta, ať opakované přeposlání nezaloží druhý záznam.
+  //
+  // Zahozené (`rejected`) faktury se do dedupu NEPOČÍTAJÍ — jinak by uživatel neměl
+  // cestu zpět: zahozená faktura je v UI neviditelná a přeposlání by skončilo jako
+  // „duplicate". Platí pro obě větve stejně.
   const existing = receipt.order_id
-    ? db.prepare('SELECT id FROM apple_receipts WHERE user_id = ? AND order_id = ?')
+    ? db.prepare("SELECT id FROM apple_receipts WHERE user_id = ? AND order_id = ? AND status != 'rejected'")
         .get(userId, receipt.order_id)
     : db.prepare(`SELECT id FROM apple_receipts
                   WHERE user_id = ? AND order_id IS NULL AND status != 'rejected'
@@ -90,16 +89,35 @@ function ingestAppleInvoice(db, userId, rawBody) {
         .get(userId, receipt.receipt_date, receipt.total_amount, receipt.card_last4);
   if (existing) return { status: 'duplicate', receiptId: existing.id, transactionId: null };
 
-  const { status, transaction } = pickMatch(candidateTransactions(db, userId, receipt), receipt);
+  // Zahozený záznam se stejným order_id nelze obejít INSERTem (UNIQUE index
+  // user_id+order_id), takže ho oživíme na místě — přeposlání pak funguje jako nové.
+  const revived = receipt.order_id
+    ? db.prepare("SELECT id FROM apple_receipts WHERE user_id = ? AND order_id = ? AND status = 'rejected'")
+        .get(userId, receipt.order_id)
+    : null;
 
-  const ins = db.prepare(`
-    INSERT INTO apple_receipts
-      (user_id, order_id, receipt_date, total_amount, is_refund, card_last4, items_json, raw_text, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(userId, receipt.order_id, receipt.receipt_date, receipt.total_amount,
-    receipt.is_refund ? 1 : 0, receipt.card_last4, JSON.stringify(receipt.items || []),
-    String(rawBody || ''), status);
-  const receiptId = Number(ins.lastInsertRowid);
+  const { status, transaction } = pickMatch(appleCandidateTransactions(db, userId, receipt), receipt);
+
+  let receiptId;
+  if (revived) {
+    db.prepare(`
+      UPDATE apple_receipts
+      SET receipt_date = ?, total_amount = ?, is_refund = ?, card_last4 = ?, items_json = ?,
+          raw_text = ?, status = ?, transaction_id = NULL, matched_at = NULL
+      WHERE id = ? AND user_id = ?
+    `).run(receipt.receipt_date, receipt.total_amount, receipt.is_refund ? 1 : 0, receipt.card_last4,
+      JSON.stringify(receipt.items || []), String(rawBody || ''), status, revived.id, userId);
+    receiptId = revived.id;
+  } else {
+    const ins = db.prepare(`
+      INSERT INTO apple_receipts
+        (user_id, order_id, receipt_date, total_amount, is_refund, card_last4, items_json, raw_text, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(userId, receipt.order_id, receipt.receipt_date, receipt.total_amount,
+      receipt.is_refund ? 1 : 0, receipt.card_last4, JSON.stringify(receipt.items || []),
+      String(rawBody || ''), status);
+    receiptId = Number(ins.lastInsertRowid);
+  }
 
   if (status === 'matched') finishMatch(db, userId, receiptId, receipt, transaction.id);
   return { status, receiptId, transactionId: status === 'matched' ? transaction.id : null };
@@ -111,7 +129,12 @@ function matchPendingForTransaction(db, userId, transactionId) {
     .get(transactionId, userId);
   if (!tx) return 0;
 
-  const rows = db.prepare("SELECT * FROM apple_receipts WHERE user_id = ? AND status IN ('pending','ambiguous')")
+  // Transakci, kterou už zabrala jiná spárovaná faktura, nepřepisujeme.
+  if (transactionAlreadyTaken(db, userId, tx.id)) return 0;
+
+  // Jen 'pending'. `ambiguous` znamená „víc kandidátů, rozhodne uživatel" — tady
+  // by pickMatch dostal jediného kandidáta a stav by se sám tiše vyřešil.
+  const rows = db.prepare("SELECT * FROM apple_receipts WHERE user_id = ? AND status = 'pending'")
     .all(userId);
   let matched = 0;
   for (const row of rows) {
@@ -126,6 +149,7 @@ function matchPendingForTransaction(db, userId, transactionId) {
     if (r.status !== 'matched') continue;
     finishMatch(db, userId, row.id, receipt, tx.id);
     matched++;
+    break; // jedna platba = jedna faktura; další čekající zůstanou pending
   }
   return matched;
 }

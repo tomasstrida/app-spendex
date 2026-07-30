@@ -5,6 +5,7 @@ const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
 const { applyReceiptToTransaction } = require('../services/appleReceipts');
 const { matchesReceipt } = require('../utils/appleMatch');
+const { appleCandidateTransactions, transactionAlreadyTaken } = require('../utils/apple-candidates');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
@@ -18,19 +19,11 @@ function toReceipt(row) {
   };
 }
 
-// Kandidáti k ručnímu výběru: Apple platby v širším okně, seřazené podle data.
+// Kandidáti k ručnímu výběru: sdílený dotaz (utils/apple-candidates) — vylučuje
+// transakce zabrané jinou spárovanou fakturou.
 function candidatesFor(userId, row) {
-  if (!row.receipt_date) return [];
-  const rows = db.prepare(`
-    SELECT id, date, amount, description, card_last4
-    FROM transactions
-    WHERE user_id = ?
-      AND (UPPER(COALESCE(description,'')) LIKE 'APPLE.COM%'
-        OR UPPER(COALESCE(place,'')) LIKE 'APPLE.COM%')
-      AND date >= date(?, '-10 days') AND date <= date(?, '+10 days')
-    ORDER BY date DESC, id DESC
-  `).all(userId, row.receipt_date, row.receipt_date);
   const receipt = toReceipt(row);
+  const rows = appleCandidateTransactions(db, userId, receipt, { exceptReceiptId: row.id });
   // Nejdřív ti, co splňují párovací pravidla, pak zbytek jako záloha pro ruční volbu.
   const fits = rows.filter(t => matchesReceipt(t, receipt));
   const rest = rows.filter(t => !fits.includes(t));
@@ -67,6 +60,11 @@ router.post('/:id/match', requireAuth, writeLimiter, (req, res) => {
     .get(req.body.transaction_id, req.dataUserId);
   if (!tx) return res.status(404).json({ error: 'Transakce nenalezena.' });
 
+  // Jedna platba = jedna faktura. Jinak by se popisy dvou faktur slepily do jedné poznámky.
+  if (transactionAlreadyTaken(db, req.dataUserId, tx.id, row.id)) {
+    return res.status(409).json({ error: 'K této platbě už je přiřazená jiná faktura.' });
+  }
+
   applyReceiptToTransaction(db, req.dataUserId, toReceipt(row), tx.id);
   db.prepare("UPDATE apple_receipts SET status = 'matched', transaction_id = ?, matched_at = datetime('now') WHERE id = ?")
     .run(tx.id, row.id);
@@ -84,12 +82,14 @@ router.post('/:id/unmatch', requireAuth, writeLimiter, (req, res) => {
   res.json(db.prepare('SELECT * FROM apple_receipts WHERE id = ?').get(row.id));
 });
 
-// DELETE /api/apple-receipts/:id — zahození (záznam zůstává kvůli idempotenci)
+// DELETE /api/apple-receipts/:id — zahození (záznam zůstává kvůli auditu).
+// Vazba na transakci se ruší: zahozená faktura nesmí dál blokovat platbu pro jinou
+// fakturu. Poznámka u transakce zůstává (nemažeme, co si uživatel mohl upravit).
 router.delete('/:id', requireAuth, writeLimiter, (req, res) => {
   const row = db.prepare('SELECT id FROM apple_receipts WHERE id = ? AND user_id = ?')
     .get(req.params.id, req.dataUserId);
   if (!row) return res.status(404).json({ error: 'Faktura nenalezena.' });
-  db.prepare("UPDATE apple_receipts SET status = 'rejected' WHERE id = ?").run(row.id);
+  db.prepare("UPDATE apple_receipts SET status = 'rejected', transaction_id = NULL, matched_at = NULL WHERE id = ?").run(row.id);
   res.json({ ok: true });
 });
 

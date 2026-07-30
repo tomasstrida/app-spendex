@@ -100,3 +100,71 @@ test('DELETE nastavi rejected, zaznam zustava', async () => {
   assert.equal(db.prepare('SELECT status FROM apple_receipts WHERE id=1').get().status, 'rejected');
   server.close();
 });
+
+// I1: zahození spárované faktury musí uvolnit i vazbu na transakci.
+test('DELETE spa rovane faktury vynuluje transaction_id', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  await fetch(`${base}/api/apple-receipts/1/match`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ transaction_id: 100 }),
+  });
+  await fetch(`${base}/api/apple-receipts/1`, { method: 'DELETE' });
+  const row = db.prepare('SELECT status, transaction_id, matched_at FROM apple_receipts WHERE id=1').get();
+  assert.equal(row.status, 'rejected');
+  assert.equal(row.transaction_id, null);
+  assert.equal(row.matched_at, null);
+  server.close();
+});
+
+// I2: jedna platba = jedna faktura (kandidáti i ruční přiřazení).
+test('uz zabranou transakci GET nenabidne jako kandidata a match ji odmitne', async () => {
+  const { db, app } = setup();
+  db.prepare(`INSERT INTO apple_receipts (id, user_id, order_id, receipt_date, total_amount, card_last4, items_json, raw_text, status)
+              VALUES (3,1,'CCC','2026-06-30',269,'4225','[{"app":"iCloud"}]','raw','pending')`).run();
+  const { server, base } = await listen(app);
+  await fetch(`${base}/api/apple-receipts/1/match`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ transaction_id: 100 }),
+  });
+  const { receipts } = await (await fetch(`${base}/api/apple-receipts?status=pending`)).json();
+  const rec3 = receipts.find(r => r.id === 3);
+  assert.deepEqual(rec3.candidates.map(c => c.id), [], 'zabrana transakce uz neni kandidat');
+
+  const r = await fetch(`${base}/api/apple-receipts/3/match`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ transaction_id: 100 }),
+  });
+  assert.equal(r.status, 409);
+  assert.ok((await r.json()).error.includes('jiná faktura'));
+  const note = db.prepare('SELECT note FROM transactions WHERE id=100').get().note;
+  assert.ok(!note.includes('iCloud'), 'poznamky se neslepi');
+  server.close();
+});
+
+test('zahozena faktura uz transakci neblokuje', async () => {
+  const { db, app } = setup();
+  db.prepare(`INSERT INTO apple_receipts (id, user_id, order_id, receipt_date, total_amount, card_last4, items_json, raw_text, status)
+              VALUES (3,1,'CCC','2026-06-30',269,'4225','[]','raw','pending')`).run();
+  const { server, base } = await listen(app);
+  await fetch(`${base}/api/apple-receipts/1/match`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ transaction_id: 100 }),
+  });
+  await fetch(`${base}/api/apple-receipts/1`, { method: 'DELETE' });
+  const r = await fetch(`${base}/api/apple-receipts/3/match`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ transaction_id: 100 }),
+  });
+  assert.equal(r.status, 200);
+  assert.equal(db.prepare('SELECT transaction_id FROM apple_receipts WHERE id=3').get().transaction_id, 100);
+  server.close();
+});
+
+test('kandidat nese i popis transakce', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const { receipts } = await (await fetch(`${base}/api/apple-receipts`)).json();
+  assert.equal(receipts[0].candidates[0].description, 'APPLE.COM/BILL');
+  server.close();
+});
