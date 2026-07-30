@@ -34,31 +34,47 @@ router.post('/inbound', inboundLimiter, checkSecret, async (req, res) => {
       return res.status(413).json({ error: 'Příliš velká zpráva.' });
     }
 
-    // Vrstva 2: whitelist odesílatele — dvě povolené cesty.
+    // Vrstva 2: whitelist odesílatele — dvě povolené cesty. OBĚ stojí na VNĚJŠÍ
+    // `from` hlavičce, kterou ověřuje Cloudflare Email Routing (SPF/DMARC).
+    // Nic, co si píše odesílatel do TĚLA mailu, nesmí o propuštění rozhodovat.
     //
     // (a) AirBank notifikace: Gmail forward přes filtr zachovává PŮVODNÍ obálku, takže
     //     From zůstane info@airbank.cz. Navíc ověříme, že e-mail prošel schránkou
     //     povoleného uživatele (jeho adresa zůstane v hlavičkách raw MIME).
     //
-    // (b) Apple faktury: uživatel je přeposílá RUČNĚ, takže From je jeho vlastní adresa
-    //     a whitelist musí stát na původním Apple odesílateli uvnitř mailu. Vědomý
-    //     kompromis: hlavičku uvnitř přeposlaného mailu lze zfalšovat, ale faktura nikdy
-    //     nezaloží transakci ani nezmění částku — nejhorší následek je špatná poznámka.
+    // (b) Apple faktury: uživatel je přeposílá RUČNĚ, takže From je jeho vlastní adresa.
+    //     Vyžadujeme proto `EMAIL_APPLE_FORWARDER` (fallback `EMAIL_ALLOWED_SENDER`)
+    //     ve `from` hlavičce. Stopy uvnitř mailu (no_reply@email.apple.com, klíčové
+    //     slovo) jsou jen DOPLŇKOVÝ filtr obsahu, ne autentizace — kdokoli si je do
+    //     těla napíše. Bez nastavené adresy je Apple cesta úplně vypnutá.
     const allowed = (process.env.EMAIL_ALLOWED_SENDER || '').toLowerCase();
+    const appleForwarder = (process.env.EMAIL_APPLE_FORWARDER || process.env.EMAIL_ALLOWED_SENDER || '')
+      .toLowerCase().trim();
     const fromHdr = String(from).toLowerCase();
     const rawLower = String(raw).toLowerCase();
-    if (!allowed || !rawLower.includes(allowed)) {
-      return res.status(202).json({ status: 'ignored' });
-    }
 
     // Klíčové slovo hledáme jako celé slovo — jinak by prošlo i „credit card"
     // nebo „accredited" schované v patičce/CSS mailu. Testujeme primárně proti
     // předmětu, tělo je jen fallback (tělo bývá zaplavené nesouvisejícím textem).
     const APPLE_KEYWORD_RE = /\b(invoice|refund|credit note)\b/i;
-    const isAirBank = fromHdr.includes('airbank.cz');
-    const isApple = rawLower.includes('no_reply@email.apple.com')
-      && (APPLE_KEYWORD_RE.test(String(subject || '')) || APPLE_KEYWORD_RE.test(rawLower));
+    const hasAppleSender = rawLower.includes('no_reply@email.apple.com');
+    const hasAppleKeyword = APPLE_KEYWORD_RE.test(String(subject || '')) || APPLE_KEYWORD_RE.test(rawLower);
+    const appleFromOk = !!appleForwarder && fromHdr.includes(appleForwarder);
+
+    // Precedence: když mail splní obě podmínky, vyhrává AirBank.
+    const isAirBank = fromHdr.includes('airbank.cz') && !!allowed && rawLower.includes(allowed);
+    const isApple = !isAirBank && appleFromOk && hasAppleSender && hasAppleKeyword;
+
     if (!isAirBank && !isApple) {
+      // Diagnostika: bez logu by uživatel neměl jak zjistit, proč mu faktura „mizí".
+      // Logujeme JEN důvod, nikdy obsah mailu.
+      if (hasAppleSender || hasAppleKeyword) {
+        const reason = !appleForwarder ? 'neni nastaveno EMAIL_APPLE_FORWARDER ani EMAIL_ALLOWED_SENDER'
+          : !appleFromOk ? 'from hlavicka neodpovida EMAIL_APPLE_FORWARDER'
+          : !hasAppleSender ? 'v tele chybi no_reply@email.apple.com'
+          : 'chybi klicove slovo invoice/refund/credit note';
+        console.warn(`[apple] mail neprosel whitelistem: ${reason}`);
+      }
       return res.status(202).json({ status: 'ignored' });
     }
 
@@ -69,9 +85,6 @@ router.post('/inbound', inboundLimiter, checkSecret, async (req, res) => {
     let parsed = null;
     if (raw) parsed = await simpleParser(raw);
 
-    // Precedence: když mail splní obě podmínky (např. AirBank notifikace, která
-    // náhodou zmíní slovo „invoice"), vyhrává AirBank — je to důvěryhodnější cesta
-    // (From skutečně z airbank.cz), Apple whitelist je jen záložní pro ruční forward.
     if (isAirBank) {
       const text = parsed ? (parsed.text || parsed.html || '') : '';
       const result = ingestEmail(db, { userEmail: allowed, fromHeader: fromHdr, text });
@@ -80,8 +93,14 @@ router.post('/inbound', inboundLimiter, checkSecret, async (req, res) => {
       return res.json(result);
     } else if (isApple) {
       const html = parsed ? (parsed.html || parsed.text || '') : '';
-      const user = db.prepare('SELECT id FROM users WHERE lower(email) = lower(?)').get(allowed);
-      if (!user) return res.status(202).json({ status: 'ignored' });
+      // Vlastník dat = uživatel Spendexu s povolenou adresou; když EMAIL_ALLOWED_SENDER
+      // není nastavená, zkusíme adresu přeposílatele.
+      const ownerEmail = allowed || appleForwarder;
+      const user = db.prepare('SELECT id FROM users WHERE lower(email) = lower(?)').get(ownerEmail);
+      if (!user) {
+        console.warn('[apple] mail prosel whitelistem, ale k adrese neexistuje uzivatel');
+        return res.status(202).json({ status: 'ignored' });
+      }
       const result = ingestAppleInvoice(db, user.id, html);
       return res.json(result);
     }

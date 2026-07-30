@@ -13,9 +13,14 @@ function freshApp() {
 }
 async function listen(app){ const s=await new Promise(r=>{const x=app.listen(0,()=>r(x));}); return {server:s, base:`http://127.0.0.1:${s.address().port}`}; }
 
-async function setupInbound() {
+async function setupInbound(env = {}) {
   process.env.EMAIL_WEBHOOK_SECRET = 'sekret';
   process.env.EMAIL_ALLOWED_SENDER = 'tom@example.com';
+  // Apple cesta stojí na adrese přeposílatele ve `from` hlavičce (viz C1).
+  process.env.EMAIL_APPLE_FORWARDER = 'tomas@icloud.com';
+  for (const [k, v] of Object.entries(env)) {
+    if (v === undefined) delete process.env[k]; else process.env[k] = v;
+  }
   process.env.DB_PATH = path.join(os.tmpdir(), `spendex-inb-${Date.now()}-${Math.random()}.db`);
   for (const m of ['../db/connection','../db/schema','./emailInbound','../services/appleReceipts']) {
     try { delete require.cache[require.resolve(m)]; } catch { /* ok */ }
@@ -116,6 +121,54 @@ test('Apple mail bez povolene adresy v raw se odmitne', async () => {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-webhook-secret': process.env.EMAIL_WEBHOOK_SECRET },
     body: JSON.stringify({ from: 'utocnik@example.org', subject: 'Your invoice from Apple.', raw }),
+  });
+  assert.equal((await r.json()).status, 'ignored');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM apple_receipts').get().n, 0);
+  server.close();
+});
+
+// C1: whitelist Apple cesty musí stát na VNĚJŠÍ `from` hlavičce (tu ověřuje Cloudflare
+// Email Routing), ne na obsahu těla, který si odesílatel plně řídí.
+test('Apple mail s cizi from hlavickou neprojde, i kdyz ma v tele vsechny spravne retezce', async () => {
+  const { db, base, server } = await setupInbound();
+  const raw = fs.readFileSync(path.join(__dirname, '..', 'utils', '__fixtures__', 'apple-invoice.eml'), 'utf8')
+    .replace('user@example.com', process.env.EMAIL_ALLOWED_SENDER)
+    // Do těla si útočník napíše všechno, co filtr hledá:
+    + `\n\nFrom: no_reply@email.apple.com\nTo: ${process.env.EMAIL_APPLE_FORWARDER}\ninvoice\n${process.env.EMAIL_ALLOWED_SENDER}\n`;
+  const r = await fetch(`${base}/api/email/inbound`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-webhook-secret': process.env.EMAIL_WEBHOOK_SECRET },
+    body: JSON.stringify({ from: 'utocnik@evil.example', subject: 'Your invoice from Apple.', raw }),
+  });
+  assert.equal(r.status, 202);
+  assert.equal((await r.json()).status, 'ignored');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM apple_receipts').get().n, 0);
+  server.close();
+});
+
+test('bez EMAIL_APPLE_FORWARDER se pouzije EMAIL_ALLOWED_SENDER jako fallback', async () => {
+  const { db, base, server } = await setupInbound({ EMAIL_APPLE_FORWARDER: undefined });
+  const raw = fs.readFileSync(path.join(__dirname, '..', 'utils', '__fixtures__', 'apple-invoice.eml'), 'utf8')
+    .replace('user@example.com', process.env.EMAIL_ALLOWED_SENDER);
+  const send = (from) => fetch(`${base}/api/email/inbound`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-webhook-secret': process.env.EMAIL_WEBHOOK_SECRET },
+    body: JSON.stringify({ from, subject: 'Your invoice from Apple.', raw }),
+  });
+  assert.equal((await (await send('tomas@icloud.com')).json()).status, 'ignored');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM apple_receipts').get().n, 0);
+  assert.equal((await send(process.env.EMAIL_ALLOWED_SENDER)).status, 200);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM apple_receipts').get().n, 1);
+  server.close();
+});
+
+test('bez obou promennych je Apple cesta vypnuta', async () => {
+  const { db, base, server } = await setupInbound({ EMAIL_APPLE_FORWARDER: undefined, EMAIL_ALLOWED_SENDER: undefined });
+  const raw = fs.readFileSync(path.join(__dirname, '..', 'utils', '__fixtures__', 'apple-invoice.eml'), 'utf8');
+  const r = await fetch(`${base}/api/email/inbound`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-webhook-secret': process.env.EMAIL_WEBHOOK_SECRET },
+    body: JSON.stringify({ from: 'tomas@icloud.com', subject: 'Your invoice from Apple.', raw }),
   });
   assert.equal((await r.json()).status, 'ignored');
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM apple_receipts').get().n, 0);
