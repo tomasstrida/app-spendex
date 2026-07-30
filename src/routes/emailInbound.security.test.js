@@ -146,6 +146,28 @@ test('Apple mail s cizi from hlavickou neprojde, i kdyz ma v tele vsechny spravn
   server.close();
 });
 
+// C1 follow-up: puvodni oprava presunula whitelist z tela na `From` hlavicku, ale
+// porovnani jelo pres `.includes(appleForwarder)` nad CELOU hlavickou vcetne display
+// name. Hlavicka `From: "tomas@icloud.com" <utocnik@evil.example>` tak prosla, protoze
+// povolena adresa byla schovana v jmene — skutecna adresa (adresni cast v zavorkach)
+// byla cizi. S puvodni `.includes` logikou by tento test SELHAL (fromHdr by povolenou
+// adresu jako podretezec obsahoval); po oprave na presnou shodu adresni casti musi projit.
+test('Apple mail s povolenou adresou schovanou v display name a cizi skutecnou adresou neprojde', async () => {
+  const { db, base, server } = await setupInbound();
+  const raw = fs.readFileSync(path.join(__dirname, '..', 'utils', '__fixtures__', 'apple-invoice.eml'), 'utf8')
+    .replace('user@example.com', process.env.EMAIL_ALLOWED_SENDER);
+  const from = `"${process.env.EMAIL_APPLE_FORWARDER}" <utocnik@evil.example>`;
+  const r = await fetch(`${base}/api/email/inbound`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-webhook-secret': process.env.EMAIL_WEBHOOK_SECRET },
+    body: JSON.stringify({ from, subject: 'Your invoice from Apple.', raw }),
+  });
+  assert.equal(r.status, 202);
+  assert.equal((await r.json()).status, 'ignored');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM apple_receipts').get().n, 0);
+  server.close();
+});
+
 test('bez EMAIL_APPLE_FORWARDER se pouzije EMAIL_ALLOWED_SENDER jako fallback', async () => {
   const { db, base, server } = await setupInbound({ EMAIL_APPLE_FORWARDER: undefined });
   const raw = fs.readFileSync(path.join(__dirname, '..', 'utils', '__fixtures__', 'apple-invoice.eml'), 'utf8')

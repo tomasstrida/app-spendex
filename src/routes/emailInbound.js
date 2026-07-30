@@ -8,6 +8,7 @@ const db = require('../db/connection');
 const { ingestEmail } = require('../services/emailIngest');
 const { notifyForResult } = require('../services/pushNotify');
 const { ingestAppleInvoice } = require('../services/appleReceipts');
+const { extractAddress } = require('../utils/mail-address');
 
 const inboundLimiter = rateLimit({ windowMs: 60 * 1000, max: 30 });
 
@@ -44,14 +45,20 @@ router.post('/inbound', inboundLimiter, checkSecret, async (req, res) => {
     //
     // (b) Apple faktury: uživatel je přeposílá RUČNĚ, takže From je jeho vlastní adresa.
     //     Vyžadujeme proto `EMAIL_APPLE_FORWARDER` (fallback `EMAIL_ALLOWED_SENDER`)
-    //     ve `from` hlavičce. Stopy uvnitř mailu (no_reply@email.apple.com, klíčové
-    //     slovo) jsou jen DOPLŇKOVÝ filtr obsahu, ne autentizace — kdokoli si je do
-    //     těla napíše. Bez nastavené adresy je Apple cesta úplně vypnutá.
+    //     jako PŘESNOU adresu (ne substring) ve `from` hlavičce NEBO v `envelope_from`.
+    //     Stopy uvnitř mailu (no_reply@email.apple.com, klíčové slovo) jsou jen
+    //     DOPLŇKOVÝ filtr obsahu, ne autentizace — kdokoli si je do těla napíše.
+    //     Bez nastavené adresy je Apple cesta úplně vypnutá.
+    //     POZOR (C1): substring přes CELOU `From` hlavičku (vč. display name) byl
+    //     obejitelný hlavičkou typu `From: "tomas@icloud.com" <utocnik@evil.example>`
+    //     — proto se porovnává jen adresní část vytažená ze závorek, na přesnou shodu.
     const allowed = (process.env.EMAIL_ALLOWED_SENDER || '').toLowerCase();
     const appleForwarder = (process.env.EMAIL_APPLE_FORWARDER || process.env.EMAIL_ALLOWED_SENDER || '')
       .toLowerCase().trim();
     const fromHdr = String(from).toLowerCase();
     const rawLower = String(raw).toLowerCase();
+    const fromAddr = extractAddress(from);
+    const envelopeFromAddr = extractAddress(envelope_from);
 
     // Klíčové slovo hledáme jako celé slovo — jinak by prošlo i „credit card"
     // nebo „accredited" schované v patičce/CSS mailu. Testujeme primárně proti
@@ -59,7 +66,8 @@ router.post('/inbound', inboundLimiter, checkSecret, async (req, res) => {
     const APPLE_KEYWORD_RE = /\b(invoice|refund|credit note)\b/i;
     const hasAppleSender = rawLower.includes('no_reply@email.apple.com');
     const hasAppleKeyword = APPLE_KEYWORD_RE.test(String(subject || '')) || APPLE_KEYWORD_RE.test(rawLower);
-    const appleFromOk = !!appleForwarder && fromHdr.includes(appleForwarder);
+    const appleFromOk = !!appleForwarder
+      && (fromAddr === appleForwarder || envelopeFromAddr === appleForwarder);
 
     // Precedence: když mail splní obě podmínky, vyhrává AirBank.
     const isAirBank = fromHdr.includes('airbank.cz') && !!allowed && rawLower.includes(allowed);

@@ -20,8 +20,13 @@ AirBank → Gmail (auto-forward) → `inbox@spendex.uk` (MX na Cloudflare)
    - `WEBHOOK_SECRET` = stejná hodnota jako `EMAIL_WEBHOOK_SECRET` na Railway
      (ukládej jako **Secret**, ne plain text)
    - `EMAIL_APPLE_FORWARDER` = adresa, ze které si ručně přeposíláš Apple faktury
-     (stejná hodnota jako `EMAIL_APPLE_FORWARDER` na Railway). Bez ní Worker žádnou
-     Apple fakturu nepropustí.
+     (stejná hodnota jako `EMAIL_APPLE_FORWARDER` na Railway). Když ji nenastavíš,
+     Worker (stejně jako server) spadne na fallback `EMAIL_ALLOWED_SENDER` — nastav
+     tedy aspoň jednu z těch dvou, jinak je Apple cesta ve Workeru úplně vypnutá.
+     **Nastav vždy stejnou dvojici proměnných na Workeru i na Railway** — pokud
+     server má nastavenou adresu, kterou Worker nezná (nebo naopak), Worker fakturu
+     zahodí ještě před serverem a v serverovém logu se o tom nic neobjeví (mail se
+     k serveru vůbec nedostane).
 6. **Routing rule:** Email Routing → Routes → `inbox@spendex.uk` → *Send to a Worker* → tento Worker.
 7. **Gmail — ověřovací kód (POZOR na gotchu):** Gmail při přidání přeposílací adresy
    pošle ověřovací e-mail s hlavičkou `From: forwarding-noreply@google.com`
@@ -51,8 +56,21 @@ ověřuje Cloudflare Email Routing (SPF/DMARC). Worker i server proto vyžadují
 
 - AirBank cesta: `From` obsahuje `airbank.cz` (server navíc `EMAIL_ALLOWED_SENDER`
   v raw MIME — důkaz, že mail prošel schránkou uživatele),
-- Apple cesta: `From` obsahuje `EMAIL_APPLE_FORWARDER` (fallback `EMAIL_ALLOWED_SENDER`;
-  když není ani jedna, je Apple cesta **vypnutá**).
+- Apple cesta: adresní část `From` (bez display name, viz níže) se PŘESNĚ shoduje
+  s `EMAIL_APPLE_FORWARDER` (fallback `EMAIL_ALLOWED_SENDER`; když není nastavená
+  ani jedna, je Apple cesta ve Workeru i na serveru **vypnutá**).
+
+**Adresa se porovnává, ne substring celé hlavičky.** `From` může mít tvar
+`Jméno <adresa@domena>` — display name („Jméno") si odesílatel volí zcela sám a
+SPF/DMARC ho nijak nekryje. Dřívější verze porovnávala `.includes()` přes CELOU
+hlavičku, takže hlavička `From: "tomas@icloud.com" <utocnik@evil.example>` prošla,
+i když skutečná adresa patřila útočníkovi (povolená adresa byla schovaná v display
+name). Worker i server proto vždy vytáhnou jen adresu ze závorek (bez závorek berou
+celý řetězec) a porovnávají ji case-insensitive na přesnou shodu — na serveru pomocná
+funkce `src/utils/mail-address.js`, ve Workeru stejná logika okopírovaná inline
+(Worker je ESM a nemůže importovat z `src/`; při úpravě jedné udržuj i druhou).
+Server navíc zkouší i `envelope_from`, které Worker posílá vedle `from` — stačí, aby
+sedla adresa v jednom z obou polí.
 
 Stopy v těle (`no_reply@email.apple.com` + celé slovo `invoice`/`refund`/`credit note`,
 primárně v předmětu) jsou až DRUHÝ, obsahový filtr — ne autentizace. Worker je testuje

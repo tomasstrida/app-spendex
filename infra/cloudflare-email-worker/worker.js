@@ -1,10 +1,24 @@
 // Cloudflare Email Worker — příjem AirBank notifikací a přeposlaných Apple faktur,
 // forward na Spendex webhook.
 // Konfigurace přes Worker Variables/Secrets: WEBHOOK_URL, WEBHOOK_SECRET,
-// EMAIL_APPLE_FORWARDER (adresa, ze které si uživatel přeposílá Apple faktury).
+// EMAIL_APPLE_FORWARDER (adresa, ze které si uživatel přeposílá Apple faktury;
+// fallback EMAIL_ALLOWED_SENDER — stejná logika jako na serveru).
+
+// Vytáhne e-mailovou adresu z hlavičky `From` ("Jméno <a@b.cz>" → "a@b.cz").
+// Worker je ESM a nemůže importovat z src/, proto je kopie stejná jako
+// src/utils/mail-address.js — při úpravě jedné aktualizuj i druhou.
+function extractAddress(fromHeader) {
+  const raw = String(fromHeader || '').trim();
+  if (!raw) return '';
+  const m = raw.match(/<([^<>]+)>/);
+  const addr = m ? m[1] : raw;
+  return addr.trim().toLowerCase();
+}
+
 export default {
   async email(message, env) {
-    const fromHeader = (message.headers.get('from') || '').toLowerCase();
+    const fromHeaderRaw = message.headers.get('from') || '';
+    const fromHeader = fromHeaderRaw.toLowerCase();
     const subject = message.headers.get('subject') || '';
 
     // Vrstva 2 (brzká): obě povolené cesty stojí na `From` hlavičce, kterou ověřuje
@@ -12,10 +26,14 @@ export default {
     // rozhodovat nesmí.
     // POZOR: Gmail forward (přes filtr) zachovává PŮVODNÍ obálku — From zůstane
     // info@airbank.cz. U ručně přeposlaných Apple faktur je From adresa uživatele
-    // (EMAIL_APPLE_FORWARDER).
-    const appleForwarder = (env.EMAIL_APPLE_FORWARDER || '').toLowerCase().trim();
+    // (EMAIL_APPLE_FORWARDER, fallback EMAIL_ALLOWED_SENDER).
+    // POZOR (C1): porovnávat se musí jen adresní část z `From`, na přesnou shodu —
+    // substring přes celou hlavičku šel obejít adresou schovanou v display name
+    // (`From: "tomas@icloud.com" <utocnik@evil.example>`).
+    const appleForwarder = (env.EMAIL_APPLE_FORWARDER || env.EMAIL_ALLOWED_SENDER || '').toLowerCase().trim();
     const isAirBank = fromHeader.includes('airbank.cz');
-    const appleFromOk = !!appleForwarder && fromHeader.includes(appleForwarder);
+    const fromAddr = extractAddress(fromHeaderRaw);
+    const appleFromOk = !!appleForwarder && fromAddr === appleForwarder;
 
     // Tenhle test je ZÁMĚRNĚ před čtením message.raw — u spamu se tělo vůbec nebufferuje.
     if (!isAirBank && !appleFromOk) {
