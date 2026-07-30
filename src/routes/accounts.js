@@ -8,7 +8,7 @@ const VALID_ROLES = ['spending', 'fixed', 'ignored', 'income'];
 // GET /api/accounts
 router.get('/', requireAuth, (req, res) => {
   const rows = db.prepare(`
-    SELECT id, account_number, name, role, created_at
+    SELECT id, account_number, name, role, is_fund, created_at
     FROM accounts WHERE user_id = ? ORDER BY name ASC
   `).all(req.dataUserId);
   res.json(rows);
@@ -16,14 +16,14 @@ router.get('/', requireAuth, (req, res) => {
 
 // POST /api/accounts
 router.post('/', requireAuth, (req, res) => {
-  const { name, role = 'spending', account_number = null } = req.body;
+  const { name, role = 'spending', account_number = null, is_fund = 0 } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Zadejte název účtu.' });
   if (!VALID_ROLES.includes(role)) return res.status(400).json({ error: 'Neplatná role.' });
   try {
     const result = db.prepare(`
-      INSERT INTO accounts (user_id, account_number, name, role)
-      VALUES (?, ?, ?, ?)
-    `).run(req.dataUserId, account_number?.trim() || null, name.trim(), role);
+      INSERT INTO accounts (user_id, account_number, name, role, is_fund)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(req.dataUserId, account_number?.trim() || null, name.trim(), role, is_fund ? 1 : 0);
     res.status(201).json(db.prepare('SELECT * FROM accounts WHERE id = ?').get(result.lastInsertRowid));
   } catch (e) {
     if (e.message?.includes('UNIQUE')) return res.status(400).json({ error: 'Účet s tímto číslem již existuje.' });
@@ -40,10 +40,12 @@ router.patch('/:id', requireAuth, (req, res) => {
   const account_number = 'account_number' in req.body
     ? (req.body.account_number?.trim() || null)
     : row.account_number;
+  // Fondový účet = kumuluje peníze na roční výdaje (Licence, Nepravidelné).
+  const is_fund = 'is_fund' in req.body ? (req.body.is_fund ? 1 : 0) : row.is_fund;
   if (!VALID_ROLES.includes(role)) return res.status(400).json({ error: 'Neplatná role.' });
   try {
-    db.prepare('UPDATE accounts SET name = ?, role = ?, account_number = ? WHERE id = ?')
-      .run(name, role, account_number, row.id);
+    db.prepare('UPDATE accounts SET name = ?, role = ?, account_number = ?, is_fund = ? WHERE id = ?')
+      .run(name, role, account_number, is_fund, row.id);
     res.json(db.prepare('SELECT * FROM accounts WHERE id = ?').get(row.id));
   } catch (e) {
     if (e.message?.includes('UNIQUE')) return res.status(400).json({ error: 'Účet s tímto číslem již existuje.' });

@@ -26,6 +26,7 @@ export default function AccountsPage() {
   const [newName, setNewName] = useState('');
   const [newNumber, setNewNumber] = useState('');
   const [newRole, setNewRole] = useState('spending');
+  const [newIsFund, setNewIsFund] = useState(false);
   const [savingNew, setSavingNew] = useState(false);
 
   function load() {
@@ -55,6 +56,10 @@ export default function AccountsPage() {
   async function handleRoleChange(acc, role) {
     if (role === acc.role) return;
     await patchAccount(acc.id, { role });
+  }
+
+  async function handleFundChange(acc, isFund) {
+    await patchAccount(acc.id, { is_fund: isFund });
   }
 
   function startEdit(acc) {
@@ -93,13 +98,14 @@ export default function AccountsPage() {
           name: newName.trim(),
           role: newRole,
           account_number: newNumber.trim() || null,
+          is_fund: newIsFund,
         }),
       });
       const d = await r.json();
       if (!r.ok) { setError(d.error || 'Chyba.'); return; }
       setAccounts(prev => [...prev, d].sort((a, b) => a.name.localeCompare(b.name)));
       setShowCreate(false);
-      setNewName(''); setNewNumber(''); setNewRole('spending');
+      setNewName(''); setNewNumber(''); setNewRole('spending'); setNewIsFund(false);
     } catch { setError('Chyba připojení.'); }
     finally { setSavingNew(false); }
   }
@@ -130,6 +136,10 @@ export default function AccountsPage() {
                 <option key={v} value={v}>{l} — {ROLE_HINTS[v]}</option>
               ))}
             </select>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+              <input type="checkbox" checked={newIsFund} onChange={e => setNewIsFund(e.target.checked)} />
+              Fondový účet
+            </label>
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="submit" className="btn btn-primary btn-sm" disabled={savingNew}>
                 <Check size={14} /> {savingNew ? 'Ukládám…' : 'Vytvořit'}
@@ -154,6 +164,7 @@ export default function AccountsPage() {
                 <th style={{ textAlign: 'left', padding: '10px 12px' }}>Název</th>
                 <th style={{ textAlign: 'left', padding: '10px 12px' }}>Číslo účtu</th>
                 <th style={{ textAlign: 'left', padding: '10px 12px' }}>Role</th>
+                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Fond</th>
                 <th style={{ padding: '10px 12px' }} />
               </tr>
             </thead>
@@ -186,6 +197,11 @@ export default function AccountsPage() {
                       <div className="text-muted" style={{ fontSize: 11, marginTop: 4, maxWidth: 360 }}>
                         {ROLE_HINTS[acc.role]}
                       </div>
+                    </td>
+                    <td style={{ padding: '8px 12px', verticalAlign: 'top' }}>
+                      <input type="checkbox" checked={!!acc.is_fund}
+                        onChange={e => handleFundChange(acc, e.target.checked)}
+                        title="Fondový účet: kumuluje peníze na roční výdaje (Licence, Nepravidelné)" />
                     </td>
                     <td style={{ padding: '8px 12px', textAlign: 'right', whiteSpace: 'nowrap', verticalAlign: 'top' }}>
                       {editing ? (
