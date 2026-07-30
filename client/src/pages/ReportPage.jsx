@@ -235,15 +235,20 @@ export default function ReportPage() {
   // „Na spořicí" = přebytek za období (příjmy − všechny výdaje). Skutečné pohyby
   // na spořicím účtu Schůzka nezobrazuje — jsou v Transakcích. Mezisoučty i přebytek
   // skládá sdílený helper (stejná pravda jako stránka Spořicí účet).
+  const fundTopupRow     = stats?.fund_topup || null;
+  const annualOffFundRow = stats?.annual_off_fund || null;
   const { totalIncome, totalFixed, totalType1, totalType3, surplus } = computeMeetingSurplus({
     incomeSources,
     fixedExpenses,
     budgetsType1: budgets,
     byCategory,
+    fundTopup: fundTopupRow?.outflow || 0,
+    annualOffFund: annualOffFundRow?.spent || 0,
   });
   const totalDiff    = Math.round(totalIncome - totalPlanned);
 
   const typ1CatIds = byCategory.filter(c => c.type === 1).map(c => c.id).join(',');
+  const typ2CatIds = byCategory.filter(c => c.type === 2).map(c => c.id).join(',');
   const typ3CatIds = byCategory.filter(c => c.type === 3).map(c => c.id).join(',');
   function txLink(extra) {
     // Posíláme `period=YYYY-MM`, ne `from/to`, aby Transakce zachovaly měsíční
@@ -307,6 +312,35 @@ export default function ReportPage() {
             {/* Řádek „Dotace na nepravidelné" odstraněn: dotace na Nepravidelné je
                 definovaná fixní platba, takže už je v součtu Fixních plateb výš.
                 Samostatný řádek počítaný z hardcoded čísla účtu ji přičítal podruhé. */}
+            {/* Dobití ročního fondu nad rámec standardní dotace. Odliv z provozního
+                účtu, který v bilanci dřív nebyl vůbec — roční kategorie (typ 2) do ní
+                nevstupují a dotace na Licence nebyla definovaná jako fixní platba. */}
+            {fundTopupRow?.category_id && fundTopupRow.outflow !== 0 && (
+              <Link to={txLink(`category_ids=${fundTopupRow.category_id}&direction=out`)}
+                className="report-bilance-row"
+                style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                title="Klik: převody na fondové účty nad rámec standardní dotace">
+                <span>{fundTopupRow.name}</span>
+                <span>
+                  − {formatCurrency(fundTopupRow.outflow)}
+                  {Math.round(fundTopupRow.saldo) !== 0 && (
+                    <span className="text-danger" style={{ fontWeight: 400 }}
+                      title="U některého převodu chybí párová noha — zkontroluj sekci Účetní."> ⚠</span>
+                  )}
+                </span>
+              </Link>
+            )}
+            {/* Roční výdaje zaplacené mimo fondový účet (typicky Oblečení ze Společného).
+                Skryté, dokud uživatel neoznačí aspoň jeden fondový účet (API vrací null). */}
+            {annualOffFundRow && annualOffFundRow.spent !== 0 && (
+              <Link to={txLink(`${typ2CatIds ? `category_ids=${typ2CatIds}&` : ''}off_fund=1&spending_only=1`)}
+                className="report-bilance-row"
+                style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                title="Klik: roční výdaje (Typ 2) zaplacené mimo fondový účet">
+                <span>Roční výdaje mimo fond</span>
+                <span>− {formatCurrency(annualOffFundRow.spent)}</span>
+              </Link>
+            )}
             <Link to={txLink(typ1CatIds ? `category_ids=${typ1CatIds}&spending_only=1` : 'spending_only=1')}
               className="report-bilance-row"
               style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}

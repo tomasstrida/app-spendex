@@ -617,6 +617,7 @@ export default function TransactionsPage() {
             { type: 1, label: 'Měsíční' },
             { type: 2, label: 'Roční' },
             { type: 3, label: 'Fondy' },
+            { type: 4, label: 'Účetní' },
           ].map(group => {
             const items = categories.filter(c => c.type === group.type);
             if (items.length === 0) return null;

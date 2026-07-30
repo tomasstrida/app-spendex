@@ -45,6 +45,8 @@ export default function SavingsPage() {
     fixedExpenses,
     budgetsType1: budgets,
     byCategory: stats?.by_category || [],
+    fundTopup: stats?.fund_topup?.outflow || 0,
+    annualOffFund: stats?.annual_off_fund?.spent || 0,
   });
 
   function txLink(extra) {
