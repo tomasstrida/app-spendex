@@ -107,3 +107,34 @@ test('computeMeetingSurplus: prázdné vstupy → nuly', () => {
   assert.equal(r.totalType3, 0);
   assert.equal(r.surplus, 0);
 });
+
+test('surplusToSavings: odečte dobití fondu i roční výdaje mimo fond', () => {
+  const surplus = surplusToSavings({
+    totalIncome: 203700, totalFixed: 102990,
+    fundTopup: 10500, annualOffFund: 2653,
+    totalType1: 55893, totalType3: 3600,
+  });
+  assert.equal(surplus, 203700 - 102990 - 10500 - 2653 - 55893 - 3600);
+  assert.equal(surplus, 28064);
+});
+
+test('surplusToSavings: chybějící fundTopup/annualOffFund = 0 (zpětná kompatibilita)', () => {
+  const surplus = surplusToSavings({
+    totalIncome: 100000, totalFixed: 20000, totalType1: 10000, totalType3: 0,
+  });
+  assert.equal(surplus, 70000);
+});
+
+test('computeMeetingSurplus: nové vstupy projdou do výsledku i do přebytku', () => {
+  const r = computeMeetingSurplus({
+    incomeSources: [{ id: 1, actual: 100000 }],
+    fixedExpenses: [{ source: 'manual', amount: 20000, actual: 20000, tx_count: 1 }],
+    budgetsType1: [{ spent: 10000, amount: 12000 }],
+    byCategory: [{ type: 3, spent: 1000 }],
+    fundTopup: 5000,
+    annualOffFund: 2000,
+  });
+  assert.equal(r.fundTopup, 5000);
+  assert.equal(r.annualOffFund, 2000);
+  assert.equal(r.surplus, 100000 - 20000 - 5000 - 2000 - 10000 - 1000);
+});
