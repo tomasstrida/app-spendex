@@ -95,3 +95,63 @@ test('migrace: fixed_expenses má match_counterparty_account', () => {
   try { fs.unlinkSync(tmp + '-wal'); fs.unlinkSync(tmp + '-shm'); } catch { /* ok */ }
   assert.ok(cols.includes('match_counterparty_account'), 'chybí sloupec match_counterparty_account');
 });
+
+test('migrace: categories.system_role + accounts.is_fund existují', () => {
+  const tmp = path.join(os.tmpdir(), `spendex-sysrole-${Date.now()}.db`);
+  process.env.DB_PATH = tmp;
+  delete require.cache[require.resolve('../db/connection')];
+  delete require.cache[require.resolve('../db/schema')];
+  const db = require('../db/connection');
+  require('../db/schema').initSchema();
+  const catCols = db.prepare('PRAGMA table_info(categories)').all().map(c => c.name);
+  const accCols = db.prepare('PRAGMA table_info(accounts)').all().map(c => c.name);
+  db.close();
+  fs.unlinkSync(tmp);
+  try { fs.unlinkSync(tmp + '-wal'); fs.unlinkSync(tmp + '-shm'); } catch { /* ok */ }
+  assert.ok(catCols.includes('system_role'), `categories nemá system_role; má: ${catCols.join(',')}`);
+  assert.ok(accCols.includes('is_fund'), `accounts nemá is_fund; má: ${accCols.join(',')}`);
+});
+
+test('bootstrap: kategorie fund_topup vznikne jen uživateli, který už kategorie má, a je idempotentní', () => {
+  const tmp = path.join(os.tmpdir(), `spendex-topup-${Date.now()}.db`);
+  process.env.DB_PATH = tmp;
+  delete require.cache[require.resolve('../db/connection')];
+  delete require.cache[require.resolve('../db/schema')];
+  const db = require('../db/connection');
+  require('../db/schema').initSchema();
+  // user 1 = data owner s kategoriemi, user 2 = člen domácnosti bez vlastních kategorií
+  db.prepare("INSERT INTO users (id, email) VALUES (1,'owner@x'),(2,'member@x')").run();
+  db.prepare("INSERT INTO categories (user_id, name, type) VALUES (1,'Jídlo',1)").run();
+  require('../db/schema').initSchema();
+  require('../db/schema').initSchema();   // druhý běh nesmí duplikovat
+  const rows = db.prepare("SELECT user_id, name, type FROM categories WHERE system_role = 'fund_topup'").all();
+  const defaultIsFund = db.prepare('PRAGMA table_info(accounts)').all().find(c => c.name === 'is_fund');
+  db.close();
+  fs.unlinkSync(tmp);
+  try { fs.unlinkSync(tmp + '-wal'); fs.unlinkSync(tmp + '-shm'); } catch { /* ok */ }
+  assert.equal(rows.length, 1, 'právě jedna kategorie fund_topup (jen pro user 1)');
+  assert.equal(rows[0].user_id, 1);
+  assert.equal(rows[0].name, 'Nestandardní dobití ročního budgetu');
+  assert.equal(rows[0].type, 4);
+  assert.equal(defaultIsFund.dflt_value, '0');
+});
+
+test('bootstrap: ručně založenou kategorii se stejným názvem povýší místo duplikátu', () => {
+  const tmp = path.join(os.tmpdir(), `spendex-topup2-${Date.now()}.db`);
+  process.env.DB_PATH = tmp;
+  delete require.cache[require.resolve('../db/connection')];
+  delete require.cache[require.resolve('../db/schema')];
+  const db = require('../db/connection');
+  require('../db/schema').initSchema();
+  db.prepare("INSERT INTO users (id, email) VALUES (1,'owner@x')").run();
+  // uživatel si ji založil sám jako měsíční (unique index na user_id+name)
+  db.prepare("INSERT INTO categories (user_id, name, type) VALUES (1,'Nestandardní dobití ročního budgetu',1)").run();
+  require('../db/schema').initSchema();
+  const rows = db.prepare("SELECT type, system_role FROM categories WHERE name = 'Nestandardní dobití ročního budgetu'").all();
+  db.close();
+  fs.unlinkSync(tmp);
+  try { fs.unlinkSync(tmp + '-wal'); fs.unlinkSync(tmp + '-shm'); } catch { /* ok */ }
+  assert.equal(rows.length, 1, 'žádný duplikát');
+  assert.equal(rows[0].type, 4);
+  assert.equal(rows[0].system_role, 'fund_topup');
+});

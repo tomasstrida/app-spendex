@@ -347,6 +347,11 @@ function initSchema() {
     // identifikovaná textem je skutečný výdaj a převod na vlastní účet do ní nepatří
     // (jinak řádek „T-Mobile" sbírá i „Dotace na T-mobile").
     'ALTER TABLE fixed_expenses ADD COLUMN include_transfers INTEGER NOT NULL DEFAULT 0',
+    // Technická kategorie „Nestandardní dobití ročního budgetu" (typ 4 = Účetní):
+    // nese převody na fondové účty NAD rámec standardní dotace.
+    'ALTER TABLE categories ADD COLUMN system_role TEXT',
+    // accounts.is_fund = účet, na kterém se kumulují peníze na roční výdaje
+    'ALTER TABLE accounts ADD COLUMN is_fund INTEGER NOT NULL DEFAULT 0',
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* sloupec/index/tabulka již existuje nebo nelze aplikovat */ }
@@ -426,6 +431,32 @@ function initSchema() {
       if (cat) addRule.run(u.id, cat.id);
     }
   } catch { /* tabulky/kategorie ještě neexistují při prvním běhu – ignoruj */ }
+
+  // Bootstrap kategorie fund_topup. Jen pro uživatele, kteří UŽ MAJÍ aspoň jednu
+  // kategorii: v household sharingu jsou kategorie jen u data ownera, takže
+  // členovi domácnosti by vznikl mrtvý záznam. Idempotentní.
+  //
+  // Na categories(user_id, name) je unique index — když si uživatel kategorii se
+  // stejným názvem založil sám, INSERT by spadl. Takový řádek proto místo vkládání
+  // POVÝŠÍME (type=4 + system_role), ať feature funguje a nezůstanou dvě kategorie.
+  try {
+    const TOPUP_NAME = 'Nestandardní dobití ročního budgetu';
+    const owners = db.prepare(`
+      SELECT DISTINCT user_id FROM categories
+      WHERE user_id NOT IN (SELECT user_id FROM categories WHERE system_role = 'fund_topup')
+    `).all();
+    const findByName = db.prepare('SELECT id FROM categories WHERE user_id = ? AND name = ?');
+    const promote = db.prepare("UPDATE categories SET type = 4, system_role = 'fund_topup' WHERE id = ?");
+    const insTopup = db.prepare(`
+      INSERT INTO categories (user_id, name, type, color, icon, system_role)
+      VALUES (?, ?, 4, '#f59e0b', 'PiggyBank', 'fund_topup')
+    `);
+    for (const o of owners) {
+      const existing = findByName.get(o.user_id, TOPUP_NAME);
+      if (existing) promote.run(existing.id);
+      else insTopup.run(o.user_id, TOPUP_NAME);
+    }
+  } catch { /* tabulka/sloupec ještě neexistuje při prvním běhu – ignoruj */ }
 }
 
 module.exports = { initSchema };
