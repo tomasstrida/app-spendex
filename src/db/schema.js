@@ -439,24 +439,37 @@ function initSchema() {
   // Na categories(user_id, name) je unique index — když si uživatel kategorii se
   // stejným názvem založil sám, INSERT by spadl. Takový řádek proto místo vkládání
   // POVÝŠÍME (type=4 + system_role), ať feature funguje a nezůstanou dvě kategorie.
-  try {
-    const TOPUP_NAME = 'Nestandardní dobití ročního budgetu';
-    const owners = db.prepare(`
-      SELECT DISTINCT user_id FROM categories
-      WHERE user_id NOT IN (SELECT user_id FROM categories WHERE system_role = 'fund_topup')
-    `).all();
-    const findByName = db.prepare('SELECT id FROM categories WHERE user_id = ? AND name = ?');
-    const promote = db.prepare("UPDATE categories SET type = 4, system_role = 'fund_topup' WHERE id = ?");
-    const insTopup = db.prepare(`
-      INSERT INTO categories (user_id, name, type, color, icon, system_role)
-      VALUES (?, ?, 4, '#f59e0b', 'PiggyBank', 'fund_topup')
-    `);
-    for (const o of owners) {
+  //
+  // V tomto místě už tabulka categories i sloupec system_role prokazatelně existují
+  // (viz ALTER TABLE výš) – proto NENÍ celý blok v jednom try/catch. try/catch je
+  // per uživatel: chrání jen proti neočekávané chybě u jednoho uživatele (např.
+  // souběžný zápis), ať nezablokuje bootstrap zbylým uživatelům.
+  const TOPUP_NAME = 'Nestandardní dobití ročního budgetu';
+  const owners = db.prepare(`
+    SELECT DISTINCT user_id FROM categories
+    WHERE user_id NOT IN (SELECT user_id FROM categories WHERE system_role = 'fund_topup')
+  `).all();
+  const findByName = db.prepare('SELECT id FROM categories WHERE user_id = ? AND name = ?');
+  const promote = db.prepare("UPDATE categories SET type = 4, system_role = 'fund_topup' WHERE id = ?");
+  // Měsíční budgety (tabulka budgets) dávají smysl jen pro Typ 1 – po povýšení na
+  // type=4 by zůstaly jako mrtvý záznam, stejně jako to řeší PATCH /api/categories
+  // (src/routes/categories.js:112-114) při ručním přepnutí typu.
+  const deleteBudgets = db.prepare('DELETE FROM budgets WHERE user_id = ? AND category_id = ?');
+  const insTopup = db.prepare(`
+    INSERT INTO categories (user_id, name, type, color, icon, system_role)
+    VALUES (?, ?, 4, '#f59e0b', 'PiggyBank', 'fund_topup')
+  `);
+  for (const o of owners) {
+    try {
       const existing = findByName.get(o.user_id, TOPUP_NAME);
-      if (existing) promote.run(existing.id);
-      else insTopup.run(o.user_id, TOPUP_NAME);
-    }
-  } catch { /* tabulka/sloupec ještě neexistuje při prvním běhu – ignoruj */ }
+      if (existing) {
+        promote.run(existing.id);
+        deleteBudgets.run(o.user_id, existing.id);
+      } else {
+        insTopup.run(o.user_id, TOPUP_NAME);
+      }
+    } catch { /* selhání bootstrapu pro jednoho uživatele – ostatní pokračují */ }
+  }
 }
 
 module.exports = { initSchema };

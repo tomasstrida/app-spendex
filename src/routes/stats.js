@@ -147,6 +147,11 @@ router.get('/overview', requireAuth, (req, res) => {
   // Do bilance jde JEN odchozí noha z provozního účtu; příchozí noha na fondovém
   // účtu by ji vyrušila. `saldo` napříč všemi účty je kontrola pro uživatele:
   // když označí jen jednu nohu převodu, nevyjde 0 (sekce Účetní to ukáže s ⚠).
+  // Záměrně BEZ SPENDING_FILTER (na rozdíl od `annual_off_fund` níž): ten filtr
+  // vyžaduje kategorii typu 1–3 a zahodil by dobití zaplacené z účtu s rolí
+  // 'ignored' (Hlavní), které se ale do bilance počítat MUSÍ. Důsledek: dobití
+  // zaplacené přímo z OSVČ účtu (role='income', mimo scope aplikace) se odečte
+  // jako výdaj domácnosti, přestože jeho zdroj do „Příjmy celkem" nevstupuje.
   const topupCat = db.prepare(
     "SELECT id, name FROM categories WHERE user_id = ? AND system_role = 'fund_topup'"
   ).get(req.dataUserId);
@@ -173,6 +178,11 @@ router.get('/overview', requireAuth, (req, res) => {
   // ── Roční výdaje (typ 2) zaplacené mimo fondový účet ──
   // null = uživatel nemá označený ani jeden fondový účet; řádek by pak ukázal
   // celé roční čerpání (každý účet by byl „mimo fond") a mátl, proto se skryje.
+  // Riziko dvojího započtení: `fixedExpensesForPeriod` matchuje čistě podle
+  // textu/protiúčtu a nekouká na typ kategorie – pokud by transakce v kategorii
+  // typu 2 na ne-fondovém účtu zároveň sedla na aktivní matcher fixní platby,
+  // počítala by se dvakrát (jednou v „Fixní platby", jednou tady). Na aktuálních
+  // produkčních datech k tomu nedochází (matcher typ kategorie nezohledňuje).
   const hasFundAccount = db.prepare(
     'SELECT 1 FROM accounts WHERE user_id = ? AND is_fund = 1 LIMIT 1'
   ).get(req.dataUserId);

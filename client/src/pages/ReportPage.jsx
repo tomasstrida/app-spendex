@@ -316,7 +316,7 @@ export default function ReportPage() {
                 účtu, který v bilanci dřív nebyl vůbec — roční kategorie (typ 2) do ní
                 nevstupují a dotace na Licence nebyla definovaná jako fixní platba. */}
             {fundTopupRow?.category_id && fundTopupRow.outflow !== 0 && (
-              <Link to={txLink(`category_ids=${fundTopupRow.category_id}&direction=out`)}
+              <Link to={txLink(`category_ids=${fundTopupRow.category_id}&direction=out&off_fund=1`)}
                 className="report-bilance-row"
                 style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
                 title="Klik: převody na fondové účty nad rámec standardní dotace">
@@ -338,7 +338,7 @@ export default function ReportPage() {
                 style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
                 title="Klik: roční výdaje (Typ 2) zaplacené mimo fondový účet">
                 <span>Roční výdaje mimo fond</span>
-                <span>− {formatCurrency(annualOffFundRow.spent)}</span>
+                <span>{annualOffFundRow.spent >= 0 ? '−' : '+'} {formatCurrency(Math.abs(annualOffFundRow.spent))}</span>
               </Link>
             )}
             <Link to={txLink(typ1CatIds ? `category_ids=${typ1CatIds}&spending_only=1` : 'spending_only=1')}

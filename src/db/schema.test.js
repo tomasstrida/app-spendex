@@ -145,13 +145,18 @@ test('bootstrap: ručně založenou kategorii se stejným názvem povýší mís
   require('../db/schema').initSchema();
   db.prepare("INSERT INTO users (id, email) VALUES (1,'owner@x')").run();
   // uživatel si ji založil sám jako měsíční (unique index na user_id+name)
-  db.prepare("INSERT INTO categories (user_id, name, type) VALUES (1,'Nestandardní dobití ročního budgetu',1)").run();
+  const catId = db.prepare("INSERT INTO categories (user_id, name, type) VALUES (1,'Nestandardní dobití ročního budgetu',1)").run().lastInsertRowid;
+  // měsíční budget existující kategorie – po povýšení na type=4 je to mrtvý záznam,
+  // stejně jako u PATCH /api/categories (src/routes/categories.js:112-114) musí zmizet
+  db.prepare("INSERT INTO budgets (user_id, category_id, month, amount) VALUES (1,?,'default',5000)").run(catId);
   require('../db/schema').initSchema();
   const rows = db.prepare("SELECT type, system_role FROM categories WHERE name = 'Nestandardní dobití ročního budgetu'").all();
+  const budgetRows = db.prepare('SELECT * FROM budgets WHERE category_id = ?').all(catId);
   db.close();
   fs.unlinkSync(tmp);
   try { fs.unlinkSync(tmp + '-wal'); fs.unlinkSync(tmp + '-shm'); } catch { /* ok */ }
   assert.equal(rows.length, 1, 'žádný duplikát');
   assert.equal(rows[0].type, 4);
   assert.equal(rows[0].system_role, 'fund_topup');
+  assert.equal(budgetRows.length, 0, 'mrtvý budget po povýšení kategorie na type=4 musí být smazaný');
 });
