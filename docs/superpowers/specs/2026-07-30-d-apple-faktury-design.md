@@ -54,13 +54,18 @@ Uživatel přeposílá ručně ze své adresy, takže `From` je `tomas.strida@ic
 Apple podmínka:
 
 - v hlavičkách nebo těle je `no_reply@email.apple.com`, **a zároveň**
-- předmět nebo tělo obsahuje `invoice` (case-insensitive — vzorek má v předmětu
-  „Your invoice from Apple." a v nadpisu „Invoice"), **a zároveň**
+- předmět nebo tělo obsahuje `invoice`, `refund` nebo `credit` (case-insensitive — vzorek faktury
+  má v předmětu „Your invoice from Apple." a v nadpisu „Invoice"; refundační doklady Apple používají
+  „refund"/„credit note"), **a zároveň**
 - v raw MIME je adresa z `EMAIL_ALLOWED_SENDER` (stejná podmínka jako dnes u AirBank).
 
-Apple mail bez slova „invoice" se zahodí a **neukládá** — na rozdíl od nerozpoznaných AirBank
-notifikací, které jdou do fronty. Důvod: uživatel přeposílá vše od Apple a marketing by frontu
-zaplavil.
+Apple mail, který žádné z těch slov neobsahuje, se zahodí a **neukládá** — na rozdíl od
+nerozpoznaných AirBank notifikací, které jdou do fronty. Důvod: uživatel přeposílá vše od Apple
+a marketing by frontu zaplavil.
+
+**Mail, který filtrem projde, ale parser ho nerozpozná, se naopak uloží** se stavem `unparsed`.
+Refundační doklad Apple zatím nemáme ve vzorku, takže tohle je způsob, jak jeho formát uvidíme,
+až první dorazí — bez toho, aby se ztratil.
 
 **Vědomé riziko:** hlavičku `From` uvnitř přeposlaného mailu lze zfalšovat. Dopad je omezený —
 faktura nikdy nezaloží transakci, nezmění částku ani datum. Nejhorší následek je špatná subkategorie
@@ -74,11 +79,12 @@ CREATE TABLE IF NOT EXISTS apple_receipts (
   user_id INTEGER NOT NULL,
   order_id TEXT,                  -- „MQ9BQ86WV5"; NULL když se nevytáhne
   receipt_date TEXT,              -- YYYY-MM-DD, převedeno z „30 June 2026"
-  total_amount REAL,              -- kladné, 269.00
+  total_amount REAL,              -- VŽDY kladné, 269.00; směr nese is_refund
+  is_refund INTEGER NOT NULL DEFAULT 0,    -- 1 = dobropis / vrácení peněz
   card_last4 TEXT,                -- „4225"
   items_json TEXT,                -- [{ app, description, amount }]
   raw_text TEXT NOT NULL,         -- dekódovaný obsah pro pozdější reparsování
-  status TEXT NOT NULL DEFAULT 'pending',  -- 'pending' | 'matched' | 'ambiguous' | 'rejected'
+  status TEXT NOT NULL DEFAULT 'pending',  -- 'pending' | 'matched' | 'ambiguous' | 'unparsed' | 'rejected'
   transaction_id INTEGER,         -- spárovaná transakce
   matched_at TEXT,
   created_at TEXT DEFAULT (datetime('now')),
@@ -100,7 +106,11 @@ Kandidáti se hledají mezi transakcemi, které:
 - patří uživateli (`user_id = dataUserId`),
 - mají `description` nebo `place` začínající `APPLE.COM`,
 - mají `ABS(amount)` rovné `total_amount` faktury (tolerance 0,5 Kč kvůli zaokrouhlení),
-- mají `date` v okně **±3 dny** od `receipt_date`.
+- mají `date` v okně **±3 dny** od `receipt_date`,
+- **mají správné znaménko**: `amount < 0` pro fakturu, `amount > 0` pro dobropis (`is_refund = 1`).
+
+Znaménko je součást párovacího klíče záměrně: nákup a jeho pozdější vrácení mají stejnou částku
+i podobné datum, takže bez něj by dobropis mohl sednout na původní platbu.
 
 Když `card_last4` faktury i transakce existují a **liší se**, kandidát vypadává. Když u transakce
 chybí (platby před v2.0.208), kritérium se ignoruje.
@@ -150,7 +160,14 @@ nové i staré stejné.
 ## 8. Hraniční případy
 
 - **Faktura dorazí dřív než platba** — zůstane `pending`, spáruje se při importu transakce.
-- **Refundace** — faktura se záporným celkem se neuloží (párujeme jen výdaje).
+- **Refundace (dobropis)** — uloží se stejně jako faktura, s `is_refund = 1` a kladným
+  `total_amount`; páruje se na příchozí transakci (`amount > 0`). Subkategorie se přiřazuje stejným
+  pravidlem jako u výdaje, takže vrácená částka padne do stejné subkategorie jako původní nákup
+  a v rozpadu Licencí se s ním vyruší — kategorie počítají utraceno jako `SUM(-amount)` přes
+  všechny transakce, viz chování zavedené v 1.1.151.
+- **Refundace bez rozpoznaného formátu** — dokud nemáme vzorek refundačního mailu, parser ho
+  nemusí rozklíčovat. Uloží se se stavem `unparsed` a `raw_text`, takže půjde doplnit parser
+  a přeparsovat bez nového přeposílání.
 - **Dvakrát přeposlaná faktura** — unikátní index na `order_id`; bez `order_id` se duplicita
   pozná podle shody `receipt_date` + `total_amount` + `card_last4`.
 - **Faktura bez rozpoznaných položek** — uloží se s prázdným `items_json`, spáruje se podle částky,
@@ -166,7 +183,8 @@ nové i staré stejné.
 - `src/utils/appleInvoiceParser.test.js` — parsování reálného vzorku (uložený fixture): datum,
   Order ID, karta, celková částka, jedna položka; dále faktura bez položek a mail bez „invoice".
 - `src/utils/appleMatch.test.js` — čisté párovací funkce: jeden kandidát, žádný, víc kandidátů,
-  rozdílná karta vyřadí kandidáta, chybějící karta kritérium ignoruje, okno ±3 dny na hranici.
+  rozdílná karta vyřadí kandidáta, chybějící karta kritérium ignoruje, okno ±3 dny na hranici,
+  **dobropis se nespáruje s odchozí platbou stejné částky a naopak**.
 - `src/routes/appleReceipts.test.js` — ownership, ruční přiřazení, zahození, idempotence dle
   `order_id`.
 - `src/routes/emailInbound.security.test.js` — Apple mail bez „invoice" se neuloží; mail bez
