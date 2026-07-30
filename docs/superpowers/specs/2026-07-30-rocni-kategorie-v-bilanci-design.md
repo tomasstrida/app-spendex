@@ -132,12 +132,25 @@ if (query.off_fund === '1') {
 
 ## Konfigurace, kterou udělá uživatel (ne kód)
 
-1. Trvalý příkaz v AirBank na účet Licence (např. 6 000/měs), „Zpráva pro příjemce: **Dotace - Licence**".
-2. Fixní platba „Dotace na účet Licence": `match_pattern = 'Dotace - Licence'`, `include_transfers = 1`, `valid_from` = měsíc, kdy příkaz začne. **Ne** `match_counterparty_account` — to by sečetlo i nadplánové převody (i když je guard z §2 vyloučí, textový matcher je tu přesnější a čitelnější).
-3. Zaškrtnout `is_fund` u účtů Licence a Nepravidelné.
-4. U každého nadplánového převodu označit **obě nohy** kategorií „Nestandardní dobití ročního budgetu".
+1. Fixní platba `Dotace na účet "Licence"`: **`match_counterparty_account = '1679014111/3030'`**, `match_pattern` prázdný, `include_transfers = 1`, plán 6 000 (= roční budget 72 000 / 12), rozmezí 6 000–6 000, `valid_from = '2026-07'`.
+2. Zaškrtnout `is_fund` u účtů Licence a Nepravidelné.
+3. U každého nadplánového převodu označit **obě nohy** kategorií „Nestandardní dobití ročního budgetu".
 
-Bez bodu 1 je „nestandardní" všechno a řádek jen zastoupí chybějící dotaci.
+**REVIZE 2026-07-30 (po kontrole reálných dat):** původní návrh byl trvalý příkaz
+se zprávou „Dotace - Licence" a textový `match_pattern`. Data to vyvrátila —
+žádný trvalý příkaz na Licence neexistuje, všech 19 dotací za 2026 je ruční
+(500–6 000 Kč, ze tří různých účtů), a zpráva pro příjemce je nekonzistentní:
+u CSV importu je `description = 'Licence'` vždy, u e-mailového importu je
+`description = 'Tomáš Střída'` a `note` je „Licence" jen u části (v červenci
+u 2 ze 6 převodů; zbylých 6 500 Kč nemá zprávu žádnou). Textový pattern by tedy
+6 500 Kč nechytil a v bilanci by zůstala díra. Číslo účtu je jediný stabilní
+identifikátor napříč zdroji — stejná lekce jako u splátky RAV4.
+
+Důsledek modelu s číslem účtu: matcher sečte **všechny** dotace, ale guard z §2
+z něj vyřadí ty, které uživatel označí jako „Nestandardní dobití". **Bilance je
+proto aritmeticky správná i bez jakéhokoli tagování** — tagování jen přesouvá
+částku z řádku „Fixní platby" na vlastní řádek, kvůli čitelnosti. Netagovaný
+nadplán se pozná podle statusu `mismatch` (actual mimo rozmezí 6 000–6 000).
 
 ## Kontrola správnosti bez nového kódu
 
