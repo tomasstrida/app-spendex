@@ -172,3 +172,71 @@ test('cerpani cizim uzivatelem neprojde', async () => {
   assert.equal((await draw(base, pkgId, {})).status, 404);
   server.close();
 });
+
+async function close(base, pkgId, writeOff) {
+  return fetch(`${base}/api/prepaid/${pkgId}/close`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ write_off: writeOff }),
+  });
+}
+
+test('close s write_off doucuje zbytek jednim cerpanim', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const pkg = await (await createPackage(base)).json();
+  await draw(base, pkg.id, { units: 4, date: '2026-04-02' });
+  const closed = await (await close(base, pkg.id, true)).json();
+  assert.equal(closed.status, 'closed');
+  assert.equal(closed.drawn_amount, 5000, 'doucteni srovna celou castku');
+  assert.equal(closed.remaining_amount, 0);
+  assert.equal(closed.draws.length, 2);
+  assert.equal(closed.draws[1].amount, 3000);
+  server.close();
+});
+
+test('close bez write_off jen uzavre a zbytek nechá nedocerpany', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const pkg = await (await createPackage(base)).json();
+  await draw(base, pkg.id, { units: 4, date: '2026-04-02' });
+  const closed = await (await close(base, pkg.id, false)).json();
+  assert.equal(closed.status, 'closed');
+  assert.equal(closed.drawn_amount, 2000);
+  assert.equal(closed.remaining_amount, 3000);
+  server.close();
+});
+
+test('uzavreny balicek uz nelze cerpat', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const pkg = await (await createPackage(base)).json();
+  await close(base, pkg.id, false);
+  const r = await draw(base, pkg.id, { date: '2026-05-02' });
+  assert.equal(r.status, 400);
+  assert.match((await r.json()).error, /uzavřen/i);
+  server.close();
+});
+
+test('DELETE vrati transakci do puvodni kategorie a smaze cerpani', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const pkg = await (await createPackage(base)).json();
+  await draw(base, pkg.id, { date: '2026-04-02' });
+  const r = await fetch(`${base}/api/prepaid/${pkg.id}`, { method: 'DELETE' });
+  assert.equal(r.status, 200);
+  assert.equal(db.prepare('SELECT category_id FROM transactions WHERE id = 100').get().category_id, 5);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM prepaid_draws').get().n, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM prepaid_packages').get().n, 0);
+  server.close();
+});
+
+test('GET status=closed vraci uzavrene balicky', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const pkg = await (await createPackage(base)).json();
+  await close(base, pkg.id, false);
+  assert.equal((await (await fetch(`${base}/api/prepaid`)).json()).packages.length, 0);
+  assert.equal((await (await fetch(`${base}/api/prepaid?status=closed`)).json()).packages.length, 1);
+  assert.equal((await (await fetch(`${base}/api/prepaid?status=all`)).json()).packages.length, 1);
+  server.close();
+});

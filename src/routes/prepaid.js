@@ -4,7 +4,7 @@ const rateLimit = require('express-rate-limit');
 const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
 const { getPeriodDates, getUserBillingDay } = require('../utils/period');
-const { unitAmount, drawAmount, packageSummary } = require('../utils/prepaid');
+const { unitAmount, drawAmount, packageSummary, writeOffAmount } = require('../utils/prepaid');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
@@ -107,6 +107,7 @@ function loadPackage(id, userId) {
 router.post('/:id/draws', requireAuth, writeLimiter, (req, res) => {
   const pkg = loadPackage(req.params.id, req.dataUserId);
   if (!pkg) return res.status(404).json({ error: 'Balíček nenalezen.' });
+  if (pkg.status === 'closed') return res.status(400).json({ error: 'Balíček je uzavřený.' });
 
   const units = req.body.units == null ? 1 : parseFloat(req.body.units);
   if (!(units > 0)) return res.status(400).json({ error: 'Počet jednotek musí být kladné číslo.' });
@@ -135,6 +136,46 @@ router.delete('/draws/:id', requireAuth, writeLimiter, (req, res) => {
     .get(req.params.id, req.dataUserId);
   if (!row) return res.status(404).json({ error: 'Čerpání nenalezeno.' });
   db.prepare('DELETE FROM prepaid_draws WHERE id = ?').run(row.id);
+  res.json({ ok: true });
+});
+
+// POST /api/prepaid/:id/close — uzavření balíčku, volitelně s doúčtováním zbytku
+router.post('/:id/close', requireAuth, writeLimiter, (req, res) => {
+  const pkg = loadPackage(req.params.id, req.dataUserId);
+  if (!pkg) return res.status(404).json({ error: 'Balíček nenalezen.' });
+
+  const draws = db.prepare('SELECT * FROM prepaid_draws WHERE package_id = ? AND user_id = ?')
+    .all(pkg.id, req.dataUserId);
+  const rest = writeOffAmount(pkg, draws);
+  const summary = packageSummary(pkg, draws);
+
+  db.transaction(() => {
+    if (req.body.write_off && rest > 0) {
+      db.prepare(`
+        INSERT INTO prepaid_draws (user_id, package_id, date, units, amount, note)
+        VALUES (?, ?, ?, ?, ?, 'Doúčtování zbytku při uzavření')
+      `).run(req.dataUserId, pkg.id, todayISO(), summary.remaining_units, rest);
+    }
+    db.prepare("UPDATE prepaid_packages SET status = 'closed', closed_at = datetime('now') WHERE id = ?")
+      .run(pkg.id);
+  })();
+
+  res.json(withSummary(loadPackage(pkg.id, req.dataUserId), null));
+});
+
+// DELETE /api/prepaid/:id — zrušení balíčku; transakce se vrátí do původní kategorie
+router.delete('/:id', requireAuth, writeLimiter, (req, res) => {
+  const pkg = loadPackage(req.params.id, req.dataUserId);
+  if (!pkg) return res.status(404).json({ error: 'Balíček nenalezen.' });
+
+  db.transaction(() => {
+    if (pkg.transaction_id) {
+      db.prepare('UPDATE transactions SET category_id = ? WHERE id = ? AND user_id = ?')
+        .run(pkg.original_category_id, pkg.transaction_id, req.dataUserId);
+    }
+    db.prepare('DELETE FROM prepaid_packages WHERE id = ?').run(pkg.id);
+  })();
+
   res.json({ ok: true });
 });
 
