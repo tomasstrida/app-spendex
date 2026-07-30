@@ -19,8 +19,13 @@ export function fixedActualTotal(fixedExpenses) {
 // `fundTopup` = odliv v kategorii fund_topup (dobití fondu nad standardní dotaci),
 // `annualOffFund` = roční výdaje (typ 2) zaplacené mimo fondový účet. Oba jdou
 // z `/api/stats/overview`; defaultně 0, aby starší volající nedostali NaN.
-export function surplusToSavings({ totalIncome, totalFixed, fundTopup, annualOffFund, totalType1, totalType3 }) {
-  return totalIncome - totalFixed - (fundTopup || 0) - (annualOffFund || 0) - totalType1 - totalType3;
+//
+// `prepaidPurchase` = nákup předplacených balíčků (technická kategorie
+// prepaid_purchase). Skutečný odliv v měsíci platby; čerpání balíčku do bilance
+// nevstupuje — to je rozpočtový pohled (`budget_spent`), tady by se počítalo dvakrát.
+export function surplusToSavings({ totalIncome, totalFixed, fundTopup, annualOffFund, prepaidPurchase, totalType1, totalType3 }) {
+  return totalIncome - totalFixed - (fundTopup || 0) - (annualOffFund || 0)
+    - (prepaidPurchase || 0) - totalType1 - totalType3;
 }
 
 // Jediná pravda pro plánovaný přebytek Schůzky. Skládá mezisoučty z API odpovědí
@@ -35,6 +40,7 @@ export function computeMeetingSurplus({
   byCategory = [],
   fundTopup = 0,
   annualOffFund = 0,
+  prepaidPurchase = 0,
 } = {}) {
   // Striktní whitelist: do bilance vstupují jen ručně aliasované zdroje (id != null).
   const totalIncome = incomeSources
@@ -46,7 +52,7 @@ export function computeMeetingSurplus({
     .filter(c => c.type === 3 && c.spent > 0)
     .reduce((s, c) => s + c.spent, 0);
   const surplus = surplusToSavings({
-    totalIncome, totalFixed, fundTopup, annualOffFund, totalType1, totalType3,
+    totalIncome, totalFixed, fundTopup, annualOffFund, prepaidPurchase, totalType1, totalType3,
   });
-  return { totalIncome, totalFixed, fundTopup, annualOffFund, totalType1, totalType3, surplus };
+  return { totalIncome, totalFixed, fundTopup, annualOffFund, prepaidPurchase, totalType1, totalType3, surplus };
 }

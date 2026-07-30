@@ -238,6 +238,7 @@ export default function ReportPage() {
   // skládá sdílený helper (stejná pravda jako stránka Spořicí účet).
   const fundTopupRow     = stats?.fund_topup || null;
   const annualOffFundRow = stats?.annual_off_fund || null;
+  const prepaidRow       = stats?.prepaid_purchase || null;
   const { totalIncome, totalFixed, totalType1, totalType3, surplus } = computeMeetingSurplus({
     incomeSources,
     fixedExpenses,
@@ -245,6 +246,7 @@ export default function ReportPage() {
     byCategory,
     fundTopup: fundTopupRow?.outflow || 0,
     annualOffFund: annualOffFundRow?.spent || 0,
+    prepaidPurchase: prepaidRow?.outflow || 0,
   });
   const totalDiff    = Math.round(totalIncome - totalPlanned);
 
@@ -355,6 +357,17 @@ export default function ReportPage() {
                 title="Klik: roční výdaje (Typ 2) zaplacené mimo fondový účet">
                 <span>Roční výdaje mimo fond</span>
                 <span>{annualOffFundRow.spent >= 0 ? '−' : '+'} {formatCurrency(Math.abs(annualOffFundRow.spent))}</span>
+              </Link>
+            )}
+            {/* Nákup předplacených balíčků — jednorázový odliv v měsíci platby.
+                Samotné čerpání balíčku je vidět jen v Měsíčních rozpočtech. */}
+            {prepaidRow?.category_id && prepaidRow.outflow !== 0 && (
+              <Link to={txLink(`category_ids=${prepaidRow.category_id}&direction=out`)}
+                className="report-bilance-row"
+                style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                title="Klik: platby za předplacené balíčky v tomto období">
+                <span>{prepaidRow.name}</span>
+                <span>− {formatCurrency(prepaidRow.outflow)}</span>
               </Link>
             )}
             {/* Dobití ročního fondu nad rámec standardní dotace. Odliv z provozního

@@ -138,3 +138,22 @@ test('computeMeetingSurplus: nové vstupy projdou do výsledku i do přebytku', 
   assert.equal(r.annualOffFund, 2000);
   assert.equal(r.surplus, 100000 - 20000 - 5000 - 2000 - 10000 - 1000);
 });
+
+test('surplusToSavings odecte nakup predplacenych balicku', () => {
+  const base = { totalIncome: 100000, totalFixed: 40000, fundTopup: 0, annualOffFund: 0, totalType1: 20000, totalType3: 0 };
+  assert.equal(surplusToSavings(base), 40000);
+  assert.equal(surplusToSavings({ ...base, prepaidPurchase: 5000 }), 35000);
+});
+
+test('computeMeetingSurplus vraci prepaidPurchase a zapocita ho do prebytku', () => {
+  const r = computeMeetingSurplus({
+    incomeSources: [{ id: 1, actual: 50000 }],
+    fixedExpenses: [],
+    budgetsType1: [{ spent: 10000, budget_spent: 12000, amount: 15000 }],
+    byCategory: [],
+    prepaidPurchase: 3000,
+  });
+  assert.equal(r.prepaidPurchase, 3000);
+  assert.equal(r.totalType1, 10000, 'bilance jede z transakcniho spent, ne z budget_spent');
+  assert.equal(r.surplus, 37000);
+});

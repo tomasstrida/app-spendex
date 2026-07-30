@@ -47,6 +47,7 @@ export default function SavingsPage() {
     byCategory: stats?.by_category || [],
     fundTopup: stats?.fund_topup?.outflow || 0,
     annualOffFund: stats?.annual_off_fund?.spent || 0,
+    prepaidPurchase: stats?.prepaid_purchase?.outflow || 0,
   });
 
   function txLink(extra) {
