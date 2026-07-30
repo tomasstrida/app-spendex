@@ -649,12 +649,10 @@ export default function ReportPage() {
                       <span>
                         <span className="budget-dot" style={{ background: a.color || '#6366f1' }} />
                         {a.name}
-                        {/* U technické kategorie dobití je tenhle řádek jen kontrola,
-                            že jsou označené OBĚ nohy převodu — samotná částka je
-                            v bilanci výš. Bez popisku vypadá jako duplicitní řádek. */}
-                        {a.id === fundTopupRow?.category_id && (
-                          <span className="text-muted" style={{ fontWeight: 400 }}> — kontrolní saldo</span>
-                        )}
+                        {/* Řádky v Účetní nejsou výdaje, ale kontrola, že jsou u
+                            převodů zaúčtované OBĚ nohy (saldo musí vyjít 0).
+                            Bez popisku vypadají jako duplicitní výdajové řádky. */}
+                        <span className="text-muted" style={{ fontWeight: 400 }}> — kontrolní saldo</span>
                       </span>
                       <span
                         className={balanced ? '' : 'text-danger'}
