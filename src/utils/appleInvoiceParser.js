@@ -8,6 +8,9 @@
 //    mailu — vážeme se jen na sémantické třídy (billing-information, subscription-lockup,
 //    payment-information) a na textové kotvy („Order ID:", „MasterCard •••• ").
 // 2. Blok <style> musí ven DŘÍV, než se strhnou tagy — jinak se CSS text promíchá s daty.
+// 3. Mail je ručně přeposlaný, takže nad fakturou bývá hlavička forwardu s vlastním
+//    datem a patička s vlastním textem. Datum proto hledáme primárně v bloku
+//    `billing-information` a příznak dobropisu jen v nadpisu <h1> — ne v celém textu.
 
 const MONTHS = {
   january: '01', february: '02', march: '03', april: '04', may: '05', june: '06',
@@ -38,11 +41,22 @@ function amountsIn(text) {
   return [...text.matchAll(AMOUNT_RE)].map(m => toNumber(m[1]));
 }
 
-function parseDate(text) {
-  const m = text.match(/(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})/i);
+const DATE_RE = /(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})/i;
+
+function matchDate(text) {
+  const m = String(text).match(DATE_RE);
   if (!m) return null;
   const mm = MONTHS[m[2].toLowerCase()];
   return `${m[3]}-${mm}-${String(m[1]).padStart(2, '0')}`;
+}
+
+// Datum hledáme PRIMÁRNĚ v bloku „billing-information" — u ručně přeposlaného mailu
+// je nad fakturou ještě hlavička forwardu („Date: 3 July 2026"), a ta by jinak jako
+// první dlouhé datum v dokumentu vyhrála. Celý text je až fallback (plain-text mail
+// nebo jiná verze šablony bez sémantické třídy).
+function parseDate(html, text) {
+  const block = String(html).match(/class="[^"]*billing-information[\s\S]{0,4000}/i);
+  return (block ? matchDate(stripToText(block[0])) : null) || matchDate(text);
 }
 
 // Položky: každý <tr class="...subscription-lockup..."> je jedna služba.
@@ -77,6 +91,18 @@ function parseTotal(html, text) {
   return pool.length ? pool[pool.length - 1] : null;
 }
 
+const REFUND_RE = /\brefund\b|\bcredit note\b|\bdobropis\b/i;
+
+// Dobropis poznáme z NADPISU dokumentu (<h1>Refund</h1>), ne z celého textu — slovo
+// „refund" v patičce („refund policy") by jinak obrátilo znaménko a faktura by pak
+// nikdy nesedla na výdajovou transakci a zůstala navždy pending.
+// Fallback pro plain-text mail bez <h1>: první řádek textu.
+function isRefund(html, text) {
+  const h1 = String(html).match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  if (h1) return REFUND_RE.test(stripToText(h1[1]));
+  return REFUND_RE.test(String(text).slice(0, 120));
+}
+
 function parseAppleInvoice(source) {
   const html = String(source || '');
   if (!html.trim()) return null;
@@ -90,11 +116,11 @@ function parseAppleInvoice(source) {
   const card = text.match(/(?:MasterCard|Visa|American Express|Amex|Maestro)[^0-9]{0,20}(\d{4})/i);
 
   return {
-    receipt_date: parseDate(text),
+    receipt_date: parseDate(html, text),
     order_id: order ? order[1] : null,
     total_amount: total != null ? Math.abs(total) : null,
     card_last4: card ? card[1] : null,
-    is_refund: /\brefund\b|\bcredit note\b|\bdobropis\b/i.test(text),
+    is_refund: isRefund(html, text),
     items: parseItems(html),
   };
 }

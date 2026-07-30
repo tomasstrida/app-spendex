@@ -63,6 +63,36 @@ test('cizi text vrati null', () => {
   assert.equal(parseAppleInvoice(''), null);
 });
 
+// Minor: slovo „refund" v patičce nesmí z faktury udělat dobropis — obrátilo by
+// znaménko a doklad by pak nikdy nesedl na výdajovou transakci.
+test('slovo refund v paticce nedela z faktury dobropis', () => {
+  const html = '<html><body><h1>Invoice</h1><div class="billing-information">'
+    + '<p>5 July 2026</p><p>Order ID:</p><p>ABC123XYZ</p></div>'
+    + '<div class="payment-information"><p>Visa •••• 1760</p><p>99,00 CZK</p></div>'
+    + '<footer><p>All sales are final. See our refund policy for details.</p></footer>'
+    + '</body></html>';
+  const r = parseAppleInvoice(html);
+  assert.equal(r.is_refund, false);
+});
+
+// Minor: u ručně přeposlaného mailu je nad fakturou hlavička forwardu s vlastním datem.
+test('datum se bere z bloku billing-information, ne z hlavicky forwardu', () => {
+  const html = '<html><body><p>---------- Forwarded message ---------</p>'
+    + '<p>Date: 3 August 2026</p><p>Subject: Your invoice from Apple.</p>'
+    + '<h1>Invoice</h1><div class="billing-information"><p>5 July 2026</p>'
+    + '<p>Order ID:</p><p>FWD123</p></div>'
+    + '<div class="payment-information"><p>Visa •••• 1760</p><p>99,00 CZK</p></div>'
+    + '</body></html>';
+  const r = parseAppleInvoice(html);
+  assert.equal(r.receipt_date, '2026-07-05');
+});
+
+test('bez bloku billing-information se datum vezme z celeho textu (fallback)', () => {
+  const r = parseAppleInvoice('<html><body><h1>Invoice</h1><p>Order ID: PLAIN1</p>'
+    + '<p>5 July 2026</p><p>99,00 CZK</p></body></html>');
+  assert.equal(r.receipt_date, '2026-07-05');
+});
+
 test('vice polozek na jedne fakture', () => {
   const html = '<html><body><h1>Invoice</h1><div class="billing-information"><p>9 July 2026</p>'
     + '<p>Order ID:</p><p>MULTI1</p></div>'
