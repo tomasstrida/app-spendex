@@ -182,3 +182,18 @@ test('GET /export: středník/uvozovky v hodnotě se escapují', async () => {
   assert.ok(body.includes('"A ; B ""C"""'), 'hodnota se středníkem/uvozovkami je obalená a uvozovky zdvojené');
   server.close();
 });
+
+test('off_fund=1 vyloučí transakce z fondového účtu', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const fond = db.prepare("INSERT INTO accounts (user_id,account_number,name,role,is_fund) VALUES (1,'200/3030','Licence','spending',1)").run().lastInsertRowid;
+  const spol = db.prepare("INSERT INTO accounts (user_id,account_number,name,role,is_fund) VALUES (1,'300/3030','Společný','spending',0)").run().lastInsertRowid;
+  db.prepare("INSERT INTO transactions (user_id,category_id,account_id,amount,date,description) VALUES (1,5,?,-399,'2026-07-04','APPLE z fondu'),(1,5,?,-2253,'2026-07-15','ANTHROPIC ze Společného')").run(fond, spol);
+  db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES (1,5,-100,'2026-07-16','Bez účtu')").run();
+
+  const res = await (await fetch(`${base}/api/transactions?off_fund=1`)).json();
+  const rows = res.transactions || res;
+  const descs = rows.map(r => r.description).sort();
+  server.close();
+  assert.deepEqual(descs, ['ANTHROPIC ze Společného', 'Bez účtu'], 'tx z fondového účtu vypadne, tx bez účtu zůstane');
+});

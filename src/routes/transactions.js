@@ -37,6 +37,15 @@ function buildTxWhere(query) {
     where += SPENDING_AND;
   }
 
+  // off_fund=1 → jen transakce, které NEJSOU na fondovém účtu (accounts.is_fund).
+  // Užívá Schůzka pro klik na „Roční výdaje mimo fond". Transakce bez účtu
+  // (account_id IS NULL) projdou — NOT EXISTS je na NULL id pravdivé.
+  if (query.off_fund === '1') {
+    where += ` AND NOT EXISTS (
+      SELECT 1 FROM accounts ofa WHERE ofa.id = t.account_id AND ofa.is_fund = 1
+    )`;
+  }
+
   // match_patterns=A,B,C → pattern LIKE přes description/note/place (stejná
   // sémantika jako matcher fixních plateb). Užívá Schůzka pro klik na „Fixní platby".
   if (query.match_patterns !== undefined && String(query.match_patterns).trim() !== '') {
