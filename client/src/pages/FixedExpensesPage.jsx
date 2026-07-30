@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import { t } from '../i18n';
+import { formatExpectedAmount } from '../utils/expectedAmount';
 
 const EMPTY = { name: '', amount: '', amount_min: '', amount_max: '', frequency_months: 1, match_pattern: '', match_counterparty_account: '', note: '', valid_from: '', valid_to: '', include_transfers: false };
 
@@ -81,7 +82,7 @@ export default function FixedExpensesPage() {
       <span className="report-budget-name">
         {it.name}
         <span className="text-muted" style={{ display: 'block', fontSize: 11 }}>
-          {it.amount_min != null && it.amount_max != null ? `${it.amount_min}–${it.amount_max} Kč` : `${it.amount} Kč`}
+          {formatExpectedAmount(it.amount_min, it.amount_max, it.amount)}
           {it.frequency_months > 1 ? ` · à ${it.frequency_months} měs.` : ''}
           {it.match_pattern ? ` · „${it.match_pattern}"` : ''}
           {it.match_counterparty_account ? ` · účet ${it.match_counterparty_account}` : ''}

@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Check, X } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
+import { formatExpectedAmount } from '../utils/expectedAmount';
 import { fixedActualTotal, computeMeetingSurplus } from '../utils/meetingBalance';
 
 // ── Status budgetu ────────────────────────────────────────────────────────────
@@ -498,7 +499,7 @@ export default function ReportPage() {
                     {row.note && <span className="text-muted" style={{ fontSize: 12 }}>{row.note}</span>}
                     {row.status === 'mismatch' && row.amount_min != null && (
                       <span className="text-muted" style={{ fontSize: 12 }}>
-                        {`${formatCurrency(row.actual)} (čekáno ${row.amount_min}–${row.amount_max} Kč)`}
+                        {`${formatCurrency(row.actual)} (čekáno ${formatExpectedAmount(row.amount_min, row.amount_max, row.amount)})`}
                         {row.tx_count > 1 ? ` · ${row.tx_count} platby` : ''}
                       </span>
                     )}
