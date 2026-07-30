@@ -84,6 +84,7 @@ export default function TransactionsPage() {
   const [direction, setDirection] = useState(searchParams.get('direction') || '');
   const [matchPatterns, setMatchPatterns] = useState(searchParams.get('match_patterns') || '');
   const [spendingOnly, setSpendingOnly] = useState(searchParams.get('spending_only') === '1');
+  const [offFund, setOffFund] = useState(searchParams.get('off_fund') === '1');
   const [loading, setLoading] = useState(true);
   const [customMode, setCustomMode] = useState(!!(urlFrom && urlTo));
   usePeriodKeys({ enabled: !customMode });
@@ -135,6 +136,12 @@ export default function TransactionsPage() {
     return () => clearTimeout(id);
   }, [amountMin, amountMax, search]);
 
+  // POZOR: tenhle seznam je allowlist — parametr, který tu není, se z URL tiše
+  // zahodí, i když ho backend umí. Když přidáš filtr do `buildTxWhere`
+  // (src/routes/transactions.js) a odkazuješ na něj z jiné stránky, MUSÍ se
+  // objevit i tady a v `searchParams.get(...)` výš, jinak proklik ukáže jiná
+  // data než součet, ze kterého vede. Tak se rozbil proklik „Roční výdaje
+  // mimo fond" (off_fund byl jen v backendu).
   const buildFilterParams = useCallback((params) => {
     if (filterCats.size > 0) params.set('category_ids', [...filterCats].join(','));
     if (filterSubcatId !== '') params.set('subcategory_id', filterSubcatId);
@@ -145,9 +152,10 @@ export default function TransactionsPage() {
     if (direction === 'in' || direction === 'out') params.set('direction', direction);
     if (matchPatterns.trim() !== '') params.set('match_patterns', matchPatterns.trim());
     if (spendingOnly) params.set('spending_only', '1');
+    if (offFund) params.set('off_fund', '1');
     params.set('limit', String(PAGE_SIZE));
     return params;
-  }, [filterCats, filterSubcatId, appliedAmountMin, appliedAmountMax, appliedSearch, counterparty, direction, matchPatterns, spendingOnly]);
+  }, [filterCats, filterSubcatId, appliedAmountMin, appliedAmountMax, appliedSearch, counterparty, direction, matchPatterns, spendingOnly, offFund]);
 
   // Filtr podle subkategorie dává smysl jen když je ve filtru vybraná právě
   // jedna konkrétní kategorie (ne „bez kategorie", ne víc kategorií najednou).
@@ -317,6 +325,7 @@ export default function TransactionsPage() {
     setDirection('');
     setMatchPatterns('');
     setSpendingOnly(false);
+    setOffFund(false);
   }
 
   function toggleSelectAll() {
@@ -535,7 +544,7 @@ export default function TransactionsPage() {
       </div>
 
       <div className="tx-filters">
-        {(counterparty || direction === 'in' || direction === 'out' || matchPatterns || spendingOnly) && (
+        {(counterparty || direction === 'in' || direction === 'out' || matchPatterns || spendingOnly || offFund) && (
           <div style={{ marginBottom: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {counterparty && (
               <span className="tx-chip tx-chip-active" style={{ cursor: 'default' }}>
@@ -584,6 +593,19 @@ export default function TransactionsPage() {
                   onClick={() => setSpendingOnly(false)}
                   style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, marginLeft: 6, display: 'inline-flex', alignItems: 'center' }}
                   title="Zrušit omezení na výdajové účty"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            )}
+            {offFund && (
+              <span className="tx-chip tx-chip-active" style={{ cursor: 'default' }}>
+                Mimo fondové účty
+                <button
+                  type="button"
+                  onClick={() => setOffFund(false)}
+                  style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, marginLeft: 6, display: 'inline-flex', alignItems: 'center' }}
+                  title="Zrušit omezení na účty mimo fond"
                 >
                   <X size={12} />
                 </button>
@@ -690,7 +712,7 @@ export default function TransactionsPage() {
             onChange={e => setAmountMax(e.target.value)}
           />
           <span className="text-muted" style={{ fontSize: 12 }}>Kč</span>
-          {(filterCats.size > 0 || filterSubcatId !== '' || amountMin !== '' || amountMax !== '' || search !== '' || counterparty !== '' || direction !== '' || matchPatterns !== '' || spendingOnly) && (
+          {(filterCats.size > 0 || filterSubcatId !== '' || amountMin !== '' || amountMax !== '' || search !== '' || counterparty !== '' || direction !== '' || matchPatterns !== '' || spendingOnly || offFund) && (
             <button
               type="button"
               className="btn btn-ghost tx-filter-clear"
