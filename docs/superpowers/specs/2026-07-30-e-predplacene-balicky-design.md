@@ -113,7 +113,9 @@ Bootstrap v `schema.js` analogicky k `fund_topup` (`src/db/schema.js:435-472`):
 
 | Místo | Změna |
 |---|---|
-| `GET /api/budgets` (`src/routes/budgets.js:28-35`) | k `spent` přičíst čerpání za období; vracet i `tx_spent` a `prepaid_spent` zvlášť |
+| `GET /api/budgets` (`src/routes/budgets.js:28-35`) | přidat `prepaid_spent` a `budget_spent` (= `spent + prepaid_spent`); **`spent` zůstává beze změny** |
+| `client/src/utils/meetingBalance.js` | `surplusToSavings`/`computeMeetingSurplus` dostanou parametr `prepaidPurchase`, který se odečte od přebytku |
+| `client/src/pages/SavingsPage.jsx` | předat `prepaidPurchase`, ať plán sedí se Schůzkou |
 | `GET /api/stats/overview` — `accounting` (`src/routes/stats.js:52-63`) | vyloučit `system_role='prepaid_purchase'` ze sekce Účetní (není to převod, saldo nemá být kontrolováno na nulu) |
 | `GET /api/stats/overview` | nový agregát `prepaid_purchase: { category_id, name, outflow, tx_count }` pro bilanci |
 | `src/utils/fixed-expenses.js:60,71` | guard `COALESCE(c.system_role,'') != 'fund_topup'` zobecnit na `COALESCE(c.system_role,'') = ''` — matcher fixních plateb nesmí chytat žádnou systémovou kategorii |
@@ -137,10 +139,15 @@ COALESCE((
 ), 0) as prepaid_spent
 ```
 
-`spent = tx_spent + prepaid_spent`. Období se bere z `getPeriodDates(billingDay, periodKey)` —
-stejné hranice jako transakce, žádný vlastní výpočet dat.
+Stávající pole `spent` se **nemění** — je to čistě součet transakcí a čtou ho cash-flow
+konzumenti (`computeMeetingSurplus` na Schůzce i na stránce Spořicí účet). Přibývá
+`prepaid_spent` a `budget_spent = spent + prepaid_spent`; po `budget_spent` sáhne jen
+rozpočtové zobrazení (`BudgetBar`, `BudgetSummary`).
 
-Souhrn „Celkem za období" (`BudgetSummary`) sčítá `b.spent`, takže čerpání zahrne automaticky.
+Kdyby čerpání zvýšilo přímo `spent`, promítlo by se do bilance Schůzky a spolu s řádkem
+„Nákup předplacených balíčků" by se stejné peníze započítaly dvakrát.
+
+Období se bere z `getPeriodDates(billingDay, periodKey)` — stejné hranice jako transakce.
 
 ### 4.2 Parita prokliků
 
@@ -190,6 +197,10 @@ aktivní i uzavřené, filtr podle kategorie a období, ruční čerpání s vla
 **Schůzka** — jediná změna je mínus řádek „Nákup předplacených balíčků" v bilanci. Pořadí:
 Příjmy → Fixní → Měsíční → Drahé věci → Roční mimo fond → **Nákup předplacených balíčků** →
 Nestandardní dobití.
+
+Řádek se **odečítá od přebytku** — peníze reálně odešly z účtu, takže musí vstoupit do
+`surplusToSavings` (nový parametr `prepaidPurchase`), jinak by bilance přestala sedět.
+Stejný parametr dostane i stránka Spořicí účet, aby obě ukazovaly stejný plán.
 
 Ikony z katalogu `client/src/categoryIcons.jsx`, texty do `i18n.js` (prefix `prepaid_`).
 
