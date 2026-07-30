@@ -348,15 +348,43 @@ test('recategorizePending: platba, co je pořád nejistá, zůstává pending', 
   assert.equal(inbox.status, 'pending');
 });
 
-test('import Apple platby spáruje čekající fakturu', async () => {
+test('import Apple platby přes ingestEmail spáruje čekající fakturu', () => {
   const { db, tmp } = freshDb();
   seed(db);
+  // solo uživatel (žádní household_members) → karta se auto-přiřadí vlastníkovi
+  db.prepare("INSERT INTO categories (id, user_id, name) VALUES (8, 1, 'Předplatné')").run();
+  db.prepare("INSERT INTO category_rules (user_id, category_id, pattern) VALUES (1, 8, 'APPLE')").run();
   db.prepare(`INSERT INTO apple_receipts (user_id, order_id, receipt_date, total_amount, is_refund, card_last4, items_json, raw_text, status)
-              VALUES (1,'MQ9BQ86WV5','2026-06-30',269,0,'4225','[{"app":"YouTube","description":"YouTube Premium (Monthly)","amount":269}]','raw','pending')`).run();
-  const txId = db.prepare(`INSERT INTO transactions (user_id, category_id, amount, date, description)
-                           VALUES (1,5,-269,'2026-06-30','APPLE.COM/BILL')`).run().lastInsertRowid;
-  const { matchPendingForTransaction } = require('./appleReceipts');
-  assert.equal(matchPendingForTransaction(db, 1, Number(txId)), 1);
-  assert.equal(db.prepare("SELECT status FROM apple_receipts WHERE order_id='MQ9BQ86WV5'").get().status, 'matched');
+              VALUES (1,'MQ9BQ86WV5','2026-06-08',482,0,'6062','[{"app":"YouTube","description":"YouTube Premium (Monthly)","amount":482}]','raw','pending')`).run();
+  const text = `zůstatek na účtu Společný číslo 1679014023/3030 se snížil o částku 482,00 CZK. Dostupný zůstatek k 08.06.2026 v 21:15 je 3 678,16 CZK.
+Platba kartou (nezaúčtováno) v APPLE.COM/BILL, ITUNES.COM, IE
+Karta: 516844******6062
+Datum provedení: 08.06.2026
+Kód transakce: 26918903543`;
+  const { ingestEmail } = require('./emailIngest');
+  const r = ingestEmail(db, { userEmail: 'tom@example.com', text });
+  const receipt = db.prepare("SELECT status, transaction_id FROM apple_receipts WHERE order_id='MQ9BQ86WV5'").get();
   cleanup(db, tmp);
+  assert.equal(r.status, 'imported');
+  assert.equal(receipt.status, 'matched');
+  assert.equal(receipt.transaction_id, r.transactionId);
+});
+
+test('releaseHeldCard: platba APPLE.COM uvízlá v awaiting_card se po přiřazení karty spáruje s čekající fakturou', () => {
+  const { db, tmp } = freshDb();
+  seed(db);
+  db.prepare("INSERT INTO categories (id, user_id, name) VALUES (8, 1, 'Předplatné')").run();
+  db.prepare("INSERT INTO category_rules (user_id, category_id, pattern) VALUES (1, 8, 'APPLE')").run();
+  db.prepare(`INSERT INTO apple_receipts (user_id, order_id, receipt_date, total_amount, is_refund, card_last4, items_json, raw_text, status)
+              VALUES (1,'MQ9BQ86WV5','2026-06-08',482,0,'6062','[{"app":"YouTube","description":"YouTube Premium (Monthly)","amount":482}]','raw','pending')`).run();
+  const parsed = JSON.stringify({ amount: -482, currency: 'CZK', date: '2026-06-08', description: '', note: '', place: 'APPLE.COM/BILL, ITUNES.COM, IE', card_last4: '6062', account_id: 10, tx_type: 'Platba kartou' });
+  db.prepare("INSERT INTO email_inbox (user_id, raw_text, parsed_json, external_id, status) VALUES (1, '', ?, '26918903543-1679014023', 'awaiting_card')").run(parsed);
+  const { releaseHeldCard } = require('./emailIngest');
+  const n = releaseHeldCard(db, 1, '6062');
+  const tx = db.prepare("SELECT id FROM transactions WHERE user_id = 1").get();
+  const receipt = db.prepare("SELECT status, transaction_id FROM apple_receipts WHERE order_id='MQ9BQ86WV5'").get();
+  cleanup(db, tmp);
+  assert.equal(n, 1);
+  assert.equal(receipt.status, 'matched');
+  assert.equal(receipt.transaction_id, tx.id);
 });

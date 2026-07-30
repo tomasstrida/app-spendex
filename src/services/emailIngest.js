@@ -20,6 +20,18 @@ function insertTx(db, userId, tx, categoryId, extId, subcategoryId) {
     tx.account_id ?? null, tx.ab_category || null, tx.variable_symbol || null, tx.card_last4 || null);
 }
 
+// Apple platba může mít čekající fakturu — zkusíme ji dorovnat. Best-effort:
+// selhání párování nesmí shodit import platby (proto try/catch).
+function tryMatchAppleReceipt(db, userId, transactionId, tx) {
+  if (!transactionId) return;
+  if (!/^APPLE\.COM/i.test(String(tx.description || tx.place || ''))) return;
+  try {
+    matchPendingForTransaction(db, userId, transactionId);
+  } catch (e) {
+    console.error('[apple] parovani po importu:', e && e.message);
+  }
+}
+
 // Rozhodne kategorii. account = řádek accounts ({id, account_number}) nebo null.
 function categorize(db, userId, tx, account) {
   const rules = { ...seedRules, textOverrides: loadUserRules(db, userId) };
@@ -43,15 +55,7 @@ function classifyAndStore(db, userId, tx, account, extId, notifyUserId, text) {
     const transactionId = r.changes > 0
       ? Number(r.lastInsertRowid)
       : (db.prepare('SELECT id FROM transactions WHERE user_id = ? AND external_id = ?').get(userId, extId)?.id ?? null);
-    // Apple platba může mít čekající fakturu — zkusíme ji dorovnat. Best-effort:
-    // selhání párování nesmí shodit import platby.
-    if (transactionId && /^APPLE\.COM/i.test(String(tx.description || tx.place || ''))) {
-      try {
-        matchPendingForTransaction(db, userId, transactionId);
-      } catch (e) {
-        console.error('[apple] parovani po importu:', e && e.message);
-      }
-    }
+    tryMatchAppleReceipt(db, userId, transactionId, tx);
     return {
       status: 'imported', external_id: extId, userId, notifyUserId,
       transactionId, txDate: tx.date,
@@ -137,8 +141,9 @@ function releaseHeldCard(db, dataOwnerId, last4) {
       : null;
     const { categoryId, subcategory_id, confident } = categorize(db, dataOwnerId, tx, account);
     if (confident) {
-      insertTx(db, dataOwnerId, tx, categoryId, row.external_id, subcategory_id);
+      const r = insertTx(db, dataOwnerId, tx, categoryId, row.external_id, subcategory_id);
       db.prepare("UPDATE email_inbox SET status = 'imported' WHERE id = ?").run(row.id);
+      if (r.changes > 0) tryMatchAppleReceipt(db, dataOwnerId, Number(r.lastInsertRowid), tx);
     } else {
       db.prepare("UPDATE email_inbox SET status = 'pending', suggested_category_id = ? WHERE id = ?").run(categoryId, row.id);
     }
@@ -162,8 +167,9 @@ function recategorizePending(db, dataOwnerId) {
       : null;
     const { categoryId, subcategory_id, confident } = categorize(db, dataOwnerId, tx, account);
     if (confident) {
-      insertTx(db, dataOwnerId, tx, categoryId, row.external_id, subcategory_id);
+      const r = insertTx(db, dataOwnerId, tx, categoryId, row.external_id, subcategory_id);
       db.prepare("UPDATE email_inbox SET status = 'imported' WHERE id = ?").run(row.id);
+      if (r.changes > 0) tryMatchAppleReceipt(db, dataOwnerId, Number(r.lastInsertRowid), tx);
       moved++;
     } else if (categoryId !== row.suggested_category_id) {
       db.prepare('UPDATE email_inbox SET suggested_category_id = ? WHERE id = ?').run(categoryId, row.id);
