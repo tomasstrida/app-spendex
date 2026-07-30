@@ -1,5 +1,6 @@
 // Cloudflare Email Worker — příjem AirBank notifikací a forward na Spendex webhook.
-// Konfigurace přes Worker Variables/Secrets: WEBHOOK_URL, WEBHOOK_SECRET, ALLOWED_SENDER.
+// Konfigurace přes Worker Variables/Secrets: WEBHOOK_URL, WEBHOOK_SECRET.
+// (Worker sám žádnou "povolenou adresu" nekontroluje — to dělá až server, viz níže.)
 export default {
   async email(message, env) {
     const fromHeader = message.headers.get('from') || '';
@@ -11,9 +12,13 @@ export default {
     // v obou případech ověří, že e-mail prošel schránkou povoleného uživatele.
     const rawText = await new Response(message.raw).text();
     const subject = message.headers.get('subject') || '';
+    // Klíčové slovo jako celé slovo — jinak by prošlo i „credit card" schované v patičce.
+    // Testujeme primárně proti předmětu, tělo je jen fallback.
+    const APPLE_KEYWORD_RE = /\b(invoice|refund|credit note)\b/i;
     const isAirBank = fromHeader.toLowerCase().includes('airbank.cz');
     const isApple = rawText.toLowerCase().includes('no_reply@email.apple.com')
-      && /invoice|refund|credit/i.test(subject + ' ' + rawText);
+      && (APPLE_KEYWORD_RE.test(subject) || APPLE_KEYWORD_RE.test(rawText));
+    // Precedence: při shodě obou podmínek vyhrává AirBank (viz server, stejná logika).
     if (!isAirBank && !isApple) {
       return; // tiše zahodit (spam / cizí e-maily na inbox@spendex.uk)
     }

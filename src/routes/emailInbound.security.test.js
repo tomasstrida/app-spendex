@@ -42,6 +42,46 @@ test('správný secret ale raw > 1MB → 413', async () => {
   assert.equal(r.status, 413);
 });
 
+const CARD_TX_TEXT = `zůstatek na účtu Společný číslo 1679014023/3030 se snížil o částku 482,00 CZK. Dostupný zůstatek k 08.06.2026 v 21:15 je 3 678,16 CZK.
+Platba kartou (nezaúčtováno) v HAMR - BRANIK,RESTAURA, PRAHA 4, 000
+Karta: 516844******6062
+Datum provedení: 08.06.2026
+Kód transakce: 26918903543`;
+
+test('AirBank notifikace s povolenou adresou v raw projde whitelistem a zapise se', async () => {
+  const { db, base, server } = await setupInbound();
+  const raw = `From: info@airbank.cz\nDelivered-To: ${process.env.EMAIL_ALLOWED_SENDER}\nSubject: Notifikace o transakci\n\n${CARD_TX_TEXT}`;
+  const r = await fetch(`${base}/api/email/inbound`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-webhook-secret': process.env.EMAIL_WEBHOOK_SECRET },
+    body: JSON.stringify({ from: 'info@airbank.cz', subject: 'Notifikace o transakci', raw }),
+  });
+  const body = await r.json();
+  assert.equal(r.status, 200);
+  assert.notEqual(body.status, 'ignored');
+  // Bez seedovaných kategorií/účtu jde platba do fronty k ručnímu zařazení — podstatné je,
+  // že prošla whitelistem a doputovala do ingestEmail (ne do apple_receipts).
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM email_inbox').get().n, 1);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM apple_receipts').get().n, 0);
+  server.close();
+});
+
+test('AirBank mail se zminkou Apple invoice jde porad AirBank cestou (precedence)', async () => {
+  const { db, base, server } = await setupInbound();
+  const raw = `From: info@airbank.cz\nDelivered-To: ${process.env.EMAIL_ALLOWED_SENDER}\nSubject: Your invoice from Apple.\n\n${CARD_TX_TEXT}\nno_reply@email.apple.com`;
+  const r = await fetch(`${base}/api/email/inbound`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-webhook-secret': process.env.EMAIL_WEBHOOK_SECRET },
+    body: JSON.stringify({ from: 'info@airbank.cz', subject: 'Your invoice from Apple.', raw }),
+  });
+  const body = await r.json();
+  assert.equal(r.status, 200);
+  assert.notEqual(body.status, 'ignored');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM apple_receipts').get().n, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM email_inbox').get().n, 1);
+  server.close();
+});
+
 test('Apple faktura projde a ulozi se jako apple_receipt', async () => {
   const { db, app, base, server } = await setupInbound();
   const raw = fs.readFileSync(path.join(__dirname, '..', 'utils', '__fixtures__', 'apple-invoice.eml'), 'utf8')

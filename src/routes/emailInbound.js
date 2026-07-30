@@ -51,31 +51,40 @@ router.post('/inbound', inboundLimiter, checkSecret, async (req, res) => {
       return res.status(202).json({ status: 'ignored' });
     }
 
+    // Klíčové slovo hledáme jako celé slovo — jinak by prošlo i „credit card"
+    // nebo „accredited" schované v patičce/CSS mailu. Testujeme primárně proti
+    // předmětu, tělo je jen fallback (tělo bývá zaplavené nesouvisejícím textem).
+    const APPLE_KEYWORD_RE = /\b(invoice|refund|credit note)\b/i;
     const isAirBank = fromHdr.includes('airbank.cz');
     const isApple = rawLower.includes('no_reply@email.apple.com')
-      && /invoice|refund|credit/i.test(String(subject || '') + ' ' + rawLower);
+      && (APPLE_KEYWORD_RE.test(String(subject || '')) || APPLE_KEYWORD_RE.test(rawLower));
     if (!isAirBank && !isApple) {
       return res.status(202).json({ status: 'ignored' });
     }
 
-    // Dekóduj MIME → plain text (vrstva 3 strukturální validace je v parseru)
-    let text = '';
-    if (raw) {
-      const parsed = await simpleParser(raw);
-      text = parsed.text || parsed.html || '';
-    }
+    // Dekóduj MIME (vrstva 3 strukturální validace je v parseru).
+    // AirBank notifikace jsou plain text → text/plain má přednost.
+    // Apple faktury jsou HTML e-maily (parser čte CSS třídy jako subscription-lockup,
+    // payment-information) → text/html má přednost, jinak parser nenajde položky ani částku.
+    let parsed = null;
+    if (raw) parsed = await simpleParser(raw);
 
-    if (isApple) {
+    // Precedence: když mail splní obě podmínky (např. AirBank notifikace, která
+    // náhodou zmíní slovo „invoice"), vyhrává AirBank — je to důvěryhodnější cesta
+    // (From skutečně z airbank.cz), Apple whitelist je jen záložní pro ruční forward.
+    if (isAirBank) {
+      const text = parsed ? (parsed.text || parsed.html || '') : '';
+      const result = ingestEmail(db, { userEmail: allowed, fromHeader: fromHdr, text });
+      // Push je best-effort: případné selhání nesmí ovlivnit odpověď webhooku ani import.
+      notifyForResult(db, result).catch((e) => console.error('[push] notifyForResult:', e && e.message));
+      return res.json(result);
+    } else if (isApple) {
+      const html = parsed ? (parsed.html || parsed.text || '') : '';
       const user = db.prepare('SELECT id FROM users WHERE lower(email) = lower(?)').get(allowed);
       if (!user) return res.status(202).json({ status: 'ignored' });
-      const result = ingestAppleInvoice(db, user.id, text);
+      const result = ingestAppleInvoice(db, user.id, html);
       return res.json(result);
     }
-
-    const result = ingestEmail(db, { userEmail: allowed, fromHeader: fromHdr, text });
-    // Push je best-effort: případné selhání nesmí ovlivnit odpověď webhooku ani import.
-    notifyForResult(db, result).catch((e) => console.error('[push] notifyForResult:', e && e.message));
-    return res.json(result);
   } catch (err) {
     return res.status(400).json({ error: err.message });
   }
