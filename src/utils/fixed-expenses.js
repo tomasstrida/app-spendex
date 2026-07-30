@@ -46,6 +46,9 @@ function fixedExpensesForPeriod(db, userId, period) {
   // Výjimka `include_transfers = 1`: řádek sám JE převodem (účelová dotace). Na
   // jeden vlastní účet chodí víc dotací s různým účelem, takže je rozliší jen
   // text v poznámce — číslo účtu by je sečetlo dohromady.
+  // Kategorie se `system_role='fund_topup'` (Nestandardní dobití ročního budgetu)
+  // je vyloučená VŽDY, i u řádků s include_transfers=1 — ta transakce je vlastním
+  // řádkem bilance, takže by se přes dotaci počítala podruhé.
   const matchByDesc = db.prepare(`
     SELECT t.id, t.amount
     FROM transactions t
@@ -54,15 +57,18 @@ function fixedExpensesForPeriod(db, userId, period) {
       AND (t.description LIKE '%' || :pattern || '%'
         OR t.note LIKE '%' || :pattern || '%'
         OR t.place LIKE '%' || :pattern || '%')
+      AND COALESCE(c.system_role, '') != 'fund_topup'
       AND (:includeTransfers = 1 OR COALESCE(c.type, 0) != 4)
   `);
   // Číslo účtu se normalizuje v JS (SQLite neumí „číslice před /" čistě), proto
   // načteme odchozí transakce s protiúčtem v okně a porovnáme přes normCounterparty.
   const outgoingWithCp = db.prepare(`
-    SELECT id, amount, counterparty_account
-    FROM transactions
-    WHERE user_id = ? AND amount < 0 AND date >= ? AND date <= ?
-      AND counterparty_account IS NOT NULL
+    SELECT t.id, t.amount, t.counterparty_account
+    FROM transactions t
+    LEFT JOIN categories c ON c.id = t.category_id
+    WHERE t.user_id = ? AND t.amount < 0 AND t.date >= ? AND t.date <= ?
+      AND t.counterparty_account IS NOT NULL
+      AND COALESCE(c.system_role, '') != 'fund_topup'
   `);
 
   const windowEnd = end;  // konec aktuálního období

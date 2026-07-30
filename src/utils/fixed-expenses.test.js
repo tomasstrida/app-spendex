@@ -351,3 +351,38 @@ test('fixedExpensesForPeriod: účet a pattern se sčítají (union), společná
   assert.equal(m.tx_count, 2);
   assert.equal(Math.round(m.actual * 100) / 100, 5161.86);
 });
+
+test('fixedExpensesForPeriod: include_transfers=1 NEmatchuje tx v kategorii fund_topup (textová větev)', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO categories (id, user_id, name, type, system_role) VALUES (30,1,'Nestandardní dobití ročního budgetu',4,'fund_topup'),(31,1,'Převody interní',4,NULL)").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_pattern, include_transfers) VALUES (1,'Dotace na účet Licence',6000,6000,6000,'Dotace - Licence',1)").run();
+  // standardní dotace (běžná účetní kategorie) – MÁ se počítat
+  db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description, note) VALUES (1,31,-6000,'2026-07-22','Tomáš Střída','Dotace - Licence')").run();
+  // nadplánové dobití se stejným textem – NESMÍ se počítat
+  db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description, note) VALUES (1,30,-10500,'2026-07-23','Tomáš Střída','Dotace - Licence extra')").run();
+
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const rows = fixedExpensesForPeriod(db, 1, '2026-07');
+  cleanup(db, tmp);
+  const m = rows.find(r => r.name === 'Dotace na účet Licence');
+  assert.equal(m.tx_count, 1, 'jen standardní dotace');
+  assert.equal(m.actual, 6000);
+  assert.equal(m.status, 'ok');
+});
+
+test('fixedExpensesForPeriod: match_counterparty_account NEmatchuje tx v kategorii fund_topup (účtová větev)', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO categories (id, user_id, name, type, system_role) VALUES (30,1,'Nestandardní dobití ročního budgetu',4,'fund_topup'),(31,1,'Převody interní',4,NULL)").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_counterparty_account) VALUES (1,'Dotace na účet Licence',6000,6000,6000,'1679014111/3030')").run();
+  db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account) VALUES (1,31,-6000,'2026-07-22','Tomáš Střída','1679014111/3030')").run();
+  db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account) VALUES (1,30,-10500,'2026-07-23','Tomáš Střída','1679014111/3030')").run();
+
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const rows = fixedExpensesForPeriod(db, 1, '2026-07');
+  cleanup(db, tmp);
+  const m = rows.find(r => r.name === 'Dotace na účet Licence');
+  assert.equal(m.tx_count, 1, 'nadplánové dobití se nesmí přičíst');
+  assert.equal(m.actual, 6000);
+});
