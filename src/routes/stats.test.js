@@ -140,3 +140,37 @@ test('annual_off_fund: respektuje SPENDING_FILTER (roční výdaj z OSVČ účtu
   assert.equal(stats.annual_off_fund.spent, 0);
   server.close();
 });
+
+test('prepaid_purchase: outflow secte nakupy balicku za obdobi', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type,system_role) VALUES (41,1,'Nákup předplacených balíčků',4,'prepaid_purchase')").run();
+  db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES (1,41,-5000,'2026-07-04','Fitness 10x'),(1,41,-2000,'2026-07-20','Masaze 5x'),(1,41,-1000,'2026-06-30','Minule obdobi')").run();
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-07`)).json();
+  assert.equal(stats.prepaid_purchase.category_id, 41);
+  assert.equal(stats.prepaid_purchase.outflow, 7000);
+  assert.equal(stats.prepaid_purchase.tx_count, 2);
+  server.close();
+});
+
+test('prepaid_purchase: technicka kategorie se neobjevi v sekci Ucetni', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type,system_role) VALUES (41,1,'Nákup předplacených balíčků',4,'prepaid_purchase')").run();
+  db.prepare("INSERT INTO categories (id,user_id,name,type) VALUES (42,1,'Převody interní',4)").run();
+  db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES (1,41,-5000,'2026-07-04','Fitness 10x'),(1,42,-100,'2026-07-05','Prevod')").run();
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-07`)).json();
+  const ids = (stats.accounting || []).map(a => a.id);
+  assert.ok(!ids.includes(41), 'prepaid_purchase nepatri do sekce Ucetni');
+  assert.ok(ids.includes(42), 'skutecne prevody v sekci Ucetni zustavaji');
+  server.close();
+});
+
+test('prepaid_purchase: bez technicke kategorie vraci nuly', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-07`)).json();
+  assert.equal(stats.prepaid_purchase.category_id, null);
+  assert.equal(stats.prepaid_purchase.outflow, 0);
+  server.close();
+});

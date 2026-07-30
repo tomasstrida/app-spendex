@@ -387,6 +387,20 @@ test('fixedExpensesForPeriod: match_counterparty_account NEmatchuje tx v kategor
   assert.equal(m.actual, 6000);
 });
 
+test('fixedExpensesForPeriod: NEmatchuje tx v kategorii prepaid_purchase', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO categories (id, user_id, name, type, system_role) VALUES (32,1,'Nákup předplacených balíčků',4,'prepaid_purchase')").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, amount_min, amount_max, match_pattern, include_transfers) VALUES (1,'Fitness',5000,5000,5000,'Fitness',1)").run();
+  db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description) VALUES (1,32,-5000,'2026-07-04','Fitness 10x')").run();
+
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const rows = fixedExpensesForPeriod(db, 1, '2026-07');
+  cleanup(db, tmp);
+  const m = rows.find(r => r.name === 'Fitness');
+  assert.equal(m.tx_count, 0, 'nakup balicku se nesmi zapocitat jako fixni platba');
+});
+
 test('fixedExpensesForPeriod: vrací tx_ids napárovaných transakcí (obě větve, dedup)', () => {
   const { db, tmp } = freshDb();
   db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();

@@ -49,6 +49,8 @@ router.get('/overview', requireAuth, (req, res) => {
 
   // Účetní kategorie (type=4): saldo napříč VŠEMI účty (bez SPENDING_FILTER),
   // aby interní převody vyšly na nulu. Kladné=příliv, záporné=odliv, ~0=vyrovnané.
+  // `prepaid_purchase` je z Účetní sekce vyloučená: není to převod mezi vlastními
+  // účty, ale skutečný výdaj, takže saldo nemá smysl kontrolovat na nulu.
   const accounting = db.prepare(`
     SELECT c.id, c.name, c.color, c.icon,
       COALESCE(SUM(t.amount), 0) AS saldo,
@@ -58,6 +60,7 @@ router.get('/overview', requireAuth, (req, res) => {
       AND t.user_id = ?
       AND t.date >= ? AND t.date <= ?
     WHERE c.user_id = ? AND c.type = 4
+      AND COALESCE(c.system_role, '') != 'prepaid_purchase'
     GROUP BY c.id
     ORDER BY c.name ASC
   `).all(req.dataUserId, start, end, req.dataUserId);
@@ -198,6 +201,26 @@ router.get('/overview', requireAuth, (req, res) => {
     `).get(req.dataUserId, start, end);
   }
 
+  // ── Nákup předplacených balíčků ──
+  // Skutečný odliv za období. Čerpání balíčku se do bilance NEpromítá (to je
+  // rozpočtový pohled v /api/budgets), takže se nic nezapočte dvakrát.
+  const prepaidCat = db.prepare(
+    "SELECT id, name FROM categories WHERE user_id = ? AND system_role = 'prepaid_purchase'"
+  ).get(req.dataUserId);
+  let prepaidPurchase = { category_id: null, name: null, outflow: 0, tx_count: 0 };
+  if (prepaidCat) {
+    const p = db.prepare(`
+      SELECT COALESCE(SUM(-t.amount), 0) AS outflow, COUNT(t.id) AS tx_count
+      FROM transactions t
+      WHERE t.user_id = ? AND t.category_id = ? AND t.amount < 0
+        AND t.date >= ? AND t.date <= ?
+    `).get(req.dataUserId, prepaidCat.id, start, end);
+    prepaidPurchase = {
+      category_id: prepaidCat.id, name: prepaidCat.name,
+      outflow: p.outflow, tx_count: p.tx_count,
+    };
+  }
+
   res.json({
     period: periodKey,
     period_start: start,
@@ -213,6 +236,7 @@ router.get('/overview', requireAuth, (req, res) => {
     accounting,
     fund_topup: fundTopup,
     annual_off_fund: annualOffFund,
+    prepaid_purchase: prepaidPurchase,
   });
 });
 

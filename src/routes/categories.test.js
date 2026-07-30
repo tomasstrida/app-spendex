@@ -100,3 +100,17 @@ test('DELETE: systémovou kategorii nelze smazat', async () => {
   assert.equal(res.status, 400);
   assert.ok(still, 'kategorie musí zůstat');
 });
+
+test('systemovou kategorii prepaid_purchase nelze prepnout na jiny typ ani smazat', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type,system_role) VALUES (50,1,'Nákup předplacených balíčků',4,'prepaid_purchase')").run();
+  const patched = await (await fetch(`${base}/api/categories/50`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 1 }),
+  })).json();
+  assert.equal(patched.type, 4, 'typ systemove kategorie se nemeni');
+  const del = await fetch(`${base}/api/categories/50`, { method: 'DELETE' });
+  assert.equal(del.status, 400);
+  server.close();
+});
