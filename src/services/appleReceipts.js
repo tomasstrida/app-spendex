@@ -66,8 +66,8 @@ function applyReceiptToTransaction(db, userId, receipt, transactionId) {
 
 function finishMatch(db, userId, receiptId, receipt, transactionId) {
   applyReceiptToTransaction(db, userId, receipt, transactionId);
-  db.prepare("UPDATE apple_receipts SET status = 'matched', transaction_id = ?, matched_at = datetime('now') WHERE id = ?")
-    .run(transactionId, receiptId);
+  db.prepare("UPDATE apple_receipts SET status = 'matched', transaction_id = ?, matched_at = datetime('now') WHERE id = ? AND user_id = ?")
+    .run(transactionId, receiptId, userId);
 }
 
 function ingestAppleInvoice(db, userId, rawBody) {

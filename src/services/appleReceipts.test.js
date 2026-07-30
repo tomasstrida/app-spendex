@@ -90,6 +90,29 @@ test('bez sedici ho pravidla zustane subkategorie beze zmeny', async () => {
   assert.ok(tx.note.includes('YouTube'));
 });
 
+test('vicepolozkova faktura nemeni subkategorii, jen dopise obe polozky do poznamky', async () => {
+  const { db, svc } = setup();
+  db.prepare("INSERT INTO category_rules (user_id, pattern, category_id, subcategory_id) VALUES (1,'CHATGPT',5,12)").run();
+  db.prepare(`INSERT INTO transactions (id, user_id, category_id, subcategory_id, amount, date, description)
+              VALUES (100,1,5,11,-624,'2026-07-09','APPLE.COM/BILL')`).run();
+  const html = '<html><body><h1>Invoice</h1><div class="billing-information"><p>9 July 2026</p>'
+    + '<p>Order ID:</p><p>MULTI1</p></div>'
+    + '<table class="lockup subscription-lockup__container"><tr class="subscription-lockup">'
+    + '<td class="subscription-lockup__content"><p>iCloud</p><p>iCloud+ 50GB<br/></p></td>'
+    + '<td class="subscription-lockup__bottom-text__col"><p>25,00&nbsp;CZK<br/></p></td></tr></table>'
+    + '<table class="lockup subscription-lockup__container"><tr class="subscription-lockup">'
+    + '<td class="subscription-lockup__content"><p>OpenAI</p><p>ChatGPT Plus<br/></p></td>'
+    + '<td class="subscription-lockup__bottom-text__col"><p>599,00&nbsp;CZK<br/></p></td></tr></table>'
+    + '<div class="payment-information"><p>MasterCard •••• 4225</p><p>624,00 CZK</p></div>'
+    + '</body></html>';
+  const r = svc.ingestAppleInvoice(db, 1, html);
+  assert.equal(r.status, 'matched');
+  const tx = db.prepare('SELECT subcategory_id, note FROM transactions WHERE id = 100').get();
+  assert.equal(tx.subcategory_id, 11, 'subkategorie zustava puvodni, ne 12 z pravidla');
+  assert.ok(tx.note.includes('iCloud'), 'poznamka obsahuje prvni polozku');
+  assert.ok(tx.note.includes('ChatGPT Plus'), 'poznamka obsahuje druhou polozku');
+});
+
 test('bez odpovidajici transakce zustane faktura pending', async () => {
   const { db, svc } = setup();
   const r = svc.ingestAppleInvoice(db, 1, await fixtureBody());
