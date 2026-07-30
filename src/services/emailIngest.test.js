@@ -347,3 +347,16 @@ test('recategorizePending: platba, co je pořád nejistá, zůstává pending', 
   assert.equal(txCount.c, 0);
   assert.equal(inbox.status, 'pending');
 });
+
+test('import Apple platby spáruje čekající fakturu', async () => {
+  const { db, tmp } = freshDb();
+  seed(db);
+  db.prepare(`INSERT INTO apple_receipts (user_id, order_id, receipt_date, total_amount, is_refund, card_last4, items_json, raw_text, status)
+              VALUES (1,'MQ9BQ86WV5','2026-06-30',269,0,'4225','[{"app":"YouTube","description":"YouTube Premium (Monthly)","amount":269}]','raw','pending')`).run();
+  const txId = db.prepare(`INSERT INTO transactions (user_id, category_id, amount, date, description)
+                           VALUES (1,5,-269,'2026-06-30','APPLE.COM/BILL')`).run().lastInsertRowid;
+  const { matchPendingForTransaction } = require('./appleReceipts');
+  assert.equal(matchPendingForTransaction(db, 1, Number(txId)), 1);
+  assert.equal(db.prepare("SELECT status FROM apple_receipts WHERE order_id='MQ9BQ86WV5'").get().status, 'matched');
+  cleanup(db, tmp);
+});

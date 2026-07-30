@@ -5,6 +5,7 @@ const applyRules = require('../utils/apply-rules');
 const seedRules = require('../../scripts/seed/rules');
 const loadUserRules = require('../utils/load-user-rules');
 const transferCategoryName = require('../utils/transfer-category');
+const { matchPendingForTransaction } = require('./appleReceipts');
 
 const TX_INSERT = `INSERT OR IGNORE INTO transactions
     (user_id, category_id, subcategory_id, amount, currency, date, description, note, source, external_id,
@@ -42,6 +43,15 @@ function classifyAndStore(db, userId, tx, account, extId, notifyUserId, text) {
     const transactionId = r.changes > 0
       ? Number(r.lastInsertRowid)
       : (db.prepare('SELECT id FROM transactions WHERE user_id = ? AND external_id = ?').get(userId, extId)?.id ?? null);
+    // Apple platba může mít čekající fakturu — zkusíme ji dorovnat. Best-effort:
+    // selhání párování nesmí shodit import platby.
+    if (transactionId && /^APPLE\.COM/i.test(String(tx.description || tx.place || ''))) {
+      try {
+        matchPendingForTransaction(db, userId, transactionId);
+      } catch (e) {
+        console.error('[apple] parovani po importu:', e && e.message);
+      }
+    }
     return {
       status: 'imported', external_id: extId, userId, notifyUserId,
       transactionId, txDate: tx.date,
