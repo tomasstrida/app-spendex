@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { Upload, Check, AlertCircle, Plus, Pencil, Trash2, X, Download, Inbox, Mail } from 'lucide-react';
 import Layout from '../components/Layout';
 import { formatCurrency } from '../i18n';
@@ -304,13 +304,15 @@ function EmailInbox() {
   }
 
   async function unmatchReceipt(receiptId) {
-    await fetch(`/api/apple-receipts/${receiptId}/unmatch`, { method: 'POST' });
+    const r = await fetch(`/api/apple-receipts/${receiptId}/unmatch`, { method: 'POST' });
+    if (!r.ok) { alert((await r.json().catch(() => ({}))).error || 'Odpojení se nezdařilo.'); return; }
     loadAppleReceipts();
   }
 
   async function rejectReceipt(receiptId) {
     if (!confirm('Zahodit tuhle fakturu?')) return;
-    await fetch(`/api/apple-receipts/${receiptId}`, { method: 'DELETE' });
+    const r = await fetch(`/api/apple-receipts/${receiptId}`, { method: 'DELETE' });
+    if (!r.ok) { alert((await r.json().catch(() => ({}))).error || 'Zahození se nezdařilo.'); return; }
     loadAppleReceipts();
   }
 
@@ -489,11 +491,17 @@ function EmailInbox() {
                         <button key={c.id} className="btn btn-ghost btn-sm"
                           onClick={() => matchReceipt(r.id, c.id)}>
                           {c.date} · {formatCurrency(Math.abs(c.amount))}
+                          {c.description ? ` · ${c.description}` : ''}
                         </button>
                       ))}
                   </div>
                 )}
                 <div className="apple-receipt-actions">
+                  {r.status === 'matched' && r.transaction_id && (
+                    <Link className="btn btn-ghost btn-sm" to={`/transactions?highlight=${r.transaction_id}`}>
+                      Zobrazit platbu
+                    </Link>
+                  )}
                   {r.status === 'matched' && (
                     <button className="btn btn-ghost btn-sm" onClick={() => unmatchReceipt(r.id)}>Odpojit</button>
                   )}
