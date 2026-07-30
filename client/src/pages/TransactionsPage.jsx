@@ -448,7 +448,13 @@ export default function TransactionsPage() {
           : t
       ));
       setEditId(null);
+      closePrepaidForm();
     }
+  }
+
+  function closePrepaidForm() {
+    setPrepaidFor(null);
+    setPrepaidData({ name: '', category_id: '', units_total: '', valid_until: '' });
   }
 
   async function createPrepaid() {
@@ -464,8 +470,8 @@ export default function TransactionsPage() {
     });
     const body = await r.json().catch(() => ({}));
     if (!r.ok) { alert(body.error || 'Balíček se nepodařilo založit.'); return; }
-    setPrepaidFor(null);
     setEditId(null);
+    closePrepaidForm();
     loadTransactions();   // stejné znovunačtení seznamu jako po CSV importu
   }
 
@@ -941,7 +947,7 @@ export default function TransactionsPage() {
                         style={{ maxWidth: 160 }} />
                     </div>
                     <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                      <button className="btn btn-ghost" type="button" onClick={() => setPrepaidFor(null)}>Zrušit balíček</button>
+                      <button className="btn btn-ghost" type="button" onClick={closePrepaidForm}>Zrušit balíček</button>
                       <button className="btn btn-primary" type="button"
                         disabled={!prepaidData.category_id || !(parseFloat(prepaidData.units_total) > 0)}
                         onClick={createPrepaid}>Založit balíček</button>
@@ -967,7 +973,7 @@ export default function TransactionsPage() {
                     }}>
                     Předplacený balíček
                   </button>
-                  <button className="btn btn-ghost" onClick={() => setEditId(null)}>
+                  <button className="btn btn-ghost" onClick={() => { setEditId(null); closePrepaidForm(); }}>
                     <X size={14} /> Zrušit
                   </button>
                   <button className="btn btn-primary" onClick={() => saveEdit(tx)}>
