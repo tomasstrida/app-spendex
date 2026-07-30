@@ -386,3 +386,32 @@ test('fixedExpensesForPeriod: match_counterparty_account NEmatchuje tx v kategor
   assert.equal(m.tx_count, 1, 'nadplánové dobití se nesmí přičíst');
   assert.equal(m.actual, 6000);
 });
+
+test('fixedExpensesForPeriod: vrací tx_ids napárovaných transakcí (obě větve, dedup)', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id,name,amount,amount_min,amount_max,match_pattern,match_counterparty_account) VALUES (1,'Nájem',38126,38126,38126,'Najem','51-1686550297/0100')").run();
+  // sedí na OBOJE (text i číslo účtu) → smí být v tx_ids jen jednou
+  const both = db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account) VALUES (1,-38126,'2026-07-01','Najem a sluzby','51-1686550297/0100')").run().lastInsertRowid;
+  // sedí jen na text
+  const txt = db.prepare("INSERT INTO transactions (user_id,amount,date,description) VALUES (1,-500,'2026-07-02','Najem doplatek')").run().lastInsertRowid;
+  // nesedí na nic
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description) VALUES (1,-999,'2026-07-03','Neco jineho')").run();
+
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const rows = fixedExpensesForPeriod(db, 1, '2026-07');
+  cleanup(db, tmp);
+  const m = rows.find(r => r.name === 'Nájem');
+  assert.deepEqual([...m.tx_ids].sort((a, b) => a - b), [both, txt].sort((a, b) => a - b));
+  assert.equal(m.tx_ids.length, m.tx_count, 'tx_ids musí mít stejný počet jako tx_count');
+});
+
+test('fixedExpensesForPeriod: řádek bez shody má prázdné tx_ids', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id,name,amount,amount_min,amount_max,match_pattern) VALUES (1,'Nic',100,100,100,'NEEXISTUJE')").run();
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const rows = fixedExpensesForPeriod(db, 1, '2026-07');
+  cleanup(db, tmp);
+  assert.deepEqual(rows.find(r => r.name === 'Nic').tx_ids, []);
+});

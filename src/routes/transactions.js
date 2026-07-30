@@ -37,6 +37,21 @@ function buildTxWhere(query) {
     where += SPENDING_AND;
   }
 
+  // tx_ids=1,2,3 → přesně vyjmenované transakce. Pro prokliky ze Schůzky u
+  // agregátů, jejichž příslušnost počítá JS a nedá se vyjádřit filtrem (matcher
+  // fixních plateb přes text i číslo účtu, seskupování příjmů podle protistrany
+  // × cílového účtu). Odkaz je pak exaktní, ne přibližný. Izolaci uživatele drží
+  // `WHERE t.user_id = ?` volajícího — tady se jen zužuje množina.
+  if (query.tx_ids !== undefined && String(query.tx_ids).trim() !== '') {
+    const ids = String(query.tx_ids).split(',')
+      .map(s => parseInt(s.trim(), 10))
+      .filter(n => Number.isFinite(n));
+    if (ids.length > 0) {
+      where += ` AND t.id IN (${ids.map(() => '?').join(',')})`;
+      params.push(...ids);
+    }
+  }
+
   // off_fund=1 → jen transakce, které NEJSOU na fondovém účtu (accounts.is_fund).
   // Užívá Schůzka pro klik na „Roční výdaje mimo fond". Transakce bez účtu
   // (account_id IS NULL) projdou — NOT EXISTS je na NULL id pravdivé.

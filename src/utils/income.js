@@ -74,11 +74,16 @@ function incomeSourcesForPeriod(db, userId, period, billingDay) {
         total: 0,
         tx_count: 0,
         descriptions: new Set(),
+        // ID transakcí ve skupině — příslušnost k příjmu počítá JS (vyloučení
+        // interních převodů + seskupení protistrana × cílový účet + aliasy),
+        // filtrem se vyjádřit nedá. Schůzka je posílá do prokliku jako `tx_ids`.
+        tx_ids: [],
       };
       groups.set(key, g);
     }
     g.total += t.amount;
     g.tx_count += 1;
+    g.tx_ids.push(t.id);
     if (t.description) g.descriptions.add(t.description);
   }
 
@@ -134,6 +139,7 @@ function incomeSourcesForPeriod(db, userId, period, billingDay) {
         account_name: accountName,
         actual: 0,
         tx_count: 0,
+        tx_ids: [],
         status: s.planned_amount > 0 ? incomeStatus(s.planned_amount, 0, 0) : null,
         sort_order: s.sort_order,
       });
@@ -152,6 +158,7 @@ function incomeSourcesForPeriod(db, userId, period, billingDay) {
         account_name: accountName,
         actual: g.total,
         tx_count: g.tx_count,
+        tx_ids: g.tx_ids,
         status: s.planned_amount > 0 ? incomeStatus(s.planned_amount, g.total, g.tx_count) : null,
         sort_order: s.sort_order,
       });
@@ -172,6 +179,7 @@ function incomeSourcesForPeriod(db, userId, period, billingDay) {
       account_name: accountName,
       actual: g.total,
       tx_count: g.tx_count,
+      tx_ids: g.tx_ids,
       status: null,
       sort_order: null,
     });

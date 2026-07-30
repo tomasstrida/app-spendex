@@ -247,9 +247,20 @@ export default function ReportPage() {
   });
   const totalDiff    = Math.round(totalIncome - totalPlanned);
 
-  const typ1CatIds = byCategory.filter(c => c.type === 1).map(c => c.id).join(',');
+  // Proklik musí ukázat PŘESNĚ transakce, ze kterých je součet nad ním.
+  // `typ1CatIds` proto vychází z `budgets` (jen kategorie s budgetem — z těch se
+  // počítá `totalType1`), NE ze všech typ-1 kategorií: „Příjmy", „Pravidelné
+  // platby" a „Mimo systém" jsou taky typ 1, ale do součtu nevstupují.
+  const typ1CatIds = budgets.map(b => b.category_id).filter(id => id != null).join(',');
   const typ2CatIds = byCategory.filter(c => c.type === 2).map(c => c.id).join(',');
-  const typ3CatIds = byCategory.filter(c => c.type === 3).map(c => c.id).join(',');
+  // Stejně u typu 3 — `totalType3` bere jen kategorie se `spent > 0`.
+  const typ3CatIds = byCategory.filter(c => c.type === 3 && c.spent > 0).map(c => c.id).join(',');
+  // Agregáty, jejichž příslušnost počítá backend v JS (matcher fixních plateb
+  // přes text i číslo účtu; seskupování příjmů podle protistrany × cílového
+  // účtu + whitelist aliasů), se filtrem vyjádřit nedají — proklik proto jede
+  // přes výčet ID, který k nim API vrací.
+  const fixedTxIds = fixedExpenses.flatMap(f => f.tx_ids || []).join(',');
+  const incomeTxIds = aliasedSources.flatMap(s => s.tx_ids || []).join(',');
   function txLink(extra) {
     // Posíláme `period=YYYY-MM`, ne `from/to`, aby Transakce zachovaly měsíční
     // přepínač (z URL from/to by se odvodil customMode = dva date inputs).
@@ -289,26 +300,22 @@ export default function ReportPage() {
 
           {/* ── BILANCE (Zbylo na běžném) – první na stránce ── */}
           <section className="report-section report-section--bilance">
-            <Link to={txLink('direction=in')} className="report-bilance-row"
+            <Link to={txLink(incomeTxIds ? `tx_ids=${incomeTxIds}` : 'direction=in')}
+              className="report-bilance-row"
               style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
-              title="Klik: všechny příchozí transakce v období">
+              title="Klik: transakce, ze kterých je součet příjmů">
               <span>Příjmy celkem</span>
               <span>{formatCurrency(totalIncome)}</span>
             </Link>
-            {totalFixed > 0 && (() => {
-              const patterns = fixedExpenses.map(f => f.match_pattern).filter(Boolean);
-              const linkExtra = patterns.length
-                ? `match_patterns=${encodeURIComponent(patterns.join(','))}&direction=out&spending_only=1`
-                : 'direction=out&spending_only=1';
-              return (
-                <Link to={txLink(linkExtra)} className="report-bilance-row"
-                  style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
-                  title="Klik: 5 fixních plateb (Nájem, PRE, RAV4, T-Mobile, Nordic Telecom) v období">
-                  <span>Fixní platby</span>
-                  <span>− {formatCurrency(totalFixed)}</span>
-                </Link>
-              );
-            })()}
+            {totalFixed > 0 && (
+              <Link to={txLink(fixedTxIds ? `tx_ids=${fixedTxIds}` : 'direction=out')}
+                className="report-bilance-row"
+                style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                title="Klik: transakce, ze kterých je součet fixních plateb">
+                <span>Fixní platby</span>
+                <span>− {formatCurrency(totalFixed)}</span>
+              </Link>
+            )}
             {/* Řádek „Dotace na nepravidelné" odstraněn: dotace na Nepravidelné je
                 definovaná fixní platba, takže už je v součtu Fixních plateb výš.
                 Samostatný řádek počítaný z hardcoded čísla účtu ji přičítal podruhé. */}
@@ -419,9 +426,14 @@ export default function ReportPage() {
                         onSave={handleIncomeSaved} onCancel={() => setEditIncome(null)} />
                     );
                   }
+                  // Proklik na konkrétní příjem: výčet ID z API (fulltext `q=`
+                  // dřív přidával i odchozí platby na tentýž účet, takže součet
+                  // v seznamu neodpovídal řádku). Fallback na hledání jen když
+                  // se zdroj v období nespároval a ID tedy nejsou.
                   const searchKey = row.match_counterparty_account || row.match_pattern || row.person;
-                  const to = `/transactions?q=${encodeURIComponent(searchKey)}`
-                    + (period ? `&period=${period}` : '');
+                  const to = (row.tx_ids && row.tx_ids.length)
+                    ? `/transactions?tx_ids=${row.tx_ids.join(',')}` + (period ? `&period=${period}` : '')
+                    : `/transactions?q=${encodeURIComponent(searchKey)}` + (period ? `&period=${period}` : '');
                   return (
                     <Link key={rowKey} to={to} className="report-income-row"
                       style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}>
@@ -558,7 +570,7 @@ export default function ReportPage() {
                     : (
                       <Link
                         key={b.category_id}
-                        to={`/transactions?category_id=${b.category_id}` + (period ? `&period=${period}` : '')}
+                        to={`/transactions?category_id=${b.category_id}&spending_only=1` + (period ? `&period=${period}` : '')}
                         className="report-budget-row"
                         style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
                       >
@@ -573,7 +585,7 @@ export default function ReportPage() {
                           {subcats.map(s => (
                             <Link
                               key={s.subcategory_id}
-                              to={`/transactions?category_id=${s.category_id}&subcategory_id=${s.subcategory_id}` + (period ? `&period=${period}` : '')}
+                              to={`/transactions?category_id=${s.category_id}&subcategory_id=${s.subcategory_id}&spending_only=1` + (period ? `&period=${period}` : '')}
                               className="report-subcat-row"
                               style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
                             >

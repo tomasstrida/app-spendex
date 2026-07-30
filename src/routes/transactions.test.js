@@ -197,3 +197,38 @@ test('off_fund=1 vyloučí transakce z fondového účtu', async () => {
   server.close();
   assert.deepEqual(descs, ['ANTHROPIC ze Společného', 'Bez účtu'], 'tx z fondového účtu vypadne, tx bez účtu zůstane');
 });
+
+test('tx_ids=1,2 vrátí přesně zadané transakce (a nic víc)', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const a = db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES (1,5,-100,'2026-07-01','A')").run().lastInsertRowid;
+  const b = db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES (1,5,-200,'2026-07-02','B')").run().lastInsertRowid;
+  db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES (1,5,-300,'2026-07-03','C')").run();
+  const res = await (await fetch(`${base}/api/transactions?tx_ids=${a},${b}`)).json();
+  const rows = res.transactions || res;
+  server.close();
+  assert.deepEqual(rows.map(r => r.description).sort(), ['A', 'B']);
+});
+
+test('tx_ids ignoruje nečíselné hodnoty a prázdný seznam nefiltruje', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const a = db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES (1,5,-100,'2026-07-01','A')").run().lastInsertRowid;
+  db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES (1,5,-200,'2026-07-02','B')").run();
+  const dirty = await (await fetch(`${base}/api/transactions?tx_ids=${a},abc,,`)).json();
+  const empty = await (await fetch(`${base}/api/transactions?tx_ids=`)).json();
+  server.close();
+  assert.deepEqual((dirty.transactions || dirty).map(r => r.description), ['A']);
+  assert.equal((empty.transactions || empty).length, 2, 'prázdný tx_ids se ignoruje');
+});
+
+test('tx_ids nesmí prolomit izolaci uživatele', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO users (id,email) VALUES (2,'x@y')").run();
+  db.prepare("INSERT INTO categories (id,user_id,name) VALUES (9,2,'Cizí')").run();
+  const foreign = db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES (2,9,-500,'2026-07-01','CIZÍ')").run().lastInsertRowid;
+  const res = await (await fetch(`${base}/api/transactions?tx_ids=${foreign}`)).json();
+  server.close();
+  assert.equal((res.transactions || res).length, 0, 'cizí transakce se nesmí vrátit');
+});

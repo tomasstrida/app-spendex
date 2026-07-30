@@ -196,3 +196,32 @@ test('normCounterparty: kompletní číslo účtu = předčíslí + číslo + k�
   assert.equal(normCounterparty('ABC'), null);
   assert.equal(normCounterparty(null), null);
 });
+
+test('incomeSourcesForPeriod: vrací tx_ids transakcí, ze kterých je actual', () => {
+  const { db, tmp } = freshDb();
+  seedUser(db);
+  db.prepare("INSERT INTO accounts (id,user_id,account_number,name,role) VALUES (60,1,'1679014138/3030','Hlavní','ignored')").run();
+  db.prepare("INSERT INTO income_sources (user_id,person,planned_amount,match_counterparty_account) VALUES (1,'Martin',20000,'1812270019/3030')").run();
+  const a = db.prepare("INSERT INTO transactions (user_id,account_id,amount,date,description,counterparty_account) VALUES (1,60,5700,'2026-07-05','Libor Bísek','1812270019/3030')").run().lastInsertRowid;
+  const b = db.prepare("INSERT INTO transactions (user_id,account_id,amount,date,description,counterparty_account) VALUES (1,60,14000,'2026-07-09','Libor Bísek','1812270019/3030')").run().lastInsertRowid;
+  // odchozí na stejný účet — do příjmu nepatří, tedy ani do tx_ids
+  db.prepare("INSERT INTO transactions (user_id,account_id,amount,date,description,counterparty_account) VALUES (1,60,-1600,'2026-07-20','Libor Bísek','1812270019/3030')").run();
+
+  const { incomeSourcesForPeriod } = require('./income');
+  const rows = incomeSourcesForPeriod(db, 1, '2026-07', 1);
+  cleanup(db, tmp);
+  const m = rows.find(r => r.person === 'Martin');
+  assert.equal(m.actual, 19700);
+  assert.deepEqual([...m.tx_ids].sort((x, y) => x - y), [a, b].sort((x, y) => x - y));
+  assert.equal(m.tx_ids.length, m.tx_count);
+});
+
+test('incomeSourcesForPeriod: nenapárovaný zdroj má prázdné tx_ids', () => {
+  const { db, tmp } = freshDb();
+  seedUser(db);
+  db.prepare("INSERT INTO income_sources (user_id,person,planned_amount,match_counterparty_account) VALUES (1,'Nikdo',20000,'9999999999/3030')").run();
+  const { incomeSourcesForPeriod } = require('./income');
+  const rows = incomeSourcesForPeriod(db, 1, '2026-07', 1);
+  cleanup(db, tmp);
+  assert.deepEqual(rows.find(r => r.person === 'Nikdo').tx_ids, []);
+});

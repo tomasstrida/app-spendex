@@ -100,6 +100,10 @@ function fixedExpensesForPeriod(db, userId, period) {
       ...row,
       actual,
       tx_count,
+      // ID napárovaných transakcí — příslušnost k této platbě počítá JS (dvě
+      // větve matcheru + dedup), filtrem se vyjádřit nedá. Schůzka je posílá do
+      // prokliku jako `tx_ids`, aby seznam ukázal přesně to, z čeho je součet.
+      tx_ids: [...hits.keys()],
       status: paymentStatus(row.amount_min, row.amount_max, actual, tx_count),
     };
   });
