@@ -5,6 +5,7 @@ const cs = {
     categories: 'Kategorie',
     rules: 'Pravidla',
     fixedExpenses: 'Fixní platby',
+    prepaid: 'Předplacené balíčky',
     budgets: 'Rozpočty',
     report: 'Schůzka',
     savings: 'Spořicí účet',

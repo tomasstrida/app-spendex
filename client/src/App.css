@@ -1409,3 +1409,10 @@ a.report-subcat-row:hover { background: var(--bg2); }
   font-weight: 600;
   white-space: nowrap;
 }
+
+/* ── Předplacené balíčky ─────────────────────────────────────────────────── */
+.prepaid-list { display: flex; flex-direction: column; gap: 12px; max-width: 720px; }
+.prepaid-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+.prepaid-card-header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.prepaid-card-name { font-weight: 600; }
+.prepaid-card-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }

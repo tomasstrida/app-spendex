@@ -18,6 +18,7 @@ import DuplicatesPage from './pages/DuplicatesPage';
 import AccountsPage from './pages/AccountsPage';
 import RulesPage from './pages/RulesPage';
 import FixedExpensesPage from './pages/FixedExpensesPage';
+import PrepaidPage from './pages/PrepaidPage';
 import { PeriodProvider } from './contexts/PeriodContext';
 import { syncPush } from './push';
 
@@ -104,6 +105,7 @@ export default function App() {
             <Route path="/categories"   element={<R el={<CategoriesPage />} />} />
             <Route path="/rules"        element={<R el={<RulesPage />} />} />
             <Route path="/fixed-expenses" element={<R el={<FixedExpensesPage />} />} />
+            <Route path="/prepaid"      element={<R el={<PrepaidPage />} />} />
             <Route path="/budgets"      element={<R el={<BudgetsPage />} />} />
             <Route path="/report"       element={<R el={<ReportPage />} />} />
             <Route path="/savings"      element={<R el={<SavingsPage />} />} />
