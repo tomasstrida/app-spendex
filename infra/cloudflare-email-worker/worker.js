@@ -4,16 +4,19 @@ export default {
   async email(message, env) {
     const fromHeader = message.headers.get('from') || '';
 
-    // Vrstva 2 (brzká): propustit jen notifikace od AirBank.
+    // Vrstva 2 (brzká): propustit notifikace od AirBank a přeposlané Apple faktury.
     // POZOR: Gmail forward (přes filtr) zachovává PŮVODNÍ obálku — message.from zůstane
-    // info@airbank.cz, NE přeposílatel. Whitelist proto stavíme na From hlavičce; server
-    // pak navíc ověří, že e-mail prošel schránkou povoleného uživatele (EMAIL_ALLOWED_SENDER).
-    if (!fromHeader.toLowerCase().includes('airbank.cz')) {
+    // info@airbank.cz, NE přeposílatel. U ručně přeposlaných Apple faktur je to naopak:
+    // From je adresa uživatele, původní Apple odesílatel zůstane až v těle. Server pak
+    // v obou případech ověří, že e-mail prošel schránkou povoleného uživatele.
+    const rawText = await new Response(message.raw).text();
+    const subject = message.headers.get('subject') || '';
+    const isAirBank = fromHeader.toLowerCase().includes('airbank.cz');
+    const isApple = rawText.toLowerCase().includes('no_reply@email.apple.com')
+      && /invoice|refund|credit/i.test(subject + ' ' + rawText);
+    if (!isAirBank && !isApple) {
       return; // tiše zahodit (spam / cizí e-maily na inbox@spendex.uk)
     }
-
-    const raw = await new Response(message.raw).text();
-    const subject = message.headers.get('subject') || '';
 
     const res = await fetch(env.WEBHOOK_URL, {
       method: 'POST',
@@ -21,7 +24,7 @@ export default {
         'Content-Type': 'application/json',
         'x-webhook-secret': env.WEBHOOK_SECRET,
       },
-      body: JSON.stringify({ envelope_from: message.from, from: fromHeader, subject, raw }),
+      body: JSON.stringify({ envelope_from: message.from, from: fromHeader, subject, raw: rawText }),
     });
     if (!res.ok) {
       console.error(`Spendex webhook returned ${res.status}`);

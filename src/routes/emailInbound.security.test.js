@@ -2,6 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const express = require('express');
+const os = require('os'); const path = require('path'); const fs = require('fs');
 function freshApp() {
   process.env.EMAIL_WEBHOOK_SECRET = 'sekret';
   process.env.EMAIL_ALLOWED_SENDER = 'tom@example.com';
@@ -11,6 +12,21 @@ function freshApp() {
   return app;
 }
 async function listen(app){ const s=await new Promise(r=>{const x=app.listen(0,()=>r(x));}); return {server:s, base:`http://127.0.0.1:${s.address().port}`}; }
+
+async function setupInbound() {
+  process.env.EMAIL_WEBHOOK_SECRET = 'sekret';
+  process.env.EMAIL_ALLOWED_SENDER = 'tom@example.com';
+  process.env.DB_PATH = path.join(os.tmpdir(), `spendex-inb-${Date.now()}-${Math.random()}.db`);
+  for (const m of ['../db/connection','../db/schema','./emailInbound','../services/appleReceipts']) {
+    try { delete require.cache[require.resolve(m)]; } catch { /* ok */ }
+  }
+  const db = require('../db/connection'); require('../db/schema').initSchema();
+  db.prepare("INSERT INTO users (id, email) VALUES (1,'tom@example.com')").run();
+  const app = express(); app.use(express.json({ limit: '10mb' }));
+  app.use('/api/email', require('./emailInbound'));
+  const { server, base } = await listen(app);
+  return { db, app, base, server };
+}
 
 test('špatný secret → 401', async () => {
   const app = freshApp(); const { server, base } = await listen(app);
@@ -24,4 +40,44 @@ test('správný secret ale raw > 1MB → 413', async () => {
   const r = await fetch(`${base}/api/email/inbound?secret=sekret`, { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ from:'info@airbank.cz', raw: big }) });
   server.close();
   assert.equal(r.status, 413);
+});
+
+test('Apple faktura projde a ulozi se jako apple_receipt', async () => {
+  const { db, app, base, server } = await setupInbound();
+  const raw = fs.readFileSync(path.join(__dirname, '..', 'utils', '__fixtures__', 'apple-invoice.eml'), 'utf8')
+    .replace('user@example.com', process.env.EMAIL_ALLOWED_SENDER);
+  const r = await fetch(`${base}/api/email/inbound`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-webhook-secret': process.env.EMAIL_WEBHOOK_SECRET },
+    body: JSON.stringify({ from: 'tomas@icloud.com', subject: 'Your invoice from Apple.', raw }),
+  });
+  assert.equal(r.status, 200);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM apple_receipts').get().n, 1);
+  server.close();
+});
+
+test('Apple mail bez slova invoice se NEulozi', async () => {
+  const { db, base, server } = await setupInbound();
+  const raw = `From: Apple <no_reply@email.apple.com>\nSubject: Novinky\n\n${process.env.EMAIL_ALLOWED_SENDER} marketing`;
+  const r = await fetch(`${base}/api/email/inbound`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-webhook-secret': process.env.EMAIL_WEBHOOK_SECRET },
+    body: JSON.stringify({ from: 'tomas@icloud.com', subject: 'Novinky', raw }),
+  });
+  assert.equal((await r.json()).status, 'ignored');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM apple_receipts').get().n, 0);
+  server.close();
+});
+
+test('Apple mail bez povolene adresy v raw se odmitne', async () => {
+  const { db, base, server } = await setupInbound();
+  const raw = 'From: Apple <no_reply@email.apple.com>\nSubject: Your invoice from Apple.\n\nInvoice 269,00 CZK';
+  const r = await fetch(`${base}/api/email/inbound`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-webhook-secret': process.env.EMAIL_WEBHOOK_SECRET },
+    body: JSON.stringify({ from: 'utocnik@example.org', subject: 'Your invoice from Apple.', raw }),
+  });
+  assert.equal((await r.json()).status, 'ignored');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM apple_receipts').get().n, 0);
+  server.close();
 });

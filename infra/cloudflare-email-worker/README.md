@@ -36,12 +36,29 @@ AirBank → Gmail (auto-forward) → `inbox@spendex.uk` (MX na Cloudflare)
    4. Nakonec v Gmailu vytvoř filtr „od info@airbank.cz → přeposlat na
       inbox@spendex.uk".
 
+## Apple faktury
+
+Worker vedle AirBank notifikací propouští i Apple faktury/dobropisy, které si
+uživatel RUČNĚ přeposílá ze své vlastní adresy na `inbox@spendex.uk`. Protože
+jde o ruční přeposlání, `From` hlavička patří uživateli — původní odesílatel
+`no_reply@email.apple.com` zůstává až v těle přeposlaného mailu. Worker proto
+propustí e-mail, pokud buď `From` obsahuje `airbank.cz`, nebo tělo obsahuje
+`no_reply@email.apple.com` a zároveň slovo `invoice`/`refund`/`credit`
+(v předmětu nebo těle). Server pak v obou případech navíc vyžaduje, aby se
+v raw MIME vyskytovala adresa z `EMAIL_ALLOWED_SENDER` — to je jediné, co brání
+tomu, aby na `inbox@spendex.uk` poslal cizí obsah kdokoli jiný.
+
+**Po úpravě `worker.js` je nutné Worker znovu nasadit ručně** přes Cloudflare
+dashboard (vlož nový obsah souboru) nebo přes `wrangler deploy` — deploy
+Workeru **není** součástí Railway pipeline, žádný push do staging/main ho
+nenasadí.
+
 ## Bezpečnostní vrstvy
 
 1. `WEBHOOK_SECRET` — posílá se v HLAVIČCE `x-webhook-secret` (ne v URL, aby se
    neobjevil v logu). Server odmítne POST bez správného secretu (HTTP 401).
 2. `ALLOWED_SENDER` — Worker i server ověří envelope sender; server navíc
-   vyžaduje `From` z `airbank.cz`.
+   vyžaduje `From` z `airbank.cz` NEBO Apple whitelist (viz výše).
 3. Strukturální validace — server uloží jen e-maily s rozpoznatelnou transakcí;
    ostatní jako `unparsed` do review fronty.
 
