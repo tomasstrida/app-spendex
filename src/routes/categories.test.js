@@ -76,3 +76,27 @@ test('PATCH type 1→4 (účetní): smaže měsíční budgety', async () => {
   assert.equal(left, 0, 'měsíční budgety měly být při přepnutí na účetní smazány');
   server.close();
 });
+
+test('PATCH: u systémové kategorie ignoruje změnu type (název jde měnit)', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const id = db.prepare("INSERT INTO categories (user_id,name,type,system_role) VALUES (1,'Nestandardní dobití',4,'fund_topup')").run().lastInsertRowid;
+  const res = await fetch(`${base}/api/categories/${id}`, { method:'PATCH', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ type: 1, name: 'Dobití fondů' }) });
+  const body = await res.json();
+  server.close();
+  assert.equal(res.status, 200);
+  assert.equal(body.type, 4, 'type systémové kategorie se nesmí přepnout');
+  assert.equal(body.name, 'Dobití fondů', 'název jde přejmenovat');
+});
+
+test('DELETE: systémovou kategorii nelze smazat', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const id = db.prepare("INSERT INTO categories (user_id,name,type,system_role) VALUES (1,'Nestandardní dobití',4,'fund_topup')").run().lastInsertRowid;
+  const res = await fetch(`${base}/api/categories/${id}`, { method:'DELETE' });
+  const still = db.prepare('SELECT 1 FROM categories WHERE id = ?').get(id);
+  server.close();
+  assert.equal(res.status, 400);
+  assert.ok(still, 'kategorie musí zůstat');
+});

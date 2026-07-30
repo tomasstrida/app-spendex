@@ -83,7 +83,10 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
   if (!cat) return res.status(404).json({ error: 'Kategorie nenalezena.' });
 
   const { name, color, icon, type, typical_price, frequency_months } = req.body;
-  const newType = type ?? cat.type ?? 1;
+  // Systémové kategorie (categories.system_role) mají typ pevně daný kódem —
+  // přepnutí by rozbilo logiku, která na ně spoléhá (fund_topup = type 4).
+  // Název, barvu a ikonu měnit lze.
+  const newType = cat.system_role ? cat.type : (type ?? cat.type ?? 1);
   try {
     db.prepare(`
       UPDATE categories
@@ -117,6 +120,7 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
 router.delete('/:id', requireAuth, writeLimiter, (req, res) => {
   const cat = db.prepare('SELECT * FROM categories WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
   if (!cat) return res.status(404).json({ error: 'Kategorie nenalezena.' });
+  if (cat.system_role) return res.status(400).json({ error: 'Systémovou kategorii nelze smazat.' });
   db.prepare('DELETE FROM categories WHERE id = ?').run(cat.id);
   res.json({ ok: true });
 });
