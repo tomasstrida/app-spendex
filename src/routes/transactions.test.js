@@ -344,3 +344,20 @@ test('GET a PATCH vrací prepaid_package_id u transakce patřící k balíčku, 
   assert.equal(patched.prepaid_package_id, pkgId, 'odznak přežije PATCH, který kategorii nemění');
   server.close();
 });
+
+test('fulltext hleda i v nazvu subkategorie (vc. diakritiky a velikosti pismen)', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const subId = db.prepare("INSERT INTO subcategories (user_id, category_id, name) VALUES (1,5,'Předplatné YouTube')").run().lastInsertRowid;
+  const hit = db.prepare("INSERT INTO transactions (user_id, category_id, subcategory_id, amount, date, description) VALUES (1,5,?,-269,'2026-06-30','APPLE.COM/BILL')").run(subId).lastInsertRowid;
+  db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description) VALUES (1,5,-100,'2026-06-30','APPLE.COM/BILL')").run();
+
+  const found = await (await fetch(`${base}/api/transactions?q=youtube`)).json();
+  const rows = found.transactions || found;
+  assert.equal(rows.length, 1, 'najde jen transakci se subkategorii YouTube');
+  assert.equal(rows[0].id, Number(hit));
+
+  const accent = await (await fetch(`${base}/api/transactions?q=predplatne`)).json();
+  assert.equal((accent.transactions || accent).length, 1, 'hleda bez ohledu na diakritiku');
+  server.close();
+});

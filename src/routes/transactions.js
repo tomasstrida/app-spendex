@@ -75,7 +75,9 @@ function buildTxWhere(query) {
     }
   }
 
-  // Full-text vyhledávání napříč textovými poli (vč. názvu kategorie)
+  // Full-text vyhledávání napříč textovými poli (vč. názvu kategorie a subkategorie).
+  // POZOR: aliasy `c` a `sc` musí být v každém dotazu, který buildTxWhere používá
+  // (GET / i /export je oba joinují) — jinak by SQL spadlo na neznámém aliasu.
   if (q !== undefined && String(q).trim() !== '') {
     // necitlivé na velikost písmen i diakritiku (unaccent_lower – viz db/connection.js)
     const like = `%${String(q).trim()}%`;
@@ -83,9 +85,9 @@ function buildTxWhere(query) {
       unaccent_lower(t.description) LIKE unaccent_lower(?) OR unaccent_lower(t.note) LIKE unaccent_lower(?) OR unaccent_lower(t.place) LIKE unaccent_lower(?)
       OR unaccent_lower(t.counterparty_account) LIKE unaccent_lower(?) OR unaccent_lower(t.ab_category) LIKE unaccent_lower(?)
       OR unaccent_lower(t.tx_type) LIKE unaccent_lower(?) OR unaccent_lower(t.entered_by) LIKE unaccent_lower(?) OR unaccent_lower(t.external_id) LIKE unaccent_lower(?)
-      OR unaccent_lower(c.name) LIKE unaccent_lower(?)
+      OR unaccent_lower(c.name) LIKE unaccent_lower(?) OR unaccent_lower(sc.name) LIKE unaccent_lower(?)
     )`;
-    for (let i = 0; i < 9; i++) params.push(like);
+    for (let i = 0; i < 10; i++) params.push(like);
   }
 
   if (category_ids) {

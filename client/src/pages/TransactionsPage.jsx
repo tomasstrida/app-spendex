@@ -662,7 +662,7 @@ export default function TransactionsPage() {
           <input
             className="input"
             type="search"
-            placeholder="Hledat (popis, poznámka, místo, protiúčet, kategorie…)"
+            placeholder="Hledat (popis, poznámka, místo, protiúčet, kategorie, subkategorie…)"
             value={search}
             onChange={e => setSearch(e.target.value)}
             style={{ width: '100%', maxWidth: 420, paddingLeft: 32 }}
