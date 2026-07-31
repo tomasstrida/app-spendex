@@ -212,7 +212,7 @@ export default function AnnualBudgetsPage() {
                             <div>
                               <button
                                 type="button"
-                                className="report-subcat-toggle"
+                                className="report-subcat-toggle-text"
                                 onClick={() => setAppleExpanded(prev => ({ ...prev, [c.id]: !prev[c.id] }))}
                                 title={isAppleOpen ? 'Skrýt rozpad podle Apple účtu' : 'Zobrazit rozpad podle Apple účtu'}
                               >
