@@ -88,6 +88,10 @@ export default function TransactionsPage() {
   // Výčet konkrétních transakcí — posílá ho Schůzka u řádků, jejichž příslušnost
   // se filtrem vyjádřit nedá (fixní platby, příjmy).
   const [txIds, setTxIds] = useState(searchParams.get('tx_ids') || '');
+  // Apple účet z faktury — proklik z rozpadu na stránce Roční budgety.
+  // Bez načtení z URL by se filtr při otevření stránky zahodil a proklik
+  // by ukázal víc transakcí, než kolik je v součtu nad ním.
+  const [appleAccount, setAppleAccount] = useState(searchParams.get('apple_account') || '');
   const [loading, setLoading] = useState(true);
   const [customMode, setCustomMode] = useState(!!(urlFrom && urlTo));
   usePeriodKeys({ enabled: !customMode });
@@ -159,9 +163,10 @@ export default function TransactionsPage() {
     if (spendingOnly) params.set('spending_only', '1');
     if (offFund) params.set('off_fund', '1');
     if (txIds.trim() !== '') params.set('tx_ids', txIds.trim());
+    if (appleAccount.trim() !== '') params.set('apple_account', appleAccount.trim());
     params.set('limit', String(PAGE_SIZE));
     return params;
-  }, [filterCats, filterSubcatId, appliedAmountMin, appliedAmountMax, appliedSearch, counterparty, direction, matchPatterns, spendingOnly, offFund, txIds]);
+  }, [filterCats, filterSubcatId, appliedAmountMin, appliedAmountMax, appliedSearch, counterparty, direction, matchPatterns, spendingOnly, offFund, txIds, appleAccount]);
 
   // Filtr podle subkategorie dává smysl jen když je ve filtru vybraná právě
   // jedna konkrétní kategorie (ne „bez kategorie", ne víc kategorií najednou).
@@ -333,6 +338,7 @@ export default function TransactionsPage() {
     setSpendingOnly(false);
     setOffFund(false);
     setTxIds('');
+    setAppleAccount('');
   }
 
   function toggleSelectAll() {
@@ -575,8 +581,21 @@ export default function TransactionsPage() {
       </div>
 
       <div className="tx-filters">
-        {(counterparty || direction === 'in' || direction === 'out' || matchPatterns || spendingOnly || offFund || txIds) && (
+        {(counterparty || direction === 'in' || direction === 'out' || matchPatterns || spendingOnly || offFund || txIds || appleAccount) && (
           <div style={{ marginBottom: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {appleAccount && (
+              <span className="tx-chip tx-chip-active" style={{ cursor: 'default' }}>
+                Apple účet: {appleAccount === 'none' ? 'bez faktury' : appleAccount}
+                <button
+                  type="button"
+                  onClick={() => setAppleAccount('')}
+                  style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, marginLeft: 6, display: 'inline-flex', alignItems: 'center' }}
+                  title="Zrušit filtr podle Apple účtu"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            )}
             {counterparty && (
               <span className="tx-chip tx-chip-active" style={{ cursor: 'default' }}>
                 Protistrana: {counterparty}
@@ -756,7 +775,7 @@ export default function TransactionsPage() {
             onChange={e => setAmountMax(e.target.value)}
           />
           <span className="text-muted" style={{ fontSize: 12 }}>Kč</span>
-          {(filterCats.size > 0 || filterSubcatId !== '' || amountMin !== '' || amountMax !== '' || search !== '' || counterparty !== '' || direction !== '' || matchPatterns !== '' || spendingOnly || offFund || txIds) && (
+          {(filterCats.size > 0 || filterSubcatId !== '' || amountMin !== '' || amountMax !== '' || search !== '' || counterparty !== '' || direction !== '' || matchPatterns !== '' || spendingOnly || offFund || txIds || appleAccount) && (
             <button
               type="button"
               className="btn btn-ghost tx-filter-clear"
