@@ -83,6 +83,7 @@ export default function AnnualBudgetsPage() {
   const [byCategory, setByCategory] = useState([]);
   const [subcatYearSpent, setSubcatYearSpent] = useState({}); // category_id → [{subcategory_id,name,spent}]
   const [appleYearSpent, setAppleYearSpent] = useState({}); // category_id → [{apple_account,spent}]
+  const [appleUnmatchedYearSpent, setAppleUnmatchedYearSpent] = useState({}); // category_id → spent
   const [appleExpanded, setAppleExpanded] = useState({});   // category_id → bool
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState({});       // category_id → bool (rozbalený graf)
@@ -103,6 +104,7 @@ export default function AnnualBudgetsPage() {
       setMonthSpent(items.category_month_spent || {});
       setSubcatYearSpent(items.category_subcategory_year_spent || {});
       setAppleYearSpent(items.category_apple_account_year_spent || {});
+      setAppleUnmatchedYearSpent(items.category_apple_unmatched_year_spent || {});
       setByCategory(st?.by_category || []);
     }).finally(() => setLoading(false));
   }, [period, year]);
@@ -203,10 +205,14 @@ export default function AnnualBudgetsPage() {
                         {(appleYearSpent[c.id] || []).length > 0 && (() => {
                           const accounts = appleYearSpent[c.id];
                           const isAppleOpen = !!appleExpanded[c.id];
-                          // Řádek „bez faktury" se DOPOČÍTÁVÁ jako zbytek do celku kategorie,
-                          // ne sčítáním — jinak by rozpad nemusel sednout na číslo nad ním.
+                          // Zbytek se dělí na dva řádky, ať každý měří přesně to, co říká:
+                          // „Apple bez faktury" = Apple platby bez spárované faktury se
+                          // ZNÁMÝM účtem (vlastní agregát, stejná identifikace jako proklik
+                          // apple_account=none). „mimo Apple" = vše ostatní v kategorii —
+                          // dopočet, protože to žádný filtr nedokáže vyjádřit samostatně.
                           const matchedSum = accounts.reduce((s, a) => s + a.spent, 0);
-                          const rest = Math.round((spent - matchedSum) * 100) / 100;
+                          const appleUnmatched = appleUnmatchedYearSpent[c.id] || 0;
+                          const rest = Math.round((spent - matchedSum - appleUnmatched) * 100) / 100;
                           const range = `from=${year}-01-01&to=${year}-12-31`;
                           return (
                             <div>
@@ -231,15 +237,21 @@ export default function AnnualBudgetsPage() {
                                       <span className="report-subcat-spent">{formatCurrency(a.spent)}</span>
                                     </Link>
                                   ))}
-                                  {rest > 0 && (
+                                  {Math.abs(appleUnmatched) >= 0.005 && (
                                     <Link
-                                      to={`/transactions?category_id=${c.id}&apple_account=none&${range}`}
+                                      to={`/transactions?category_id=${c.id}&apple_account=none&q=APPLE.COM&${range}`}
                                       className="report-subcat-row"
                                       style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
                                     >
-                                      <span className="report-subcat-name text-muted">bez faktury</span>
-                                      <span className="report-subcat-spent text-muted">{formatCurrency(rest)}</span>
+                                      <span className="report-subcat-name text-muted">Apple bez faktury</span>
+                                      <span className="report-subcat-spent text-muted">{formatCurrency(appleUnmatched)}</span>
                                     </Link>
+                                  )}
+                                  {Math.abs(rest) >= 0.005 && (
+                                    <div className="report-subcat-row">
+                                      <span className="report-subcat-name text-muted">mimo Apple</span>
+                                      <span className="report-subcat-spent text-muted">{formatCurrency(rest)}</span>
+                                    </div>
                                   )}
                                 </div>
                               )}

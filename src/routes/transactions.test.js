@@ -404,3 +404,24 @@ test('filtr apple_account je case-insensitive a ignoruje neparovane faktury', as
   assert.equal((none.transactions || none).length, 1, 'tx s pending fakturou patri do "bez faktury"');
   server.close();
 });
+
+// Faktury ulozene pred zavedenim apple_account (nebo takove, ze kterych se ucet
+// nepodarilo rozpoznat) maji status='matched' ale apple_account IS NULL — ta
+// hranicni podminka je duvod, proc se spec upravoval (rozpad se jinak po nasazeni
+// vubec nezobrazi), takze ji musi chranit test proti regresi.
+test('transakce se sparovanou fakturou bez rozpoznaneho uctu patri do apple_account=none', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare(`INSERT INTO transactions (id, user_id, category_id, amount, date, description)
+              VALUES (420,1,5,-269,'2026-03-01','APPLE.COM/BILL'),
+                     (421,1,5,-500,'2026-03-02','APPLE.COM/BILL')`).run();
+  db.prepare(`INSERT INTO apple_receipts (user_id, raw_text, status, transaction_id, apple_account)
+              VALUES (1,'raw','matched',420,NULL),
+                     (1,'raw','matched',421,'prvni@icloud.com')`).run();
+
+  const none = await (await fetch(`${base}/api/transactions?apple_account=none`)).json();
+  const rowsNone = none.transactions || none;
+  assert.equal(rowsNone.length, 1, 'matched faktura bez uctu spada do "bez faktury"');
+  assert.equal(rowsNone[0].id, 420);
+  server.close();
+});

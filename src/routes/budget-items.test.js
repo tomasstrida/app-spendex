@@ -73,6 +73,28 @@ test('rozpad podle Apple uctu scita jen sparovane faktury rocnich kategorii', as
   server.close();
 });
 
+test('category_apple_unmatched_year_spent: Apple platby bez sparovane faktury se znamym uctem', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id, user_id, name, type) VALUES (63,1,'Y_Licence_Unmatched',2)").run();
+  db.prepare(`INSERT INTO transactions (id, user_id, category_id, amount, date, description)
+              VALUES (320,1,63,-269,'2026-03-01','APPLE.COM/BILL'),
+                     (321,1,63,-100,'2026-04-01','APPLE.COM/BILL'),
+                     (322,1,63,-500,'2026-05-01','APPLE.COM/BILL'),
+                     (323,1,63,-999,'2026-06-01','ADOBE CREATIVE')`).run();
+  // 320: sparovano se znamym uctem -> NEPATRI do unmatched
+  // 321: sparovano, ale apple_account NULL (stary radek pred migraci) -> PATRI
+  // 322: bez faktury vubec -> PATRI
+  // 323: neni Apple platba (Adobe) -> nepatri, i kdyz nema fakturu
+  db.prepare(`INSERT INTO apple_receipts (user_id, raw_text, status, transaction_id, apple_account)
+              VALUES (1,'raw','matched',320,'prvni@icloud.com'),
+                     (1,'raw','matched',321,NULL)`).run();
+
+  const d = await (await fetch(`${base}/api/budget-items?year=2026`)).json();
+  assert.equal(d.category_apple_unmatched_year_spent[63], 600, '100 (ucet neznamy) + 500 (bez faktury vubec)');
+  server.close();
+});
+
 test('rozpad podle Apple uctu nezahrne mesicni kategorie ani faktury bez uctu', async () => {
   const { db, app } = setup();
   const { server, base } = await listen(app);

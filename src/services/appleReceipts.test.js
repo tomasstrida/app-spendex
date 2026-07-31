@@ -163,6 +163,36 @@ test('oziveni zahozene faktury doplni apple_account', async () => {
   assert.equal(row.apple_account, 'user@example.com');
 });
 
+// I1 (Important 2 v review): přeposlání téže faktury (duplicitní větev, ne oživení
+// zahozené) musí doplnit apple_account, když je v DB NULL — tři faktury uložené v
+// produkci před zavedením sloupce mají apple_account=NULL napořád, dokud je uživatel
+// nepřepošle. Bez téhle opravy by se duplicate větev vrátila před jakýmkoli zápisem.
+test('preposlani duplicitni faktury doplni apple_account, kdyz byl NULL', async () => {
+  const { db, svc } = setup();
+  const body = await fixtureBody();
+  const first = svc.ingestAppleInvoice(db, 1, body);
+  // Simulace radku ulozeneho pred migraci (ALTER TABLE ADD COLUMN existujici radky nedoplni).
+  db.prepare('UPDATE apple_receipts SET apple_account = NULL WHERE id = ?').run(first.receiptId);
+
+  const second = svc.ingestAppleInvoice(db, 1, body);
+  assert.equal(second.status, 'duplicate');
+  assert.equal(second.receiptId, first.receiptId);
+  const row = db.prepare('SELECT apple_account FROM apple_receipts WHERE id = ?').get(second.receiptId);
+  assert.equal(row.apple_account, 'user@example.com');
+});
+
+test('preposlani duplicitni faktury neprepise uz vyplneny apple_account', async () => {
+  const { db, svc } = setup();
+  const body = await fixtureBody();
+  const first = svc.ingestAppleInvoice(db, 1, body);
+  db.prepare("UPDATE apple_receipts SET apple_account = 'jiny@icloud.com' WHERE id = ?").run(first.receiptId);
+
+  const second = svc.ingestAppleInvoice(db, 1, body);
+  assert.equal(second.status, 'duplicate');
+  const row = db.prepare('SELECT apple_account FROM apple_receipts WHERE id = ?').get(second.receiptId);
+  assert.equal(row.apple_account, 'jiny@icloud.com', 'neprazdna hodnota se nikdy neprepisuje');
+});
+
 // I2: jedna platba = jedna faktura.
 test('druha faktura se nepovesi na uz spa rovanou transakci', async () => {
   const { db, svc } = setup();

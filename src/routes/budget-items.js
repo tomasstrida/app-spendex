@@ -115,7 +115,30 @@ router.get('/', requireAuth, (req, res) => {
     category_apple_account_year_spent[r.category_id].push({ apple_account: r.apple_account, spent: r.spent });
   }
 
-  res.json({ year, items: result, category_year_spent, category_month_spent, category_subcategory_year_spent, category_apple_account_year_spent });
+  // Apple platby (identifikace shodná s apple-candidates.js) BEZ spárované faktury
+  // se ZNÁMÝM účtem, za rok, per roční kategorie. Podmínka NOT EXISTS je záměrně
+  // identická s filtrem apple_account=none v routes/transactions.js — jinak by se
+  // proklik rozešel se součtem tady zobrazeným. Patří sem jak faktury bez vazby na
+  // transakci vůbec, tak faktury spárované, ale s apple_account IS NULL (staré
+  // řádky před migrací, nebo faktura, ze které se účet nepodařilo rozpoznat).
+  const appleUnmatched = db.prepare(`
+    SELECT t.category_id, COALESCE(SUM(-t.amount), 0) AS spent
+    FROM transactions t
+    JOIN categories c ON c.id = t.category_id AND c.user_id = t.user_id
+    WHERE t.user_id = ? AND c.type = 2
+      AND (UPPER(COALESCE(t.description,'')) LIKE 'APPLE.COM%' OR UPPER(COALESCE(t.place,'')) LIKE 'APPLE.COM%')
+      AND t.date >= ? AND t.date <= ?
+      AND NOT EXISTS (
+        SELECT 1 FROM apple_receipts ar
+        WHERE ar.transaction_id = t.id AND ar.user_id = t.user_id
+          AND ar.status = 'matched' AND ar.apple_account IS NOT NULL
+      )
+    GROUP BY t.category_id
+  `).all(req.dataUserId, `${year}-01-01`, `${year}-12-31`);
+  const category_apple_unmatched_year_spent = {};
+  for (const r of appleUnmatched) category_apple_unmatched_year_spent[r.category_id] = r.spent;
+
+  res.json({ year, items: result, category_year_spent, category_month_spent, category_subcategory_year_spent, category_apple_account_year_spent, category_apple_unmatched_year_spent });
 });
 
 // POST /api/budget-items

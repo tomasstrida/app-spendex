@@ -68,11 +68,28 @@ ORDER BY spent DESC
 Omezení `c.type = 2` (roční kategorie) je stejné jako u stávajícího rozpadu podle subkategorie —
 stránka Roční budgety jiné kategorie nezobrazuje.
 
-**Řádek „bez faktury".** Rozpad musí sečíst na celek kategorie, jinak porušuje projektové
-pravidlo, že zobrazený součet odpovídá datům pod ním. Většina Apple plateb fakturu zatím nemá,
-takže se dopočítá zbytek: `category_year_spent[cat] − Σ spent za účty` a zobrazí se jako
-poslední řádek `apple_account: null`. Zároveň slouží jako ukazatel, kolik faktur ještě zbývá
-přeposlat — jak jich bude přibývat, bude klesat.
+**Řádky „Apple bez faktury" a „mimo Apple".** Rozpad musí sečíst na celek kategorie, jinak
+porušuje projektové pravidlo, že zobrazený součet odpovídá datům pod ním. Původní návrh počítal
+jediný dopočtený zbytek (`category_year_spent[cat] − Σ spent za účty`), ale review proti reálným
+datům ukázalo, že to je zavádějící: kategorie Licence má v roce 2026 23 Apple plateb za 7 115 Kč
+a 44 ne-Apple plateb (Adobe, OpenAI…) za 28 795 Kč — jeden řádek „bez faktury ≈ 33 000 Kč" by
+uživatel přečetl jako „tolik faktur mi ještě chybí přeposlat", přestože drtivá většina té částky
+žádnou Apple fakturu nikdy mít nebude.
+
+Zbytek se proto dělí na dva řádky, každý měří přesně to, co říká:
+
+- **„Apple bez faktury"** — vlastní SQL agregát (`category_apple_unmatched_year_spent` v
+  `src/routes/budget-items.js`): Apple platby (stejná identifikace jako `apple-candidates.js`,
+  `UPPER(description) LIKE 'APPLE.COM%' OR UPPER(place) LIKE 'APPLE.COM%'`) BEZ spárované faktury
+  se známým účtem. Podmínka „bez faktury" je přesně `NOT EXISTS` téhož poddotazu, jaký používá
+  filtr `apple_account=none` v `src/routes/transactions.js` — jinak by se rozpad a proklik
+  rozešly. Patří sem jak faktury bez vazby na transakci vůbec, tak faktury spárované, ale
+  s `apple_account IS NULL` (staré řádky před migrací, nebo faktura, ze které se účet nepodařilo
+  rozpoznat). Tohle je ten skutečný ukazatel „kolik faktur ještě zbývá přeposlat".
+- **„mimo Apple"** — dopočet `category_year_spent[cat] − Σ spent za účty − „Apple bez faktury"`.
+  Zbytkové platby v kategorii, které s Applem vůbec nesouvisí (Adobe, OpenAI…). Nemá odpovídající
+  filtr v Transakcích (žádná jednoduchá podmínka „vše kromě Apple" tam není), takže se zobrazí
+  jako neklikací text ve stejném stylu jako ostatní řádky rozpadu, ne jako odkaz.
 
 Rozpad se zobrazí jen u kategorií, kde je aspoň jedna spárovaná faktura, aby se nekomplikovaly
 karty ostatních ročních kategorií.
@@ -82,7 +99,10 @@ karty ostatních ročních kategorií.
 Nový URL parametr `apple_account`:
 
 - `apple_account=<e-mail>` → jen transakce, ke kterým existuje spárovaná faktura s tímto účtem,
-- `apple_account=none` → transakce **bez** spárované faktury (odpovídá řádku „bez faktury").
+- `apple_account=none` → transakce **bez** spárované faktury se známým účtem (odpovídá řádku
+  „Apple bez faktury"; proklik z UI k tomu přidává i `q=APPLE.COM`, aby vrátil přesně Apple platby,
+  ze kterých je součet — samotný `apple_account=none` totiž vrací i ne-Apple transakce bez
+  spárované faktury, protože EXISTS poddotaz nerozlišuje obchodníka).
 
 V `buildTxWhere` (`src/routes/transactions.js:16`) se přidá jako `EXISTS` / `NOT EXISTS`
 poddotaz — bez JOINu, aby se nezměnil počet řádků výsledku ani stránkování:
@@ -115,13 +135,19 @@ stávajícím „rozpad podle subkategorie":
    tomas.strida@icloud.com      3 228 Kč
    bisek.martin@icloud.com      1 076 Kč
    xstrt06@centrum.cz             538 Kč
-   bez faktury                 11 290 Kč
+   Apple bez faktury             272 Kč
+   mimo Apple                 28 795 Kč
 ```
 
-Řádky vedou na `/transactions?category_id=<id>&apple_account=<účet>&from=<rok>-01-01&to=<rok>-12-31`,
-řádek „bez faktury" na totéž s `apple_account=none`. Recykluje se existující vzhled
+Řádky za jednotlivé účty vedou na
+`/transactions?category_id=<id>&apple_account=<účet>&from=<rok>-01-01&to=<rok>-12-31`, řádek
+„Apple bez faktury" na totéž s `apple_account=none&q=APPLE.COM`. Řádek „mimo Apple" proklik nemá —
+zobrazí se jako neklikací text ve stejném vzhledu. Recykluje se existující vzhled
 (`report-subcat-*` třídy), jen s vlastním stavem rozkliknutí — oba rozpady musí jít otevřít
 nezávisle.
+
+Oba dopočtené řádky se zobrazí i pro zápornou hodnotu (např. čisté refundy převýší útratu) —
+skryté jsou jen prakticky nulové (`< 0,005`), aby nesedící součet nezmizel beze stopy.
 
 ## 7. Doplnění historie
 
@@ -133,9 +159,14 @@ v projektu.
 ## 8. Hraniční případy
 
 - **Faktura bez rozpoznaného účtu** — `apple_account` zůstane `NULL` a transakce spadne do
-  řádku „bez faktury". Lepší než vymýšlet zástupnou hodnotu.
+  řádku „Apple bez faktury". Lepší než vymýšlet zástupnou hodnotu.
 - **Odpojená faktura** (`status != 'matched'`) do součtů nevstupuje — proto podmínka na stav.
-  Jinak by se částka počítala dvakrát: jednou přes fakturu, jednou v „bez faktury".
+  Jinak by se částka počítala dvakrát: jednou přes fakturu, jednou v „Apple bez faktury".
+- **Přeposlání téže faktury** (`duplicate` větev v `src/services/appleReceipts.js`) doplní
+  `apple_account`, pokud je v DB `NULL` a parser ho z právě přišlé faktury zná — jinak by faktury
+  uložené před zavedením sloupce zůstaly bez účtu navždy, dokud neproběhne jednorázová migrace, a
+  nejpřirozenější reakce uživatele (přeposlat fakturu znovu) by nic nespravila a nic by to
+  neřekla. Neprázdná hodnota se nikdy nepřepisuje.
 - **Dvě faktury na jedné transakci** nemohou nastat — brání tomu kontrola zavedená v balíčku D.
 - **Kategorie bez faktur** rozpad nezobrazí vůbec.
 - **Household** — vše přes `req.dataUserId`; faktury i transakce jsou sdílené jako ostatní data.
@@ -145,9 +176,14 @@ v projektu.
 - `src/utils/appleInvoiceParser.test.js` — `apple_account` z fixture; faktura bez toho řádku
   vrátí `null`.
 - `src/routes/budget-items.test.js` — součet za dva účty; transakce bez faktury se do účtů
-  nezapočte; odpojená faktura se nezapočte; součet účtů + „bez faktury" dá celek kategorie.
+  nezapočte; odpojená faktura se nezapočte; součet účtů + „Apple bez faktury" + „mimo Apple" dá
+  celek kategorie.
 - `src/routes/transactions.test.js` — filtr podle účtu vrátí jen odpovídající transakce;
-  `apple_account=none` vrátí ty bez faktury; filtr je case-insensitive.
+  `apple_account=none` vrátí ty bez faktury; filtr je case-insensitive; transakce se spárovanou
+  fakturou bez rozpoznaného účtu (`status='matched'`, `apple_account IS NULL`) spadne do
+  `apple_account=none`.
+- `src/services/appleReceipts.test.js` — přeposlání duplicitní faktury doplní `apple_account`,
+  když byl v DB `NULL`; neprázdnou hodnotu nikdy nepřepíše.
 
 ## 10. Mimo scope
 

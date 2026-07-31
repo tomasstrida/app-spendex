@@ -81,13 +81,23 @@ function ingestAppleInvoice(db, userId, rawBody) {
   // cestu zpět: zahozená faktura je v UI neviditelná a přeposlání by skončilo jako
   // „duplicate". Platí pro obě větve stejně.
   const existing = receipt.order_id
-    ? db.prepare("SELECT id FROM apple_receipts WHERE user_id = ? AND order_id = ? AND status != 'rejected'")
+    ? db.prepare("SELECT id, apple_account FROM apple_receipts WHERE user_id = ? AND order_id = ? AND status != 'rejected'")
         .get(userId, receipt.order_id)
-    : db.prepare(`SELECT id FROM apple_receipts
+    : db.prepare(`SELECT id, apple_account FROM apple_receipts
                   WHERE user_id = ? AND order_id IS NULL AND status != 'rejected'
                     AND receipt_date IS ? AND total_amount IS ? AND card_last4 IS ?`)
         .get(userId, receipt.receipt_date, receipt.total_amount, receipt.card_last4);
-  if (existing) return { status: 'duplicate', receiptId: existing.id, transactionId: null };
+  if (existing) {
+    // Faktury uložené před zavedením apple_account (nebo ty, ze kterých se účet
+    // tehdy nepodařilo rozpoznat) mají sloupec NULL napořád — dokud je uživatel
+    // nepřepošle. Přeposlání je nejpřirozenější reakce, takže duplicitní větev
+    // je jediná šance účet doplnit. Neprázdnou hodnotu nikdy nepřepisujeme.
+    if (!existing.apple_account && receipt.apple_account) {
+      db.prepare('UPDATE apple_receipts SET apple_account = ? WHERE id = ? AND user_id = ?')
+        .run(receipt.apple_account, existing.id, userId);
+    }
+    return { status: 'duplicate', receiptId: existing.id, transactionId: null };
+  }
 
   // Zahozený záznam se stejným order_id nelze obejít INSERTem (UNIQUE index
   // user_id+order_id), takže ho oživíme na místě — přeposlání pak funguje jako nové.
