@@ -103,10 +103,10 @@ function ingestAppleInvoice(db, userId, rawBody) {
     db.prepare(`
       UPDATE apple_receipts
       SET receipt_date = ?, total_amount = ?, is_refund = ?, card_last4 = ?, items_json = ?,
-          raw_text = ?, status = ?, transaction_id = NULL, matched_at = NULL
+          raw_text = ?, status = ?, apple_account = ?, transaction_id = NULL, matched_at = NULL
       WHERE id = ? AND user_id = ?
     `).run(receipt.receipt_date, receipt.total_amount, receipt.is_refund ? 1 : 0, receipt.card_last4,
-      JSON.stringify(receipt.items || []), String(rawBody || ''), status, revived.id, userId);
+      JSON.stringify(receipt.items || []), String(rawBody || ''), status, receipt.apple_account, revived.id, userId);
     receiptId = revived.id;
   } else {
     const ins = db.prepare(`

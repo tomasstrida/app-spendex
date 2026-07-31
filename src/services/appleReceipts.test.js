@@ -148,6 +148,21 @@ test('zahozenou fakturu s order_id lze preposlat znovu', async () => {
   assert.equal(db.prepare('SELECT status FROM apple_receipts WHERE id = ?').get(second.receiptId).status, 'pending');
 });
 
+// Revive větev (přeposlání zahozené faktury) musí apple_account doplnit stejně jako
+// prvotní INSERT — jinak faktura uložená před migrací zůstane navždy bez účtu.
+test('oziveni zahozene faktury doplni apple_account', async () => {
+  const { db, svc } = setup();
+  const body = await fixtureBody();
+  const first = svc.ingestAppleInvoice(db, 1, body);
+  db.prepare("UPDATE apple_receipts SET status = 'rejected', transaction_id = NULL WHERE id = ?").run(first.receiptId);
+  // Simulace řádku uloženého před migrací (ALTER TABLE ADD COLUMN existující řádky nedoplní).
+  db.prepare('UPDATE apple_receipts SET apple_account = NULL WHERE id = ?').run(first.receiptId);
+  const second = svc.ingestAppleInvoice(db, 1, body);
+  assert.equal(second.receiptId, first.receiptId);
+  const row = db.prepare('SELECT apple_account FROM apple_receipts WHERE id = ?').get(second.receiptId);
+  assert.equal(row.apple_account, 'user@example.com');
+});
+
 // I2: jedna platba = jedna faktura.
 test('druha faktura se nepovesi na uz spa rovanou transakci', async () => {
   const { db, svc } = setup();
