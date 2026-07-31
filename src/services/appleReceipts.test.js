@@ -242,6 +242,13 @@ test('matchPendingForTransaction spa ruje cekajici fakturu po importu platby', a
   assert.equal(db.prepare('SELECT status FROM apple_receipts WHERE id = ?').get(r.receiptId).status, 'matched');
 });
 
+test('ingest ulozi apple_account z faktury', async () => {
+  const { db, svc } = setup();
+  const r = svc.ingestAppleInvoice(db, 1, await fixtureBody());
+  const row = db.prepare('SELECT apple_account FROM apple_receipts WHERE id = ?').get(r.receiptId);
+  assert.equal(row.apple_account, 'user@example.com');
+});
+
 test('cizi uzivatel neni dotcen', async () => {
   const { db, svc } = setup();
   db.prepare("INSERT INTO users (id, email) VALUES (2,'b@x')").run();

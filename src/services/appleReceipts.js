@@ -111,11 +111,11 @@ function ingestAppleInvoice(db, userId, rawBody) {
   } else {
     const ins = db.prepare(`
       INSERT INTO apple_receipts
-        (user_id, order_id, receipt_date, total_amount, is_refund, card_last4, items_json, raw_text, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (user_id, order_id, receipt_date, total_amount, is_refund, card_last4, items_json, raw_text, status, apple_account)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(userId, receipt.order_id, receipt.receipt_date, receipt.total_amount,
       receipt.is_refund ? 1 : 0, receipt.card_last4, JSON.stringify(receipt.items || []),
-      String(rawBody || ''), status);
+      String(rawBody || ''), status, receipt.apple_account);
     receiptId = Number(ins.lastInsertRowid);
   }
 

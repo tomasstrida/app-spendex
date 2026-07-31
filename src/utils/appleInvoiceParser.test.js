@@ -93,6 +93,25 @@ test('bez bloku billing-information se datum vezme z celeho textu (fallback)', (
   assert.equal(r.receipt_date, '2026-07-05');
 });
 
+test('vytahne Apple Account z faktury', async () => {
+  const r = parseAppleInvoice(await fixtureBody());
+  assert.equal(r.apple_account, 'user@example.com');
+});
+
+test('Apple Account se normalizuje na mala pismena', () => {
+  const html = '<html><body><h1>Invoice</h1><div class="billing-information">'
+    + '<p>2 July 2026</p><p>Apple Account:</p><p>Tomas.Strida@ICLOUD.com</p></div>'
+    + '<div class="payment-information"><p>50,00 CZK</p></div></body></html>';
+  assert.equal(parseAppleInvoice(html).apple_account, 'tomas.strida@icloud.com');
+});
+
+test('faktura bez Apple Account vraci null', () => {
+  const html = '<html><body><h1>Invoice</h1><div class="billing-information">'
+    + '<p>2 July 2026</p><p>Order ID:</p><p>ZZZ999</p></div>'
+    + '<div class="payment-information"><p>50,00 CZK</p></div></body></html>';
+  assert.equal(parseAppleInvoice(html).apple_account, null);
+});
+
 test('vice polozek na jedne fakture', () => {
   const html = '<html><body><h1>Invoice</h1><div class="billing-information"><p>9 July 2026</p>'
     + '<p>Order ID:</p><p>MULTI1</p></div>'

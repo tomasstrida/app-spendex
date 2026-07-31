@@ -103,6 +103,17 @@ function isRefund(html, text) {
   return REFUND_RE.test(String(text).slice(0, 120));
 }
 
+// Účet, ze kterého byl nákup zaplacen („Apple Account: user@icloud.com").
+// Uživatel může mít víc Apple ID a chce vidět, kolik utratil který — proto se
+// hodnota normalizuje na malá písmena, ať se dva zápisy téhož účtu nerozejdou.
+function parseAppleAccount(html, text) {
+  const billBlock = String(html).match(/class="billing-information[\s\S]{0,4000}/i);
+  const pool = billBlock ? stripToText(billBlock[0]) : text;
+  const m = pool.match(/Apple Account:\s*([^\s<]+@[^\s<]+)/i)
+    || text.match(/Apple Account:\s*([^\s<]+@[^\s<]+)/i);
+  return m ? m[1].trim().toLowerCase() : null;
+}
+
 function parseAppleInvoice(source) {
   const html = String(source || '');
   if (!html.trim()) return null;
@@ -122,6 +133,7 @@ function parseAppleInvoice(source) {
     card_last4: card ? card[1] : null,
     is_refund: isRefund(html, text),
     items: parseItems(html),
+    apple_account: parseAppleAccount(html, text),
   };
 }
 

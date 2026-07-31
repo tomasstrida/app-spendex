@@ -247,6 +247,21 @@ test('apple_receipts: tabulka existuje se spravnymi sloupci', () => {
   }
 });
 
+test('apple_receipts ma sloupec apple_account', () => {
+  const tmp = path.join(os.tmpdir(), `spendex-apple-account-${Date.now()}.db`);
+  process.env.DB_PATH = tmp;
+  delete require.cache[require.resolve('../db/connection')];
+  delete require.cache[require.resolve('../db/schema')];
+  const db = require('../db/connection');
+  const { initSchema } = require('../db/schema');
+  initSchema();
+  const cols = db.prepare('PRAGMA table_info(apple_receipts)').all().map(c => c.name);
+  db.close();
+  fs.unlinkSync(tmp);
+  try { fs.unlinkSync(tmp + '-wal'); fs.unlinkSync(tmp + '-shm'); } catch { /* ok */ }
+  assert.ok(cols.includes('apple_account'), 'chybi sloupec apple_account');
+});
+
 test('apple_receipts: order_id je unikatni per uzivatel, NULL se neomezuje', () => {
   const tmp = path.join(os.tmpdir(), `spendex-apple-unique-${Date.now()}.db`);
   process.env.DB_PATH = tmp;

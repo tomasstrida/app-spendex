@@ -411,6 +411,10 @@ function initSchema() {
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_apple_receipt_order
        ON apple_receipts(user_id, order_id) WHERE order_id IS NOT NULL`,
     'CREATE INDEX IF NOT EXISTS idx_apple_receipt_status ON apple_receipts(user_id, status)',
+    // Apple Account, ze kterého byl nákup zaplacen — uživatel má víc Apple ID a chce
+    // vidět, kolik utratil který.
+    'ALTER TABLE apple_receipts ADD COLUMN apple_account TEXT',
+    'CREATE INDEX IF NOT EXISTS idx_apple_receipt_account ON apple_receipts(user_id, apple_account)',
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* sloupec/index/tabulka již existuje nebo nelze aplikovat */ }
