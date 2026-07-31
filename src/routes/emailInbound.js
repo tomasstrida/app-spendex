@@ -8,7 +8,7 @@ const db = require('../db/connection');
 const { ingestEmail } = require('../services/emailIngest');
 const { notifyForResult } = require('../services/pushNotify');
 const { ingestAppleInvoice } = require('../services/appleReceipts');
-const { extractAddress } = require('../utils/mail-address');
+const { extractAddress, parseAddressList } = require('../utils/mail-address');
 
 const inboundLimiter = rateLimit({ windowMs: 60 * 1000, max: 30 });
 
@@ -53,8 +53,11 @@ router.post('/inbound', inboundLimiter, checkSecret, async (req, res) => {
     //     obejitelný hlavičkou typu `From: "tomas@icloud.com" <utocnik@evil.example>`
     //     — proto se porovnává jen adresní část vytažená ze závorek, na přesnou shodu.
     const allowed = (process.env.EMAIL_ALLOWED_SENDER || '').toLowerCase();
-    const appleForwarder = (process.env.EMAIL_APPLE_FORWARDER || process.env.EMAIL_ALLOWED_SENDER || '')
-      .toLowerCase().trim();
+    // Seznam povolených přeposílatelů (uživatel může mít víc Apple ID a přeposílat
+    // z různých schránek). Porovnává se na přesnou shodu s kteroukoli položkou.
+    const appleForwarders = parseAddressList(
+      process.env.EMAIL_APPLE_FORWARDER || process.env.EMAIL_ALLOWED_SENDER || ''
+    );
     const fromHdr = String(from).toLowerCase();
     const rawLower = String(raw).toLowerCase();
     const fromAddr = extractAddress(from);
@@ -66,8 +69,8 @@ router.post('/inbound', inboundLimiter, checkSecret, async (req, res) => {
     const APPLE_KEYWORD_RE = /\b(invoice|refund|credit note)\b/i;
     const hasAppleSender = rawLower.includes('no_reply@email.apple.com');
     const hasAppleKeyword = APPLE_KEYWORD_RE.test(String(subject || '')) || APPLE_KEYWORD_RE.test(rawLower);
-    const appleFromOk = !!appleForwarder
-      && (fromAddr === appleForwarder || envelopeFromAddr === appleForwarder);
+    const appleFromOk = appleForwarders.length > 0
+      && (appleForwarders.includes(fromAddr) || appleForwarders.includes(envelopeFromAddr));
 
     // Precedence: když mail splní obě podmínky, vyhrává AirBank.
     const isAirBank = fromHdr.includes('airbank.cz') && !!allowed && rawLower.includes(allowed);
@@ -77,7 +80,7 @@ router.post('/inbound', inboundLimiter, checkSecret, async (req, res) => {
       // Diagnostika: bez logu by uživatel neměl jak zjistit, proč mu faktura „mizí".
       // Logujeme JEN důvod, nikdy obsah mailu.
       if (hasAppleSender || hasAppleKeyword) {
-        const reason = !appleForwarder ? 'neni nastaveno EMAIL_APPLE_FORWARDER ani EMAIL_ALLOWED_SENDER'
+        const reason = !appleForwarders.length ? 'neni nastaveno EMAIL_APPLE_FORWARDER ani EMAIL_ALLOWED_SENDER'
           : !appleFromOk ? 'from hlavicka neodpovida EMAIL_APPLE_FORWARDER'
           : !hasAppleSender ? 'v tele chybi no_reply@email.apple.com'
           : 'chybi klicove slovo invoice/refund/credit note';
@@ -103,7 +106,7 @@ router.post('/inbound', inboundLimiter, checkSecret, async (req, res) => {
       const html = parsed ? (parsed.html || parsed.text || '') : '';
       // Vlastník dat = uživatel Spendexu s povolenou adresou; když EMAIL_ALLOWED_SENDER
       // není nastavená, zkusíme adresu přeposílatele.
-      const ownerEmail = allowed || appleForwarder;
+      const ownerEmail = allowed || appleForwarders[0];
       const user = db.prepare('SELECT id FROM users WHERE lower(email) = lower(?)').get(ownerEmail);
       if (!user) {
         console.warn('[apple] mail prosel whitelistem, ale k adrese neexistuje uzivatel');

@@ -20,7 +20,8 @@ AirBank → Gmail (auto-forward) → `inbox@spendex.uk` (MX na Cloudflare)
    - `WEBHOOK_SECRET` = stejná hodnota jako `EMAIL_WEBHOOK_SECRET` na Railway
      (ukládej jako **Secret**, ne plain text)
    - `EMAIL_APPLE_FORWARDER` = adresa, ze které si ručně přeposíláš Apple faktury
-     (stejná hodnota jako `EMAIL_APPLE_FORWARDER` na Railway). Když ji nenastavíš,
+     (stejná hodnota jako `EMAIL_APPLE_FORWARDER` na Railway). Smí to být SEZNAM
+     adres oddělený čárkou, když máš víc Apple ID a přeposíláš z různých schránek. Když ji nenastavíš,
      Worker (stejně jako server) spadne na fallback `EMAIL_ALLOWED_SENDER` — nastav
      tedy aspoň jednu z těch dvou, jinak je Apple cesta ve Workeru úplně vypnutá.
      **Nastav vždy stejnou dvojici proměnných na Workeru i na Railway** — pokud

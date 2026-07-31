@@ -15,6 +15,12 @@ function extractAddress(fromHeader) {
   return addr.trim().toLowerCase();
 }
 
+// EMAIL_APPLE_FORWARDER smí být SEZNAM adres oddělený čárkou — uživatel může mít
+// víc Apple ID a přeposílat faktury z různých schránek.
+function parseAddressList(value) {
+  return String(value || '').split(',').map(extractAddress).filter(Boolean);
+}
+
 export default {
   async email(message, env) {
     const fromHeaderRaw = message.headers.get('from') || '';
@@ -30,10 +36,10 @@ export default {
     // POZOR (C1): porovnávat se musí jen adresní část z `From`, na přesnou shodu —
     // substring přes celou hlavičku šel obejít adresou schovanou v display name
     // (`From: "tomas@icloud.com" <utocnik@evil.example>`).
-    const appleForwarder = (env.EMAIL_APPLE_FORWARDER || env.EMAIL_ALLOWED_SENDER || '').toLowerCase().trim();
+    const appleForwarders = parseAddressList(env.EMAIL_APPLE_FORWARDER || env.EMAIL_ALLOWED_SENDER || '');
     const isAirBank = fromHeader.includes('airbank.cz');
     const fromAddr = extractAddress(fromHeaderRaw);
-    const appleFromOk = !!appleForwarder && fromAddr === appleForwarder;
+    const appleFromOk = appleForwarders.length > 0 && appleForwarders.includes(fromAddr);
 
     // Tenhle test je ZÁMĚRNĚ před čtením message.raw — u spamu se tělo vůbec nebufferuje.
     if (!isAirBank && !appleFromOk) {

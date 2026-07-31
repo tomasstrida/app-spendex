@@ -13,4 +13,14 @@ function extractAddress(fromHeader) {
   return addr.trim().toLowerCase();
 }
 
-module.exports = { extractAddress };
+// Rozdělí konfiguraci typu "a@b.cz, Jméno <c@d.cz>" na pole normalizovaných adres.
+// Uživatel může mít víc Apple ID a přeposílat faktury z různých schránek, takže
+// whitelist přeposílatele je seznam, ne jedna hodnota. Prázdné položky vypadnou.
+function parseAddressList(value) {
+  return String(value || '')
+    .split(',')
+    .map(part => extractAddress(part))
+    .filter(Boolean);
+}
+
+module.exports = { extractAddress, parseAddressList };

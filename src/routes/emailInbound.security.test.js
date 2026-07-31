@@ -196,3 +196,38 @@ test('bez obou promennych je Apple cesta vypnuta', async () => {
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM apple_receipts').get().n, 0);
   server.close();
 });
+
+// Uzivatel ma vic Apple ID a faktury preposila z ruznych schranek — EMAIL_APPLE_FORWARDER
+// proto prijima SEZNAM adres oddeleny carkou. Kazda polozka se porovnava na presnou
+// shodu adresni casti (stejna ochrana jako u jedne adresy, viz C1).
+test('Apple faktura z druhe adresy v seznamu projde', async () => {
+  const { db, base, server } = await setupInbound({
+    EMAIL_APPLE_FORWARDER: 'prvni@icloud.com, druhy@icloud.com',
+  });
+  const raw = fs.readFileSync(path.join(__dirname, '..', 'utils', '__fixtures__', 'apple-invoice.eml'), 'utf8')
+    .replace('user@example.com', process.env.EMAIL_ALLOWED_SENDER);
+  const r = await fetch(`${base}/api/email/inbound`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-webhook-secret': process.env.EMAIL_WEBHOOK_SECRET },
+    body: JSON.stringify({ from: 'Druhy Ucet <druhy@icloud.com>', subject: 'Your invoice from Apple.', raw }),
+  });
+  assert.equal(r.status, 200);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM apple_receipts').get().n, 1);
+  server.close();
+});
+
+test('Apple faktura z adresy mimo seznam neprojde', async () => {
+  const { db, base, server } = await setupInbound({
+    EMAIL_APPLE_FORWARDER: 'prvni@icloud.com, druhy@icloud.com',
+  });
+  const raw = fs.readFileSync(path.join(__dirname, '..', 'utils', '__fixtures__', 'apple-invoice.eml'), 'utf8')
+    .replace('user@example.com', process.env.EMAIL_ALLOWED_SENDER);
+  const r = await fetch(`${base}/api/email/inbound`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-webhook-secret': process.env.EMAIL_WEBHOOK_SECRET },
+    body: JSON.stringify({ from: 'treti@icloud.com', subject: 'Your invoice from Apple.', raw }),
+  });
+  assert.equal((await r.json()).status, 'ignored');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM apple_receipts').get().n, 0);
+  server.close();
+});
