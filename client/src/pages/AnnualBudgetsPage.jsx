@@ -82,6 +82,8 @@ export default function AnnualBudgetsPage() {
   const [monthSpent, setMonthSpent] = useState({}); // category_id → [12] měsíčně
   const [byCategory, setByCategory] = useState([]);
   const [subcatYearSpent, setSubcatYearSpent] = useState({}); // category_id → [{subcategory_id,name,spent}]
+  const [appleYearSpent, setAppleYearSpent] = useState({}); // category_id → [{apple_account,spent}]
+  const [appleExpanded, setAppleExpanded] = useState({});   // category_id → bool
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState({});       // category_id → bool (rozbalený graf)
   const [subExpanded, setSubExpanded] = useState({}); // category_id → bool (rozbalený rozpad subkategorií)
@@ -100,6 +102,7 @@ export default function AnnualBudgetsPage() {
       setYearSpent(items.category_year_spent || {});
       setMonthSpent(items.category_month_spent || {});
       setSubcatYearSpent(items.category_subcategory_year_spent || {});
+      setAppleYearSpent(items.category_apple_account_year_spent || {});
       setByCategory(st?.by_category || []);
     }).finally(() => setLoading(false));
   }, [period, year]);
@@ -197,6 +200,52 @@ export default function AnnualBudgetsPage() {
                             ))}
                           </div>
                         )}
+                        {(appleYearSpent[c.id] || []).length > 0 && (() => {
+                          const accounts = appleYearSpent[c.id];
+                          const isAppleOpen = !!appleExpanded[c.id];
+                          // Řádek „bez faktury" se DOPOČÍTÁVÁ jako zbytek do celku kategorie,
+                          // ne sčítáním — jinak by rozpad nemusel sednout na číslo nad ním.
+                          const matchedSum = accounts.reduce((s, a) => s + a.spent, 0);
+                          const rest = Math.round((spent - matchedSum) * 100) / 100;
+                          const range = `from=${year}-01-01&to=${year}-12-31`;
+                          return (
+                            <div>
+                              <button
+                                type="button"
+                                className="report-subcat-toggle"
+                                onClick={() => setAppleExpanded(prev => ({ ...prev, [c.id]: !prev[c.id] }))}
+                                title={isAppleOpen ? 'Skrýt rozpad podle Apple účtu' : 'Zobrazit rozpad podle Apple účtu'}
+                              >
+                                {isAppleOpen ? '▾' : '▸'} rozpad podle Apple účtu
+                              </button>
+                              {isAppleOpen && (
+                                <div className="report-subcat-list">
+                                  {accounts.map(a => (
+                                    <Link
+                                      key={a.apple_account}
+                                      to={`/transactions?category_id=${c.id}&apple_account=${encodeURIComponent(a.apple_account)}&${range}`}
+                                      className="report-subcat-row"
+                                      style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                                    >
+                                      <span className="report-subcat-name">{a.apple_account}</span>
+                                      <span className="report-subcat-spent">{formatCurrency(a.spent)}</span>
+                                    </Link>
+                                  ))}
+                                  {rest > 0 && (
+                                    <Link
+                                      to={`/transactions?category_id=${c.id}&apple_account=none&${range}`}
+                                      className="report-subcat-row"
+                                      style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                                    >
+                                      <span className="report-subcat-name text-muted">bez faktury</span>
+                                      <span className="report-subcat-spent text-muted">{formatCurrency(rest)}</span>
+                                    </Link>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                         {budget > 0 && (
                           <YearThermometer spent={spent} amount={budget} year={year} />
                         )}
