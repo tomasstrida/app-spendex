@@ -93,7 +93,29 @@ router.get('/', requireAuth, (req, res) => {
     category_subcategory_year_spent[r.category_id].push({ subcategory_id: r.subcategory_id, name: r.name, spent: r.spent });
   }
 
-  res.json({ year, items: result, category_year_spent, category_month_spent, category_subcategory_year_spent });
+  // Rozpad ročních kategorií podle Apple účtu, ze kterého byl nákup zaplacen.
+  // Účet žije na faktuře (apple_receipts), ne na transakci — proto JOIN přes
+  // transaction_id. Jen `matched` faktury: odpojená by se počítala dvakrát,
+  // jednou tady a jednou v dopočítaném řádku „bez faktury" na klientovi.
+  const appleSpent = db.prepare(`
+    SELECT t.category_id, LOWER(ar.apple_account) AS apple_account,
+           COALESCE(SUM(-t.amount), 0) AS spent
+    FROM transactions t
+    JOIN apple_receipts ar ON ar.transaction_id = t.id AND ar.user_id = t.user_id
+    JOIN categories c ON c.id = t.category_id AND c.user_id = t.user_id
+    WHERE t.user_id = ? AND c.type = 2
+      AND ar.apple_account IS NOT NULL AND ar.status = 'matched'
+      AND t.date >= ? AND t.date <= ?
+    GROUP BY t.category_id, LOWER(ar.apple_account)
+    ORDER BY spent DESC
+  `).all(req.dataUserId, `${year}-01-01`, `${year}-12-31`);
+  const category_apple_account_year_spent = {};
+  for (const r of appleSpent) {
+    if (!category_apple_account_year_spent[r.category_id]) category_apple_account_year_spent[r.category_id] = [];
+    category_apple_account_year_spent[r.category_id].push({ apple_account: r.apple_account, spent: r.spent });
+  }
+
+  res.json({ year, items: result, category_year_spent, category_month_spent, category_subcategory_year_spent, category_apple_account_year_spent });
 });
 
 // POST /api/budget-items

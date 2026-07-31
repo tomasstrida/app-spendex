@@ -46,3 +46,46 @@ test('category_subcategory_year_spent: roční rozpad po subkategoriích v rámc
   assert.equal(rows.length, 2);
   server.close();
 });
+
+test('rozpad podle Apple uctu scita jen sparovane faktury rocnich kategorii', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id, user_id, name, type) VALUES (60,1,'Y_Licence_Apple',2)").run();
+  db.prepare(`INSERT INTO transactions (id, user_id, category_id, amount, date, description)
+              VALUES (300,1,60,-269,'2026-03-01','APPLE.COM/BILL'),
+                     (301,1,60,-100,'2026-04-01','APPLE.COM/BILL'),
+                     (302,1,60,-500,'2026-05-01','APPLE.COM/BILL'),
+                     (303,1,60,-50,'2026-06-01','APPLE.COM/BILL')`).run();
+  db.prepare(`INSERT INTO apple_receipts (user_id, raw_text, status, transaction_id, apple_account)
+              VALUES (1,'raw','matched',300,'prvni@icloud.com'),
+                     (1,'raw','matched',301,'prvni@icloud.com'),
+                     (1,'raw','matched',302,'druhy@icloud.com'),
+                     (1,'raw','pending',303,'treti@icloud.com')`).run();
+
+  const d = await (await fetch(`${base}/api/budget-items?year=2026`)).json();
+  const rows = d.category_apple_account_year_spent[60];
+  assert.equal(rows.length, 2, 'jen dva ucty se sparovanou fakturou');
+  // sestupne dle spent (viz interface spec i ORDER BY spent DESC v briefu)
+  assert.equal(rows[0].apple_account, 'druhy@icloud.com');
+  assert.equal(rows[0].spent, 500);
+  assert.equal(rows[1].apple_account, 'prvni@icloud.com');
+  assert.equal(rows[1].spent, 369, '269 + 100');
+  server.close();
+});
+
+test('rozpad podle Apple uctu nezahrne mesicni kategorie ani faktury bez uctu', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id, user_id, name, type) VALUES (61,1,'Mesicni',1),(62,1,'Rocni',2)").run();
+  db.prepare(`INSERT INTO transactions (id, user_id, category_id, amount, date, description)
+              VALUES (310,1,61,-200,'2026-03-01','APPLE.COM/BILL'),
+                     (311,1,62,-300,'2026-03-01','APPLE.COM/BILL')`).run();
+  db.prepare(`INSERT INTO apple_receipts (user_id, raw_text, status, transaction_id, apple_account)
+              VALUES (1,'raw','matched',310,'prvni@icloud.com'),
+                     (1,'raw','matched',311,NULL)`).run();
+
+  const d = await (await fetch(`${base}/api/budget-items?year=2026`)).json();
+  assert.equal(d.category_apple_account_year_spent[61], undefined, 'mesicni kategorie tam nepatri');
+  assert.equal(d.category_apple_account_year_spent[62], undefined, 'faktura bez uctu se nepocita');
+  server.close();
+});
