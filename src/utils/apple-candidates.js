@@ -13,6 +13,14 @@
 
 const SELECT_COLS = 't.id, t.date, t.amount, t.description, t.card_last4, t.note, t.subcategory_id, t.category_id';
 
+// Predikát „je to Apple platba" — description NEBO place ZAČÍNÁ (ne obsahuje)
+// 'APPLE.COM'. Prefix, ne substring: platba „PLATBA KARTOU APPLE.COM/BILL" nebo
+// poznámka obsahující „apple.com" tímhle NEPROJDE. Používá se na třech místech
+// (tady, routes/budget-items.js agregát „Apple bez faktury", routes/transactions.js
+// filtr apple_merchant=1 pro proklik) — musí zůstat JEDNA definice, jinak se
+// agregát a proklik rozejdou (viz feedback_link_aggregate_parity).
+const APPLE_MERCHANT_SQL = "(UPPER(COALESCE(t.description,'')) LIKE 'APPLE.COM%' OR UPPER(COALESCE(t.place,'')) LIKE 'APPLE.COM%')";
+
 // Vrátí true, když na transakci už ukazuje jiná faktura ve stavu 'matched'.
 // `exceptReceiptId` vynechá vlastní fakturu (re-match téže faktury je v pořádku).
 function transactionAlreadyTaken(db, userId, transactionId, exceptReceiptId = null) {
@@ -30,8 +38,7 @@ function appleCandidateTransactions(db, userId, receipt, opts = {}) {
     SELECT ${SELECT_COLS}
     FROM transactions t
     WHERE t.user_id = ?
-      AND (UPPER(COALESCE(t.description,'')) LIKE 'APPLE.COM%'
-        OR UPPER(COALESCE(t.place,'')) LIKE 'APPLE.COM%')
+      AND ${APPLE_MERCHANT_SQL}
       AND t.date >= date(?, '-10 days') AND t.date <= date(?, '+10 days')
       AND NOT EXISTS (
         SELECT 1 FROM apple_receipts ar
@@ -42,4 +49,4 @@ function appleCandidateTransactions(db, userId, receipt, opts = {}) {
   `).all(userId, receipt.receipt_date, receipt.receipt_date, except, except);
 }
 
-module.exports = { appleCandidateTransactions, transactionAlreadyTaken };
+module.exports = { appleCandidateTransactions, transactionAlreadyTaken, APPLE_MERCHANT_SQL };

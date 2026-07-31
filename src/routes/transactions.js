@@ -6,6 +6,7 @@ const { requireAuth } = require('../middleware/auth');
 const { findDuplicates, wouldEmptyDuplicateGroup } = require('../utils/duplicates');
 const { ownsSubcategory } = require('../utils/subcategory-ownership');
 const { SPENDING_AND } = require('../utils/spending-filter');
+const { APPLE_MERCHANT_SQL } = require('../utils/apple-candidates');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
@@ -14,7 +15,7 @@ const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 // respektoval přesně stejné filtry jako to, co uživatel vidí v seznamu.
 // Vrací { where, params }; `where` začíná ' AND …' (nebo je prázdné).
 function buildTxWhere(query) {
-  const { from, to, category_id, category_ids, subcategory_id, amount_min, amount_max, q, counterparty, direction, apple_account } = query;
+  const { from, to, category_id, category_ids, subcategory_id, amount_min, amount_max, q, counterparty, direction, apple_account, apple_merchant } = query;
   let where = '';
   const params = [];
 
@@ -135,6 +136,14 @@ function buildTxWhere(query) {
       where += ` AND EXISTS (${linked} AND LOWER(ar.apple_account) = LOWER(?))`;
       params.push(val);
     }
+  }
+
+  // apple_merchant=1 → stejný prefix predikát jako agregát „Apple bez faktury"
+  // v routes/budget-items.js (přes APPLE_MERCHANT_SQL). Záměrně PREFIX, ne
+  // substring jako obecné `q` — jinak proklik ukáže víc transakcí, než kolik
+  // sečetl agregát (viz feedback_link_aggregate_parity).
+  if (apple_merchant === '1') {
+    where += ` AND ${APPLE_MERCHANT_SQL}`;
   }
 
   if (amount_min !== undefined && amount_min !== '') {

@@ -425,3 +425,73 @@ test('transakce se sparovanou fakturou bez rozpoznaneho uctu patri do apple_acco
   assert.equal(rowsNone[0].id, 420);
   server.close();
 });
+
+// apple_merchant=1 musi pouzivat presne stejny PREFIX predikat jako agregat
+// category_apple_unmatched_year_spent (src/routes/budget-items.js), ne obecny
+// fulltext `q` (substring napric 10 poli vc. poznamky) — jinak proklik z karty
+// "Apple bez faktury" ukaze vic transakci, nez kolik sečetl součet nad ním.
+test('apple_merchant=1 vraci jen platby s prefixem APPLE.COM, ne substring', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare(`INSERT INTO transactions (id, user_id, category_id, amount, date, description, note)
+              VALUES (430,1,5,-269,'2026-03-01','APPLE.COM/BILL',NULL),
+                     (431,1,5,-100,'2026-03-02','PLATBA KARTOU APPLE.COM/BILL',NULL),
+                     (432,1,5,-50,'2026-03-03','ADOBE','viz apple.com pro fakturu')`).run();
+
+  const r = await (await fetch(`${base}/api/transactions?apple_merchant=1`)).json();
+  const rows = r.transactions || r;
+  assert.equal(rows.length, 1, 'jen prefix APPLE.COM na zacatku popisu/place — ne substring uprostred popisu ani v poznamce');
+  assert.equal(rows[0].id, 430);
+  server.close();
+});
+
+// Setup varianta, ktera navic mountuje /api/budget-items ve stejne DB — potrebne
+// pro test parity proklik/soucet nize (obe strany musi videt stejna data).
+function setupWithBudgetItems() {
+  const tmp = path.join(os.tmpdir(), `spendex-tx-bi-${Date.now()}-${Math.random()}.db`);
+  process.env.DB_PATH = tmp;
+  for (const m of ['../db/connection', '../db/schema', './transactions', './budget-items']) delete require.cache[require.resolve(m)];
+  const db = require('../db/connection'); require('../db/schema').initSchema();
+  db.prepare("INSERT INTO users (id, email) VALUES (1,'o@x')").run();
+  db.prepare("INSERT INTO categories (id, user_id, name, type) VALUES (5,1,'Y_Licence',2)").run();
+  const app = express(); app.use(express.json());
+  app.use((req,_res,next)=>{ req.user={id:1}; req.dataUserId=1; req.isAuthenticated=()=>true; next(); });
+  app.use('/api/transactions', require('./transactions'));
+  app.use('/api/budget-items', require('./budget-items'));
+  return { db, app };
+}
+
+// Jádro opravy: proklik z řádku „Apple bez faktury" (apple_account=none&apple_merchant=1)
+// musí vrátit PŘESNĚ ty transakce, z nichž agregát category_apple_unmatched_year_spent
+// sečetl součet. Kdyby se predikáty v budoucnu rozešly (např. by se apple_merchant vrátil
+// zpátky k substring hledání), tenhle test spadne na nesedícím součtu i na jiné množině id.
+test('apple_account=none&apple_merchant=1 sedi presne s agregatem "Apple bez faktury"', async () => {
+  const { db, app } = setupWithBudgetItems();
+  const { server, base } = await listen(app);
+  db.prepare(`INSERT INTO transactions (id, user_id, category_id, amount, date, description)
+              VALUES (440,1,5,-269,'2026-03-01','APPLE.COM/BILL'),
+                     (441,1,5,-100,'2026-04-01','APPLE.COM/BILL'),
+                     (442,1,5,-500,'2026-05-01','APPLE.COM/BILL'),
+                     (443,1,5,-999,'2026-06-01','PLATBA KARTOU APPLE.COM/BILL'),
+                     (444,1,5,-777,'2026-07-01','ADOBE')`).run();
+  // 440: sparovano se znamym uctem -> nepatri do "bez faktury"
+  // 441: sparovano, ale apple_account NULL (stara faktura pred migraci) -> patri
+  // 442: bez faktury vubec -> patri
+  // 443: prefix APPLE.COM neni na zacatku popisu -> neni Apple platba podle predikatu, nepatri nikam
+  // 444: Adobe, neni Apple -> nepatri
+  db.prepare(`INSERT INTO apple_receipts (user_id, raw_text, status, transaction_id, apple_account)
+              VALUES (1,'raw','matched',440,'prvni@icloud.com'),
+                     (1,'raw','matched',441,NULL)`).run();
+
+  const agg = await (await fetch(`${base}/api/budget-items?year=2026`)).json();
+  const aggSpent = agg.category_apple_unmatched_year_spent[5];
+  assert.equal(aggSpent, 600, '100 (441) + 500 (442)');
+
+  const proklik = await (await fetch(`${base}/api/transactions?apple_account=none&apple_merchant=1&from=2026-01-01&to=2026-12-31`)).json();
+  const rows = proklik.transactions || proklik;
+  const ids = rows.map(r => r.id).sort((a, b) => a - b);
+  assert.deepEqual(ids, [441, 442], 'proklik vrati presne mnozinu transakci z agregatu, zadne navic');
+  const sumSpent = rows.reduce((s, r) => s + (-r.amount), 0);
+  assert.equal(sumSpent, aggSpent, 'soucet vracenych transakci sedi presne se souctem agregatu');
+  server.close();
+});

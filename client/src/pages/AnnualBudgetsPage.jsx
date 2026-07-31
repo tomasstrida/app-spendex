@@ -239,7 +239,7 @@ export default function AnnualBudgetsPage() {
                                   ))}
                                   {Math.abs(appleUnmatched) >= 0.005 && (
                                     <Link
-                                      to={`/transactions?category_id=${c.id}&apple_account=none&q=APPLE.COM&${range}`}
+                                      to={`/transactions?category_id=${c.id}&apple_account=none&apple_merchant=1&${range}`}
                                       className="report-subcat-row"
                                       style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
                                     >

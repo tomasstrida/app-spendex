@@ -3,6 +3,7 @@ const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
+const { APPLE_MERCHANT_SQL } = require('../utils/apple-candidates');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
@@ -126,7 +127,7 @@ router.get('/', requireAuth, (req, res) => {
     FROM transactions t
     JOIN categories c ON c.id = t.category_id AND c.user_id = t.user_id
     WHERE t.user_id = ? AND c.type = 2
-      AND (UPPER(COALESCE(t.description,'')) LIKE 'APPLE.COM%' OR UPPER(COALESCE(t.place,'')) LIKE 'APPLE.COM%')
+      AND ${APPLE_MERCHANT_SQL}
       AND t.date >= ? AND t.date <= ?
       AND NOT EXISTS (
         SELECT 1 FROM apple_receipts ar

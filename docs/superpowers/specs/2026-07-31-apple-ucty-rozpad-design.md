@@ -79,13 +79,14 @@ uživatel přečetl jako „tolik faktur mi ještě chybí přeposlat", přesto�
 Zbytek se proto dělí na dva řádky, každý měří přesně to, co říká:
 
 - **„Apple bez faktury"** — vlastní SQL agregát (`category_apple_unmatched_year_spent` v
-  `src/routes/budget-items.js`): Apple platby (stejná identifikace jako `apple-candidates.js`,
-  `UPPER(description) LIKE 'APPLE.COM%' OR UPPER(place) LIKE 'APPLE.COM%'`) BEZ spárované faktury
-  se známým účtem. Podmínka „bez faktury" je přesně `NOT EXISTS` téhož poddotazu, jaký používá
-  filtr `apple_account=none` v `src/routes/transactions.js` — jinak by se rozpad a proklik
-  rozešly. Patří sem jak faktury bez vazby na transakci vůbec, tak faktury spárované, ale
-  s `apple_account IS NULL` (staré řádky před migrací, nebo faktura, ze které se účet nepodařilo
-  rozpoznat). Tohle je ten skutečný ukazatel „kolik faktur ještě zbývá přeposlat".
+  `src/routes/budget-items.js`): Apple platby (identifikace přes sdílenou konstantu
+  `APPLE_MERCHANT_SQL` v `src/utils/apple-candidates.js` —
+  `UPPER(description) LIKE 'APPLE.COM%' OR UPPER(place) LIKE 'APPLE.COM%'`, prefix ne substring)
+  BEZ spárované faktury se známým účtem. Podmínka „bez faktury" je přesně `NOT EXISTS` téhož
+  poddotazu, jaký používá filtr `apple_account=none` v `src/routes/transactions.js` — jinak by se
+  rozpad a proklik rozešly. Patří sem jak faktury bez vazby na transakci vůbec, tak faktury
+  spárované, ale s `apple_account IS NULL` (staré řádky před migrací, nebo faktura, ze které se
+  účet nepodařilo rozpoznat). Tohle je ten skutečný ukazatel „kolik faktur ještě zbývá přeposlat".
 - **„mimo Apple"** — dopočet `category_year_spent[cat] − Σ spent za účty − „Apple bez faktury"`.
   Zbytkové platby v kategorii, které s Applem vůbec nesouvisí (Adobe, OpenAI…). Nemá odpovídající
   filtr v Transakcích (žádná jednoduchá podmínka „vše kromě Apple" tam není), takže se zobrazí
@@ -100,9 +101,18 @@ Nový URL parametr `apple_account`:
 
 - `apple_account=<e-mail>` → jen transakce, ke kterým existuje spárovaná faktura s tímto účtem,
 - `apple_account=none` → transakce **bez** spárované faktury se známým účtem (odpovídá řádku
-  „Apple bez faktury"; proklik z UI k tomu přidává i `q=APPLE.COM`, aby vrátil přesně Apple platby,
-  ze kterých je součet — samotný `apple_account=none` totiž vrací i ne-Apple transakce bez
+  „Apple bez faktury"; samotný `apple_account=none` totiž vrací i ne-Apple transakce bez
   spárované faktury, protože EXISTS poddotaz nerozlišuje obchodníka).
+
+Druhý parametr `apple_merchant=1` filtruje transakce **stejným prefix predikátem**
+(`APPLE_MERCHANT_SQL`), jaký používá agregát „Apple bez faktury". Proklik z UI kombinuje oba —
+`apple_account=none&apple_merchant=1` — aby vrátil přesně Apple platby, ze kterých je součet.
+Původní návrh počítal s obecným fulltextem `q=APPLE.COM`, ale ten hledá substring napříč deseti
+poli (vč. poznámky) a vrátil i transakce, které agregát nezapočítal (např. popis
+`PLATBA KARTOU APPLE.COM/BILL`, kde `APPLE.COM` není na začátku, nebo transakci s „apple.com" jen
+v poznámce) — proklik pak ukazoval víc řádků, než kolik sečetl součet nad ním. Opraveno zavedením
+`apple_merchant=1` s identickým predikátem jako agregát (viz
+`.superpowers/sdd/2026-07-31-apple-ucty-rozpad/parity-fix-report.md`).
 
 V `buildTxWhere` (`src/routes/transactions.js:16`) se přidá jako `EXISTS` / `NOT EXISTS`
 poddotaz — bez JOINu, aby se nezměnil počet řádků výsledku ani stránkování:
@@ -141,7 +151,7 @@ stávajícím „rozpad podle subkategorie":
 
 Řádky za jednotlivé účty vedou na
 `/transactions?category_id=<id>&apple_account=<účet>&from=<rok>-01-01&to=<rok>-12-31`, řádek
-„Apple bez faktury" na totéž s `apple_account=none&q=APPLE.COM`. Řádek „mimo Apple" proklik nemá —
+„Apple bez faktury" na totéž s `apple_account=none&apple_merchant=1`. Řádek „mimo Apple" proklik nemá —
 zobrazí se jako neklikací text ve stejném vzhledu. Recykluje se existující vzhled
 (`report-subcat-*` třídy), jen s vlastním stavem rozkliknutí — oba rozpady musí jít otevřít
 nezávisle.
@@ -181,7 +191,10 @@ v projektu.
 - `src/routes/transactions.test.js` — filtr podle účtu vrátí jen odpovídající transakce;
   `apple_account=none` vrátí ty bez faktury; filtr je case-insensitive; transakce se spárovanou
   fakturou bez rozpoznaného účtu (`status='matched'`, `apple_account IS NULL`) spadne do
-  `apple_account=none`.
+  `apple_account=none`; `apple_merchant=1` vrátí jen prefix-match (ne substring — platba
+  `PLATBA KARTOU APPLE.COM/BILL` ani „apple.com" jen v poznámce filtrem neprojdou); kombinace
+  `apple_account=none&apple_merchant=1` vrátí přesně tytéž transakce a stejný součet jako agregát
+  `category_apple_unmatched_year_spent` z `/api/budget-items` (parita proklik/součet).
 - `src/services/appleReceipts.test.js` — přeposlání duplicitní faktury doplní `apple_account`,
   když byl v DB `NULL`; neprázdnou hodnotu nikdy nepřepíše.
 
