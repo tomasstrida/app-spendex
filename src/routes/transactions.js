@@ -14,7 +14,7 @@ const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 // respektoval přesně stejné filtry jako to, co uživatel vidí v seznamu.
 // Vrací { where, params }; `where` začíná ' AND …' (nebo je prázdné).
 function buildTxWhere(query) {
-  const { from, to, category_id, category_ids, subcategory_id, amount_min, amount_max, q, counterparty, direction } = query;
+  const { from, to, category_id, category_ids, subcategory_id, amount_min, amount_max, q, counterparty, direction, apple_account } = query;
   let where = '';
   const params = [];
 
@@ -117,6 +117,24 @@ function buildTxWhere(query) {
   if (subcategory_id !== undefined && String(subcategory_id).trim() !== '') {
     const v = parseInt(subcategory_id, 10);
     if (Number.isFinite(v)) { where += ' AND t.subcategory_id = ?'; params.push(v); }
+  }
+
+  // Filtr podle Apple účtu z faktury. Účet žije na apple_receipts, ne na transakci —
+  // proto EXISTS poddotaz, ne JOIN: join by při víc fakturách zduplikoval řádky
+  // a rozbil stránkování.
+  // `none` = transakce bez spárované faktury S ÚČTEM. Musí to sedět na dopočítaný
+  // řádek „bez faktury" v rozpadu, do kterého spadají i faktury bez rozpoznaného účtu.
+  if (apple_account !== undefined && String(apple_account).trim() !== '') {
+    const val = String(apple_account).trim();
+    const linked = `SELECT 1 FROM apple_receipts ar
+      WHERE ar.transaction_id = t.id AND ar.user_id = t.user_id
+        AND ar.status = 'matched' AND ar.apple_account IS NOT NULL`;
+    if (val.toLowerCase() === 'none') {
+      where += ` AND NOT EXISTS (${linked})`;
+    } else {
+      where += ` AND EXISTS (${linked} AND LOWER(ar.apple_account) = LOWER(?))`;
+      params.push(val);
+    }
   }
 
   if (amount_min !== undefined && amount_min !== '') {

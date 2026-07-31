@@ -361,3 +361,46 @@ test('fulltext hleda i v nazvu subkategorie (vc. diakritiky a velikosti pismen)'
   assert.equal((accent.transactions || accent).length, 1, 'hleda bez ohledu na diakritiku');
   server.close();
 });
+
+test('filtr apple_account vrati jen transakce daneho uctu', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare(`INSERT INTO transactions (id, user_id, category_id, amount, date, description)
+              VALUES (400,1,5,-269,'2026-03-01','APPLE.COM/BILL'),
+                     (401,1,5,-500,'2026-03-02','APPLE.COM/BILL'),
+                     (402,1,5,-100,'2026-03-03','APPLE.COM/BILL')`).run();
+  db.prepare(`INSERT INTO apple_receipts (user_id, raw_text, status, transaction_id, apple_account)
+              VALUES (1,'raw','matched',400,'prvni@icloud.com'),
+                     (1,'raw','matched',401,'druhy@icloud.com')`).run();
+
+  const a = await (await fetch(`${base}/api/transactions?apple_account=prvni@icloud.com`)).json();
+  const rowsA = a.transactions || a;
+  assert.equal(rowsA.length, 1);
+  assert.equal(rowsA[0].id, 400);
+
+  const none = await (await fetch(`${base}/api/transactions?apple_account=none`)).json();
+  const rowsNone = none.transactions || none;
+  assert.equal(rowsNone.length, 1, 'jen transakce bez faktury');
+  assert.equal(rowsNone[0].id, 402);
+  server.close();
+});
+
+test('filtr apple_account je case-insensitive a ignoruje neparovane faktury', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare(`INSERT INTO transactions (id, user_id, category_id, amount, date, description)
+              VALUES (410,1,5,-269,'2026-03-01','APPLE.COM/BILL'),
+                     (411,1,5,-300,'2026-03-02','APPLE.COM/BILL')`).run();
+  db.prepare(`INSERT INTO apple_receipts (user_id, raw_text, status, transaction_id, apple_account)
+              VALUES (1,'raw','matched',410,'prvni@icloud.com'),
+                     (1,'raw','pending',411,'prvni@icloud.com')`).run();
+
+  const r = await (await fetch(`${base}/api/transactions?apple_account=PRVNI@ICLOUD.COM`)).json();
+  const rows = r.transactions || r;
+  assert.equal(rows.length, 1, 'neparovana faktura se nepocita');
+  assert.equal(rows[0].id, 410);
+
+  const none = await (await fetch(`${base}/api/transactions?apple_account=none`)).json();
+  assert.equal((none.transactions || none).length, 1, 'tx s pending fakturou patri do "bez faktury"');
+  server.close();
+});
