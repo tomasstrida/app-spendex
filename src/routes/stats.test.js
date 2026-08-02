@@ -295,3 +295,39 @@ test('savings: číslo účtu s mezerami se rozpozná jako vlastní účet', asy
   assert.equal(stats.savings.transfers.length, 1);
   server.close();
 });
+
+test('savings: nohy převodu s posunutým datem se spárují (nezdvojí se)', async () => {
+  const { db, app, savingsId, mainId } = setupSavings();
+  const { server, base } = await listen(app);
+  // banka zaúčtuje strany v jiný den; bez tolerance by se převod počítal dvakrát
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id) VALUES (1,-5000,'2026-08-10','Tomáš Střída',?,?)").run(SAVINGS_ACC, mainId);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id) VALUES (1,5000,'2026-08-11','Tomáš Střída',NULL,?)").run(savingsId);
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-08`)).json();
+  assert.equal(stats.savings.deposits, 5000);
+  assert.equal(stats.savings.transfers.length, 1);
+  server.close();
+});
+
+test('savings: vzdálený pohyb stejné částky se NEspáruje (mimo okno)', async () => {
+  const { db, app, savingsId, mainId } = setupSavings();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id) VALUES (1,-5000,'2026-08-05','Tomáš Střída',?,?)").run(SAVINGS_ACC, mainId);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id) VALUES (1,5000,'2026-08-25','Nezavisly vklad',NULL,?)").run(savingsId);
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-08`)).json();
+  assert.equal(stats.savings.deposits, 10000, 'dva nezávislé vklady');
+  assert.equal(stats.savings.transfers.length, 2);
+  server.close();
+});
+
+test('savings: shodné datum má při párování přednost před posunutým', async () => {
+  const { db, app, savingsId, mainId } = setupSavings();
+  const { server, base } = await listen(app);
+  // dvě referenční nohy stejné částky (11. a 12.) a dvě nohy na spořicím (12. a 14.):
+  // greedy párování musí obě spotřebovat, jinak jeden převod propadne jako externí
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id) VALUES (1,-1000,'2026-08-11','A',?,?),(1,-1000,'2026-08-12','B',?,?)").run(SAVINGS_ACC, mainId, SAVINGS_ACC, mainId);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id) VALUES (1,1000,'2026-08-12','A',NULL,?),(1,1000,'2026-08-14','B',NULL,?)").run(savingsId, savingsId);
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-08`)).json();
+  assert.equal(stats.savings.deposits, 2000, 'oba převody právě jednou');
+  assert.equal(stats.savings.transfers.length, 2);
+  server.close();
+});

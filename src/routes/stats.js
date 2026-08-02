@@ -111,11 +111,29 @@ router.get('/overview', requireAuth, (req, res) => {
   // referenční protějšek v datech SKUTEČNĚ existuje (stejné datum, opačná částka,
   // párování 1:1). Odvozovat to z protiúčtu nestačí: chybějící protiúčet by převod
   // zdvojil a nenaimportovaný druhý účet by naopak skutečný pohyb nechal zmizet.
-  const counterpartyLegs = savingsRows.filter(t => normCounterparty(t.counterparty_account) === savingsNumber);
-  const unpaired = new Map();          // "datum|částka nohy na spořicím" → počet volných protějšků
-  for (const t of counterpartyLegs) {
-    const key = `${t.date}|${-t.amount}`;
-    unpaired.set(key, (unpaired.get(key) || 0) + 1);
+  // Párovací okno: obě nohy nesou datum zaúčtování téhož převodu, takže v datech
+  // vycházejí na stejný den (ověřeno na celé historii: 49 z 49 párů). Tolerance je
+  // pojistka pro případ, kdy banka strany zaúčtuje přes půlnoc nebo přes víkend.
+  const PAIR_WINDOW_DAYS = 3;
+  const dayDiff = (a, b) => Math.abs(Date.parse(a) - Date.parse(b)) / 86400000;
+
+  const pool = savingsRows
+    .filter(t => normCounterparty(t.counterparty_account) === savingsNumber)
+    .map(t => ({ date: t.date, amount: -t.amount, used: false }));   // částka z pohledu spořicího
+
+  // Spotřebuje protějšek pro danou nohu (nejbližší datum vyhrává), nebo vrátí false.
+  function takeCounterpartyLeg(t) {
+    let best = null;
+    for (const p of pool) {
+      if (p.used || p.amount !== t.amount) continue;
+      const d = dayDiff(p.date, t.date);
+      if (d > PAIR_WINDOW_DAYS) continue;
+      if (!best || d < best.d) best = { p, d };
+      if (d === 0) break;
+    }
+    if (!best) return false;
+    best.p.used = true;
+    return true;
   }
 
   const savingsTransfers = savingsRows
@@ -123,12 +141,7 @@ router.get('/overview', requireAuth, (req, res) => {
       if (normCounterparty(t.counterparty_account) === savingsNumber) {
         return { ...t, external: 0, is_regular: t.amount === -25000 };
       }
-      const key = `${t.date}|${t.amount}`;
-      const free = unpaired.get(key) || 0;
-      if (free > 0) {                  // druhá noha už započteného převodu
-        unpaired.set(key, free - 1);
-        return null;
-      }
+      if (takeCounterpartyLeg(t)) return null;    // druhá noha už započteného převodu
       return { ...t, external: 1, is_regular: false };
     })
     .filter(Boolean);
