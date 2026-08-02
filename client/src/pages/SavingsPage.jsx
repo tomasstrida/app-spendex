@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
 import { computeMeetingSurplus } from '../utils/meetingBalance';
+import { savingsTransferView } from '../utils/savingsTransfer';
 
 export default function SavingsPage() {
   const { period, setPeriod, currentPeriod, resetToCurrent } = usePeriod();
@@ -117,17 +118,10 @@ export default function SavingsPage() {
             ) : (
               <div className="report-budget-list">
                 {transfers.map(tr => {
-                  // amount je z pohledu zdrojového účtu: záporné = vklad na spořicí
-                  // (na spoření přibylo), kladné = výběr zpět na provoz.
-                  const onSavings = -tr.amount;   // z pohledu spořicího účtu
-                  // Odkud → kam: vlastní účet (account_name), na kterém převod proběhl,
-                  // vs. protistrana (spořicí účet, description). Vklad = běžný → spořicí,
-                  // výběr = spořicí → běžný.
-                  const savingsName = tr.description || 'Spořicí účet';
-                  const ownName = tr.account_name;
-                  const flow = ownName
-                    ? (onSavings >= 0 ? `${ownName} → ${savingsName}` : `${savingsName} → ${ownName}`)
-                    : savingsName;
+                  // Částka z pohledu spořicího účtu + tok „odkud → kam". Interní převod
+                  // a pohyb bez druhé nohy (platba zvenku, úrok) mají opačnou orientaci —
+                  // rozdíl řeší sdílený util.
+                  const { onSavings, flow } = savingsTransferView(tr);
                   return (
                     <Link key={tr.id} to={txLink(`highlight=${tr.id}`)}
                       className="report-budget-row"

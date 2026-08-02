@@ -5,6 +5,7 @@ const { requireAuth } = require('../middleware/auth');
 const { getPeriodDates, getUserBillingDay, currentPeriodKey } = require('../utils/period');
 const { savingsNet, reserveBalance, savingsAccount, reserveAccount, reservePaidPatterns, mainAccount, variableAccount } = require('../utils/recurring');
 const { SPENDING_AND } = require('../utils/spending-filter');
+const { normCounterparty } = require('../utils/income');
 
 // GET /api/stats/overview?period=2026-04
 router.get('/overview', requireAuth, (req, res) => {
@@ -77,30 +78,54 @@ router.get('/overview', requireAuth, (req, res) => {
     LIMIT 12
   `).all(req.dataUserId);
 
-  const sav = db.prepare(`
-    SELECT
-      COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) AS deposits,
-      COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS withdrawals
-    FROM transactions
-    WHERE user_id = ? AND counterparty_account LIKE ? || '%'
-      AND date >= ? AND date <= ?
-  `).get(req.dataUserId, savingsAccount, start, end);
+  // Detailní rozpis pohybů na spořicím účtu za období.
+  // Interní převod má v DB OBĚ nohy (odchozí z běžného účtu + příchozí na spořicí),
+  // proto se bere jen ta, kde je spořicí protiúčtem — druhá by ho zdvojila.
+  // Peníze, které na spořicí přijdou zvenku (cizí odesílatel) nebo bez protistrany
+  // (kreditní úrok), ale druhou nohu nemají — ty se musí vzít z transakcí zaúčtovaných
+  // přímo na spořicím účtu, jinak by v přehledu chyběly (řádek má `external: 1`).
+  const savingsAccountId = (db.prepare(
+    'SELECT id FROM accounts WHERE user_id = ? AND account_number = ?'
+  ).get(req.dataUserId, savingsAccount) || {}).id || null;
 
-  // Detailní rozpis převodů přes spořicí účet za období. `amount` je z pohledu
-  // zdrojového účtu: záporné = vklad na spořicí (peníze odešly), kladné = výběr
-  // ze spořicího zpět na provoz. is_regular = standardní měsíční vklad 25 000.
+  const ownAccountNumbers = new Set(
+    db.prepare('SELECT account_number FROM accounts WHERE user_id = ?')
+      .all(req.dataUserId)
+      .map(a => normCounterparty(a.account_number))
+      .filter(Boolean)
+  );
+  const savingsNumber = normCounterparty(savingsAccount);
+
+  // `amount` je u běžné nohy z pohledu zdrojového účtu (záporné = vklad na spořicí),
+  // u `external` řádků z pohledu spořicího účtu (kladné = přibylo). Převod na jednotný
+  // pohled dělá `onSavings` níž i klient. is_regular = standardní měsíční vklad 25 000.
   const savingsTransfers = db.prepare(`
     SELECT t.id, t.date, t.description, t.amount, t.counterparty_account, t.note,
            a.name AS account_name, a.account_number AS account_number
     FROM transactions t
     LEFT JOIN accounts a ON a.id = t.account_id AND a.user_id = t.user_id
-    WHERE t.user_id = ? AND t.counterparty_account LIKE ? || '%'
-      AND t.date >= ? AND t.date <= ?
+    WHERE t.user_id = ? AND t.date >= ? AND t.date <= ?
+      AND (t.counterparty_account LIKE ? || '%' OR t.account_id = ?)
     ORDER BY t.date DESC, t.id DESC
-  `).all(req.dataUserId, savingsAccount, start, end).map(t => ({
-    ...t,
-    is_regular: t.amount === -25000,
-  }));
+  `).all(req.dataUserId, start, end, savingsAccount, savingsAccountId)
+    .map(t => {
+      const cp = normCounterparty(t.counterparty_account);
+      if (cp && cp === savingsNumber) return { ...t, external: 0, is_regular: t.amount === -25000 };
+      // Zbytek jsou transakce zaúčtované na spořicím účtu. Protistrana z vlastních
+      // účtů = druhá noha interního převodu, kterou už pokryl řádek výše.
+      if (cp && ownAccountNumbers.has(cp)) return null;
+      return { ...t, external: 1, is_regular: false };
+    })
+    .filter(Boolean);
+
+  // Pohled spořicího účtu: kladné = přibylo (vklad), záporné = ubylo (výběr).
+  const onSavings = t => (t.external ? t.amount : -t.amount);
+  const sav = savingsTransfers.reduce((acc, t) => {
+    const v = onSavings(t);
+    if (v > 0) acc.deposits += v;
+    else acc.withdrawals += -v;
+    return acc;
+  }, { deposits: 0, withdrawals: 0 });
 
   const savings = {
     deposits: sav.deposits,

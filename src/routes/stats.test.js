@@ -174,3 +174,67 @@ test('prepaid_purchase: bez technicke kategorie vraci nuly', async () => {
   assert.equal(stats.prepaid_purchase.outflow, 0);
   server.close();
 });
+
+// ── Spořicí účet: pohyby zaúčtované PŘÍMO na spořicím účtu ──
+// Interní převod má v DB obě nohy (odchozí z běžného + příchozí na spořicí), proto
+// se pohyby berou z nohy, kde je spořicí protiúčtem. Peníze, které na spořicí přijdou
+// zvenku (cizí odesílatel) nebo bez protistrany (úrok), ale druhou nohu nemají —
+// bez nich by v přehledu chyběly.
+const SAVINGS_ACC = '1679014082/3030';
+const MAIN_ACC = '1679014138/3030';
+
+function setupSavings() {
+  const { db, app } = setup();
+  const savingsId = db.prepare("INSERT INTO accounts (user_id, account_number, name, role) VALUES (1,?,'Spořicí-účet-1','ignored')").run(SAVINGS_ACC).lastInsertRowid;
+  const mainId = db.prepare("INSERT INTO accounts (user_id, account_number, name, role) VALUES (1,?,'Hlavní','ignored')").run(MAIN_ACC).lastInsertRowid;
+  return { db, app, savingsId, mainId };
+}
+
+test('savings: příchozí platba od cizí protistrany přímo na spořicí je vklad', async () => {
+  const { db, app, savingsId } = setupSavings();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id) VALUES (1,100,'2026-08-02','Libor Bísek','1812270019/3030',?)").run(savingsId);
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-08`)).json();
+  assert.equal(stats.savings.deposits, 100);
+  assert.equal(stats.savings.withdrawals, 0);
+  assert.equal(stats.savings.net, 100);
+  const tr = stats.savings.transfers.find(t => t.description === 'Libor Bísek');
+  assert.ok(tr, 'převod musí být v rozpisu');
+  assert.equal(tr.external, 1, 'řádek je označený jako pohyb bez druhé nohy');
+  assert.equal(tr.amount, 100, 'u externího pohybu je amount z pohledu spořicího účtu');
+  server.close();
+});
+
+test('savings: úrok připsaný na spořicí (bez protistrany) je vklad', async () => {
+  const { db, app, savingsId } = setupSavings();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id) VALUES (1,164.1,'2026-08-31','Kreditní úrok od Air Bank',NULL,?)").run(savingsId);
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-08`)).json();
+  assert.equal(stats.savings.deposits, 164.1);
+  assert.equal(stats.savings.transfers.length, 1);
+  server.close();
+});
+
+test('savings: odchozí platba ze spořicího cizí protistraně je výběr', async () => {
+  const { db, app, savingsId } = setupSavings();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id) VALUES (1,-250,'2026-08-05','Cizi prijemce','2222222222/0800',?)").run(savingsId);
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-08`)).json();
+  assert.equal(stats.savings.withdrawals, 250);
+  assert.equal(stats.savings.deposits, 0);
+  assert.equal(stats.savings.net, -250);
+  server.close();
+});
+
+test('savings: interní převod s oběma nohama se nezapočítá dvakrát', async () => {
+  const { db, app, savingsId, mainId } = setupSavings();
+  const { server, base } = await listen(app);
+  // noha 1: odchozí z Hlavního (protiúčet = spořicí), noha 2: příchozí na spořicí (protiúčet = Hlavní)
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id) VALUES (1,-5000,'2026-08-10','Tomáš Střída',?,?)").run(SAVINGS_ACC, mainId);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id) VALUES (1,5000,'2026-08-10','Tomáš Střída',?,?)").run(MAIN_ACC, savingsId);
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-08`)).json();
+  assert.equal(stats.savings.deposits, 5000, 'jen jedna noha převodu');
+  assert.equal(stats.savings.transfers.length, 1);
+  assert.equal(stats.savings.transfers[0].external, 0, 'interní převod není externí pohyb');
+  server.close();
+});
