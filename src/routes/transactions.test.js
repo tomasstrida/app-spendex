@@ -495,3 +495,23 @@ test('apple_account=none&apple_merchant=1 sedi presne s agregatem "Apple bez fak
   assert.equal(sumSpent, aggSpent, 'soucet vracenych transakci sedi presne se souctem agregatu');
   server.close();
 });
+
+test('GET /export: prázdné obchodní místo doplní protiúčet (interní i externí)', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO accounts (user_id, account_number, name) VALUES (1,'1679014138/3030','Hlavní')").run();
+  // interní protiúčet → "číslo · název"
+  db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account) VALUES (1,5,-500,'2026-07-10','Převod','1679014138/3030')").run();
+  // externí protiúčet → holé číslo (QR platba)
+  db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account) VALUES (1,5,-230,'2026-07-25','káva na vodě ve stánku','201220675/0600')").run();
+  // vyplněné place se nemění
+  db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description, place, counterparty_account) VALUES (1,5,-99,'2026-07-26','ALBERT','ALBERT 1234','201220675/0600')").run();
+
+  const res = await fetch(`${base}/api/transactions/export?from=2026-07-01&to=2026-07-31`);
+  assert.equal(res.status, 200);
+  const csv = await res.text();
+  assert.ok(csv.includes('1679014138/3030 · Hlavní'), 'interní protiúčet s názvem');
+  assert.ok(csv.includes('201220675/0600'), 'externí protiúčet jako číslo');
+  assert.ok(csv.includes('ALBERT 1234'), 'vyplněné place zůstává');
+  server.close();
+});

@@ -7,6 +7,7 @@ const { findDuplicates, wouldEmptyDuplicateGroup } = require('../utils/duplicate
 const { ownsSubcategory } = require('../utils/subcategory-ownership');
 const { SPENDING_AND } = require('../utils/spending-filter');
 const { APPLE_MERCHANT_SQL } = require('../utils/apple-candidates');
+const { buildAccountNameMap, placeDisplayText } = require('../utils/place-display');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
@@ -192,11 +193,16 @@ router.get('/export', requireAuth, (req, res) => {
     ORDER BY t.date DESC, t.id DESC`;
   const rows = db.prepare(query).all(req.dataUserId, ...params);
 
+  // Mapa vlastních účtů se načítá zvlášť — druhý JOIN na accounts.account_number
+  // by při duplicitním čísle rozmnožil řádky exportu.
+  const accountRows = db.prepare('SELECT account_number, name FROM accounts WHERE user_id = ?').all(req.dataUserId);
+  const cpNameMap = buildAccountNameMap(accountRows);
+
   const cols = [
     ['Datum', r => r.date],
     ['Čas', r => r.tx_time],
     ['Popis', r => r.description],
-    ['Obchodní místo', r => r.place],
+    ['Obchodní místo', r => placeDisplayText(r, cpNameMap)],
     ['Kategorie', r => r.category_name],
     ['Subkategorie', r => r.subcategory_name],
     ['Částka', r => (r.amount == null ? '' : String(r.amount).replace('.', ','))],
