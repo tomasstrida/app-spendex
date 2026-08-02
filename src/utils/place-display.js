@@ -1,17 +1,23 @@
 'use strict';
-const { normCounterparty } = require('./income');
 
 /**
  * Serverový protějšek klientského `placeDisplay` (client/src/utils/accountName.js).
  * Používá ho CSV export, aby v něm „Obchodní místo" nebylo prázdné u QR plateb
  * a převodů. Čistě zobrazovací — do DB se nic nezapisuje.
- * Obě implementace musí dávat stejný výsledek; hlídají to unit testy na obou stranách.
+ * Obě implementace používají stejnou normalizaci (ořez mezer, exact porovnání
+ * kompletního čísla), takže pro tytéž vstupy dávají stejný text — liší se jen
+ * návratový typ (klient `{ text, derived } | null` pro UI, server holý string
+ * pro CSV buňku).
  */
+function normalizeAccountNumber(raw) {
+  if (!raw) return '';
+  return String(raw).replace(/\s/g, '');
+}
+
 function buildAccountNameMap(rows) {
   const map = new Map();
   for (const a of rows || []) {
-    const num = normCounterparty(a.account_number);
-    if (num) map.set(num, a.name);
+    if (a.account_number) map.set(normalizeAccountNumber(a.account_number), a.name);
   }
   return map;
 }
@@ -22,7 +28,7 @@ function placeDisplayText(tx, nameMap) {
   const place = (tx.place || '').trim();
   if (place) return place;
 
-  const cp = normCounterparty(tx.counterparty_account);
+  const cp = normalizeAccountNumber(tx.counterparty_account);
   if (!cp) return '';
 
   const name = nameMap ? nameMap.get(cp) : null;

@@ -510,8 +510,25 @@ test('GET /export: prázdné obchodní místo doplní protiúčet (interní i ex
   const res = await fetch(`${base}/api/transactions/export?from=2026-07-01&to=2026-07-31`);
   assert.equal(res.status, 200);
   const csv = await res.text();
-  assert.ok(csv.includes('1679014138/3030 · Hlavní'), 'interní protiúčet s názvem');
-  assert.ok(csv.includes('201220675/0600'), 'externí protiúčet jako číslo');
-  assert.ok(csv.includes('ALBERT 1234'), 'vyplněné place zůstává');
+  const rowsByDate = Object.fromEntries(
+    csv.split('\r\n').filter(l => /^\d{4}-\d{2}-\d{2};/.test(l)).map(l => [l.slice(0, 10), l.split(';')])
+  );
+  // sloupec „Obchodní místo" je pole s indexem 3 (Datum, Čas, Popis, Obchodní místo, ...)
+  assert.equal(rowsByDate['2026-07-10'][3], '1679014138/3030 · Hlavní', 'interní protiúčet s názvem');
+  assert.equal(rowsByDate['2026-07-25'][3], '201220675/0600', 'externí protiúčet jako číslo (QR platba)');
+  assert.equal(rowsByDate['2026-07-26'][3], 'ALBERT 1234', 'vyplněné place zůstává');
+  server.close();
+});
+
+test('GET /export: IBAN protiúčtu bez interní shody se propíše do Obchodního místa', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare(`INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account)
+              VALUES (1,5,-150,'2026-07-27','platba do zahraničí','CZ6530300000001679014138')`).run();
+
+  const res = await fetch(`${base}/api/transactions/export?from=2026-07-01&to=2026-07-31`);
+  const csv = await res.text();
+  const row = csv.split('\r\n').find(l => l.startsWith('2026-07-27;'));
+  assert.equal(row.split(';')[3], 'CZ6530300000001679014138', 'IBAN protiúčtu se zobrazí holý, i když nezačíná číslicí');
   server.close();
 });

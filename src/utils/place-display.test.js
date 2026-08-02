@@ -34,3 +34,11 @@ test('účet bez čísla v mapě nefiguruje a nespadne', () => {
   assert.equal(map.size, 2);
   assert.equal(placeDisplayText({ counterparty_account: '19-1679014138/3030' }, map), '19-1679014138/3030');
 });
+
+test('IBAN protiúčtu (nezačíná číslicí) → holý IBAN, žádný pád', () => {
+  const map = buildAccountNameMap(accounts);
+  assert.equal(
+    placeDisplayText({ place: null, counterparty_account: 'CZ6530300000001679014138' }, map),
+    'CZ6530300000001679014138'
+  );
+});

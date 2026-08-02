@@ -1169,7 +1169,6 @@ function renderCell(key, tx, categories, accountNameMap, accountById) {
       return (
         <span
           className={pd.derived ? 'text-muted' : undefined}
-          title={pd.text}
           style={{ fontSize: 13 }}
         >
           {pd.text}

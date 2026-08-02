@@ -79,3 +79,20 @@ test('placeDisplay: chybějící tx nebo mapa nespadne', () => {
   assert.equal(placeDisplay(null, new Map()), null);
   assert.deepEqual(placeDisplay({ place: 'X' }, null), { text: 'X', derived: false });
 });
+
+test('placeDisplay: IBAN protiúčtu (nezačíná číslicí) → holý IBAN, žádný pád', () => {
+  const map = buildAccountNameMap(txAccounts);
+  const r = placeDisplay({ place: null, counterparty_account: 'CZ6530300000001679014138' }, map);
+  assert.deepEqual(r, { text: 'CZ6530300000001679014138', derived: true });
+});
+
+test('placeDisplay: place jen z mezer propadne na protiúčet', () => {
+  const map = buildAccountNameMap(txAccounts);
+  const r = placeDisplay({ place: '   ', counterparty_account: '201220675/0600' }, map);
+  assert.deepEqual(r, { text: '201220675/0600', derived: true });
+});
+
+test('placeDisplay: prázdné place + nameMap null + protiúčet → holé číslo', () => {
+  const r = placeDisplay({ place: '', counterparty_account: '201220675/0600' }, null);
+  assert.deepEqual(r, { text: '201220675/0600', derived: true });
+});
