@@ -238,3 +238,60 @@ test('savings: interní převod s oběma nohama se nezapočítá dvakrát', asyn
   assert.equal(stats.savings.transfers[0].external, 0, 'interní převod není externí pohyb');
   server.close();
 });
+
+test('savings: noha na spořicím bez protiúčtu se nezapočítá dvakrát, když pár existuje', async () => {
+  const { db, app, savingsId, mainId } = setupSavings();
+  const { server, base } = await listen(app);
+  // odchozí noha má protiúčet vyplněný, příchozí noha na spořicím ho postrádá
+  // (parser ho u některých plateb nevytáhne) — dedup se nesmí opírat jen o protiúčet
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id) VALUES (1,-5000,'2026-08-10','Tomáš Střída',?,?)").run(SAVINGS_ACC, mainId);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id) VALUES (1,5000,'2026-08-10','Tomáš Střída',NULL,?)").run(savingsId);
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-08`)).json();
+  assert.equal(stats.savings.deposits, 5000, 'jen jedna noha převodu');
+  assert.equal(stats.savings.transfers.length, 1);
+  server.close();
+});
+
+test('savings: noha na spořicím s vlastním protiúčtem zůstane, když pár v datech není', async () => {
+  const { db, app, savingsId } = setupSavings();
+  const { server, base } = await listen(app);
+  // druhý vlastní účet uživatel nemá naimportovaný → protilehlá noha v DB chybí;
+  // pohyb se nesmí zahodit, jinak z přehledu zmizí skutečný vklad
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id) VALUES (1,3000,'2026-08-12','Tomáš Střída',?,?)").run(MAIN_ACC, savingsId);
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-08`)).json();
+  assert.equal(stats.savings.deposits, 3000);
+  assert.equal(stats.savings.transfers.length, 1);
+  server.close();
+});
+
+test('savings: dva stejné převody ve stejný den spárují obě nohy 1:1', async () => {
+  const { db, app, savingsId, mainId } = setupSavings();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id) VALUES (1,-1000,'2026-08-14','Tomáš Střída',?,?),(1,-1000,'2026-08-14','Tomáš Střída',?,?)").run(SAVINGS_ACC, mainId, SAVINGS_ACC, mainId);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id) VALUES (1,1000,'2026-08-14','Tomáš Střída',?,?),(1,1000,'2026-08-14','Tomáš Střída',?,?)").run(MAIN_ACC, savingsId, MAIN_ACC, savingsId);
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-08`)).json();
+  assert.equal(stats.savings.deposits, 2000, 'oba převody právě jednou');
+  assert.equal(stats.savings.transfers.length, 2);
+  server.close();
+});
+
+test('savings: bez založeného spořicího účtu funguje aspoň větev přes protiúčet', async () => {
+  const { db, app } = setup();          // žádný účet v accounts
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account) VALUES (1,-5000,'2026-08-10','Tomáš Střída','1679014082/3030')").run();
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-08`)).json();
+  assert.equal(stats.savings.deposits, 5000);
+  assert.equal(stats.savings.transfers.length, 1);
+  server.close();
+});
+
+test('savings: číslo účtu s mezerami se rozpozná jako vlastní účet', async () => {
+  const { db, app, savingsId, mainId } = setupSavings();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id) VALUES (1,-2000,'2026-08-16','Tomáš Střída',?,?)").run(' 1679014082/3030 ', mainId);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id) VALUES (1,2000,'2026-08-16','Tomáš Střída',?,?)").run(' 1679014138/3030 ', savingsId);
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-08`)).json();
+  assert.equal(stats.savings.deposits, 2000, 'jen jedna noha');
+  assert.equal(stats.savings.transfers.length, 1);
+  server.close();
+});
