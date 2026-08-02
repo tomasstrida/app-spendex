@@ -91,6 +91,15 @@ function parseEmailNotification(text) {
     }
   }
 
+  // Převod na účet (typicky i QR platba): e-mail typ úhrady neuvádí, na rozdíl od CSV.
+  // Doplní se ze směru, s názvoslovím převzatým z CSV od banky („Odchozí/Příchozí
+  // úhrada"), aby stejná platba měla stejný typ bez ohledu na cestu do Spendexu.
+  // Podmínkou je protiúčet — platby bez něj (inkaso, splátka půjčky, poplatek)
+  // převody nejsou a e-mail je od sebe neodliší, takže zůstávají bez typu.
+  if (!tx_type && counterparty_account) {
+    tx_type = sign < 0 ? 'Odchozí úhrada' : 'Příchozí úhrada';
+  }
+
   // Zpráva pro plátce i příjemce → note (obě zachovat; e-mail může mít obě —
   // "plátce" = účel platby, "příjemce" = jméno/identifikace protistrany).
   const payerM = body.match(/Zpráva pro plátce:\s*(.+)/i);

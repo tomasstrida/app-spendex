@@ -149,7 +149,47 @@ test('převod nemá kartu ani místo', () => {
   const tx = parseEmailNotification(OUTGOING);
   assert.equal(tx.place, null);
   assert.equal(tx.card_last4, null);
+});
+
+// Typ úhrady u převodů: e-mail ho na rozdíl od CSV neuvádí, doplňuje se ze směru.
+// Názvosloví je převzaté z CSV od banky, aby stejná platba měla stejný typ bez
+// ohledu na to, kterou cestou do Spendexu dorazila.
+test('odchozí převod dostane typ „Odchozí úhrada"', () => {
+  const tx = parseEmailNotification(OUTGOING);
+  assert.equal(tx.tx_type, 'Odchozí úhrada');
+});
+
+test('příchozí převod dostane typ „Příchozí úhrada"', () => {
+  const tx = parseEmailNotification(`zůstatek na účtu Společný číslo 1679014023/3030 se zvýšil o částku 15,00 CZK. Dostupný zůstatek k 07.06.2026 v 22:21 je 4 890,66 CZK.
+
+Příchozí úhrada z účtu Tomáš Střída číslo 1679014138/3030
+Částka: 15,00 CZK
+Datum zaúčtování: 07.06.2026
+Kód transakce: 160614737162`);
+  assert.equal(tx.tx_type, 'Příchozí úhrada');
+});
+
+test('platba bez protiúčtu (splátka půjčky) typ nedostane — není to převod', () => {
+  const tx = parseEmailNotification(LOAN_PAYMENT);
   assert.equal(tx.tx_type, null);
+});
+
+test('převod bez jména protistrany, ale s protiúčtem, typ dostane', () => {
+  const tx = parseEmailNotification(`zůstatek na účtu Společný číslo 1679014023/3030 se snížil o částku 230,00 CZK. Dostupný zůstatek k 25.07.2026 v 12:08 je 1 000,00 CZK.
+
+Pro úplnost uvádíme detaily této úhrady:
+
+Odchozí úhrada na účet číslo 201220675/0600
+Částka: 230,00 CZK
+Datum zaúčtování: 25.07.2026
+Zpráva pro plátce: káva na vodě ve stánku
+Kód transakce: 164703698812`);
+  assert.equal(tx.tx_type, 'Odchozí úhrada');
+});
+
+test('karetní platba si typ „Platba kartou" udrží', () => {
+  const tx = parseEmailNotification(CARD);
+  assert.equal(tx.tx_type, 'Platba kartou');
 });
 
 // Korekce karetní blokace: obchodník při placení zablokuje odhadní/zaokrouhlenou
