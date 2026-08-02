@@ -77,10 +77,18 @@
 }
 
 .app-main {
+  --page-pad: 32px;
   flex: 1;
   overflow-y: auto;
-  padding: 32px;
+  /* Horní odsazení NENÍ padding scroll containeru, ale margin prvního prvku obsahu:
+     sticky prvky se lepí až pod horní padding scrollportu a v tom pásu by obsah
+     projížděl viditelně nad nimi. Takhle je `top: 0` opravdu horní hrana.
+     Margin neprosákne ven — overflow != visible zakládá BFC. */
+  padding: 0 var(--page-pad) var(--page-pad);
   min-width: 0;
+}
+.app-main > :first-child {
+  margin-top: var(--page-pad);
 }
 
 /* ── Sidebar ── */
@@ -260,7 +268,7 @@
     display: flex;
   }
   .app-main {
-    padding: 16px;
+    --page-pad: 16px;
   }
   .sidebar {
     position: fixed;
@@ -1216,10 +1224,10 @@ a.report-subcat-row:hover { background: var(--bg2); }
   flex-direction: column;
 }
 
-/* Hlavička zůstává čitelná i po odscrollování filtrů — scroll container je
-   `.app-main`, takže `top: 0` ji zastaví u horní hrany stránky. Neprůhledné pozadí
-   je nutné, jinak by pod ní prosvítaly řádky; z-index drží pod mobilním hamburgerem
-   (z-index 40) a pod otevřeným sidebarem. */
+/* Hlavička zůstává čitelná i po odscrollování filtrů. Scroll container je `.app-main`
+   a nemá horní padding (viz tam), takže `top: 0` je opravdu horní hrana a řádky nemají
+   kudy projet nad hlavičkou. Neprůhledné pozadí je nutné, jinak by pod hlavičkou
+   prosvítaly; z-index drží pod mobilním hamburgerem (40) i sidebarem (60). */
 .tx-header-row {
   display: grid;
   gap: 12px;
