@@ -991,8 +991,16 @@ a.report-subcat-row:hover { background: var(--bg2); }
   color: var(--text);
 }
 
+/* Aktivní filtr musí být poznat na první pohled. Podklad v barvě + plný rámeček
+   + halo; text zůstává světlý (barva kategorie na tmavém pozadí je u tmavších
+   odstínů nečitelná). Chipy kategorií si barvu přebíjejí inline, tohle je výchozí
+   stav pro ty bez vlastní barvy (subkategorie). */
 .tx-chip-active {
   color: var(--text);
+  font-weight: 600;
+  background: rgba(99, 102, 241, 0.32);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.16);
 }
 
 .tx-chip-dot {
@@ -1011,9 +1019,10 @@ a.report-subcat-row:hover { background: var(--bg2); }
   padding-left: 10px;
 }
 .tx-chip-none.tx-chip-active {
-  background: var(--bg3);
+  background: rgba(139, 144, 167, 0.32);
   color: var(--text);
   border-color: var(--text2);
+  box-shadow: 0 0 0 3px rgba(139, 144, 167, 0.16);
 }
 
 .tx-amount-filter {
@@ -1207,11 +1216,19 @@ a.report-subcat-row:hover { background: var(--bg2); }
   flex-direction: column;
 }
 
+/* Hlavička zůstává čitelná i po odscrollování filtrů — scroll container je
+   `.app-main`, takže `top: 0` ji zastaví u horní hrany stránky. Neprůhledné pozadí
+   je nutné, jinak by pod ní prosvítaly řádky; z-index drží pod mobilním hamburgerem
+   (z-index 40) a pod otevřeným sidebarem. */
 .tx-header-row {
   display: grid;
   gap: 12px;
-  padding: 6px 8px 8px;
+  padding: 10px 8px 8px;
   border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg);
 }
 
 .tx-th {

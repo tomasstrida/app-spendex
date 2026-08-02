@@ -738,10 +738,13 @@ export default function TransactionsPage() {
                       key={c.id}
                       className={`tx-chip${active ? ' tx-chip-active' : ''}`}
                       onClick={() => toggleCatChip(String(c.id))}
+                      // Aktivní chip: sytější podklad, plný rámeček a halo v barvě
+                      // kategorie. Text zůstává světlý — barva kategorie jako text
+                      // je u tmavších odstínů na tmavém pozadí nečitelná.
                       style={active ? {
-                        background: color + '33',
-                        color: color,
-                        borderColor: color + '66',
+                        background: color + '52',
+                        borderColor: color,
+                        boxShadow: `0 0 0 3px ${color}29`,
                       } : { '--chip-dot': color }}
                     >
                       <span className="tx-chip-dot" style={{ background: color }} />
