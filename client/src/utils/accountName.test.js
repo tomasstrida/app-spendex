@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeAccountNumber, buildAccountNameMap, accountNameFor } from './accountName.js';
+import { normalizeAccountNumber, buildAccountNameMap, accountNameFor, placeDisplay } from './accountName.js';
 
 test('normalizace zachová kompletní číslo, ořeže jen mezery', () => {
   assert.equal(normalizeAccountNumber(' 1679014082/3030 '), '1679014082/3030');
@@ -38,4 +38,44 @@ test('prázdný vstup vrátí null', () => {
   const map = buildAccountNameMap(accounts);
   assert.equal(accountNameFor('', map), null);
   assert.equal(accountNameFor(null, map), null);
+});
+
+const txAccounts = [
+  { account_number: '1679014138/3030', name: 'Hlavní' },
+  { account_number: '1679014023/3030', name: 'Společný' },
+];
+
+test('placeDisplay: vyplněné place má přednost a není odvozené', () => {
+  const map = buildAccountNameMap(txAccounts);
+  const r = placeDisplay({ place: 'ALBERT 1234', counterparty_account: '1679014138/3030' }, map);
+  assert.deepEqual(r, { text: 'ALBERT 1234', derived: false });
+});
+
+test('placeDisplay: interní protiúčet → "číslo · název", označeno jako odvozené', () => {
+  const map = buildAccountNameMap(txAccounts);
+  const r = placeDisplay({ place: null, counterparty_account: '1679014138/3030' }, map);
+  assert.deepEqual(r, { text: '1679014138/3030 · Hlavní', derived: true });
+});
+
+test('placeDisplay: externí protiúčet → holé číslo (QR platba ve stánku)', () => {
+  const map = buildAccountNameMap(txAccounts);
+  const r = placeDisplay({ place: '', counterparty_account: '201220675/0600' }, map);
+  assert.deepEqual(r, { text: '201220675/0600', derived: true });
+});
+
+test('placeDisplay: bez place i bez protiúčtu → null', () => {
+  const map = buildAccountNameMap(txAccounts);
+  assert.equal(placeDisplay({ place: null, counterparty_account: null }, map), null);
+  assert.equal(placeDisplay({ place: '', counterparty_account: '' }, map), null);
+});
+
+test('placeDisplay: mezery v čísle účtu nevadí, výstup je normalizované číslo', () => {
+  const map = buildAccountNameMap(txAccounts);
+  const r = placeDisplay({ place: null, counterparty_account: ' 1679014023/3030 ' }, map);
+  assert.deepEqual(r, { text: '1679014023/3030 · Společný', derived: true });
+});
+
+test('placeDisplay: chybějící tx nebo mapa nespadne', () => {
+  assert.equal(placeDisplay(null, new Map()), null);
+  assert.deepEqual(placeDisplay({ place: 'X' }, null), { text: 'X', derived: false });
 });

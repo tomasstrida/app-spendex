@@ -5,7 +5,7 @@ import Layout from '../components/Layout';
 import { formatCurrency, formatPeriod, addPeriods, t } from '../i18n';
 import { usePeriod } from '../contexts/PeriodContext';
 import { usePeriodKeys } from '../hooks/usePeriodKeys';
-import { buildAccountNameMap } from '../utils/accountName';
+import { buildAccountNameMap, placeDisplay } from '../utils/accountName';
 import { accountFlow } from '../utils/accountFlow';
 
 const ALL_COLS = [
@@ -1161,8 +1161,21 @@ function renderCell(key, tx, categories, accountNameMap, accountById) {
         </span>
       );
     }
-    case 'place':
-      return <span style={{ fontSize: 13 }}>{tx.place || '—'}</span>;
+    case 'place': {
+      // Prázdné `place` (QR platby, převody) → protiúčet; odvozená hodnota ztlumeně,
+      // ať je poznat, že to není obchodní místo hlášené bankou.
+      const pd = placeDisplay(tx, accountNameMap);
+      if (!pd) return <span style={{ fontSize: 13 }}>—</span>;
+      return (
+        <span
+          className={pd.derived ? 'text-muted' : undefined}
+          title={pd.text}
+          style={{ fontSize: 13 }}
+        >
+          {pd.text}
+        </span>
+      );
+    }
     case 'note':
       return <span className="text-muted" style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.note || '—'}</span>;
     case 'amount':

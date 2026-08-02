@@ -20,3 +20,20 @@ export function accountNameFor(counterpartyAccount, nameMap) {
   if (!counterpartyAccount || !nameMap) return null;
   return nameMap.get(normalizeAccountNumber(counterpartyAccount)) || null;
 }
+
+// Zobrazované "Obchodní místo". Parsery plní `place` jen u kartových plateb —
+// u QR plateb a převodů zůstává prázdné, i když z transakce víme, komu peníze šly.
+// Fallback je čistě zobrazovací: DB se nemění, aby se nerozšířil haystack
+// textových pravidel (apply-rules) ani matcheru fixních plateb.
+// Vrací null, když není co zobrazit — volající vykreslí „—".
+export function placeDisplay(tx, nameMap) {
+  if (!tx) return null;
+  const place = (tx.place || '').trim();
+  if (place) return { text: place, derived: false };
+
+  const cp = normalizeAccountNumber(tx.counterparty_account);
+  if (!cp) return null;
+
+  const name = accountNameFor(cp, nameMap);
+  return { text: name ? `${cp} · ${name}` : cp, derived: true };
+}
