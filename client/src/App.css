@@ -991,16 +991,16 @@ a.report-subcat-row:hover { background: var(--bg2); }
   color: var(--text);
 }
 
-/* Aktivní filtr musí být poznat na první pohled. Podklad v barvě + plný rámeček
-   + halo; text zůstává světlý (barva kategorie na tmavém pozadí je u tmavších
-   odstínů nečitelná). Chipy kategorií si barvu přebíjejí inline, tohle je výchozí
-   stav pro ty bez vlastní barvy (subkategorie). */
-.tx-chip-active {
-  color: var(--text);
+/* Aktivní filtr je JEDNOTNĚ fialový (barva Spendex ikonky) napříč všemi chipy —
+   nezávisle na barvě kategorie. Barva kategorie zůstává v tečce, zvýraznění nese
+   plný brand podklad + bílý text, aby bylo na první pohled jasné, co je zapnuté. */
+.tx-chip-active,
+.tx-chip-active:hover {
+  color: #fff;
   font-weight: 600;
-  background: rgba(99, 102, 241, 0.32);
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.16);
+  background: var(--brand);
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(134, 59, 255, 0.35);
 }
 
 .tx-chip-dot {
@@ -1010,6 +1010,11 @@ a.report-subcat-row:hover { background: var(--bg2); }
   display: inline-block;
   flex-shrink: 0;
 }
+/* Na fialovém podkladu by tečka fialové kategorie splynula — světlý prstenec
+   ji udrží čitelnou u všech barev. */
+.tx-chip-active .tx-chip-dot {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.65);
+}
 
 .tx-chip-none {
   font-style: italic;
@@ -1018,12 +1023,7 @@ a.report-subcat-row:hover { background: var(--bg2); }
 .tx-chip-none {
   padding-left: 10px;
 }
-.tx-chip-none.tx-chip-active {
-  background: rgba(139, 144, 167, 0.32);
-  color: var(--text);
-  border-color: var(--text2);
-  box-shadow: 0 0 0 3px rgba(139, 144, 167, 0.16);
-}
+/* „Bez kategorie" se řídí stejným pravidlem jako ostatní chipy — žádná výjimka. */
 
 .tx-amount-filter {
   display: flex;
