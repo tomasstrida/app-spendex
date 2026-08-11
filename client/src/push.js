@@ -63,7 +63,7 @@ export async function fetchPushStatus() {
     const r = await fetch('/api/push/status', { credentials: 'include' });
     if (!r.ok) return null;
     return r.json(); // { count, subscriptions: [{ endpoint, last_success_at, last_error, ... }] }
-  } catch (_e) {
+  } catch {
     return null;
   }
 }
@@ -85,7 +85,7 @@ export async function syncPush() {
       body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
     });
     return r.ok;
-  } catch (_e) {
+  } catch {
     return false;
   }
 }

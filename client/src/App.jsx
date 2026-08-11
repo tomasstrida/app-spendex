@@ -68,7 +68,7 @@ function SwNavigationBridge() {
       const d = event.data;
       if (!d || d.type !== 'navigate' || !d.url) return;
       let target = d.url;
-      try { target = new URL(d.url, window.location.origin).pathname + new URL(d.url, window.location.origin).search; } catch (_e) { /* použij raw */ }
+      try { target = new URL(d.url, window.location.origin).pathname + new URL(d.url, window.location.origin).search; } catch { /* použij raw */ }
       navigate(target);
     };
     navigator.serviceWorker.addEventListener('message', onMessage);

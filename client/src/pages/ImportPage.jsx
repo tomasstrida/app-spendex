@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { Upload, Check, AlertCircle, Plus, Pencil, Trash2, X, Download, Inbox, Mail } from 'lucide-react';
+import { Upload, Check, Plus, Trash2, X, Download, Inbox, Mail } from 'lucide-react';
 import Layout from '../components/Layout';
 import { formatCurrency } from '../i18n';
 import { CategoryIcon } from '../categoryIcons';

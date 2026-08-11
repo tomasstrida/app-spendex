@@ -4,7 +4,7 @@ self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim(
 
 self.addEventListener('push', (event) => {
   let data = { title: 'SPENDEX', body: 'Nová platba k zařazení', url: '/import' };
-  try { if (event.data) data = { ...data, ...event.data.json() }; } catch (_e) { /* keep default */ }
+  try { if (event.data) data = { ...data, ...event.data.json() }; } catch { /* keep default */ }
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
@@ -23,11 +23,11 @@ self.addEventListener('notificationclick', (event) => {
     const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     // Jen okna stejného originu (vyhneme se zaostření cizí karty).
     const windows = list.filter((c) => {
-      try { return new URL(c.url).origin === self.location.origin; } catch (_e) { return false; }
+      try { return new URL(c.url).origin === self.location.origin; } catch { return false; }
     });
     if (windows.length > 0) {
       const c = windows[0];
-      try { await c.focus(); } catch (_e) { /* fokus nemusí projít */ }
+      try { await c.focus(); } catch { /* fokus nemusí projít */ }
       // Hlavní cesta: appka přesměruje sama přes React Router (spolehlivé i když
       // je už otevřená na jiné stránce, kde c.navigate() na iOS PWA selhává).
       c.postMessage({ type: 'navigate', url });

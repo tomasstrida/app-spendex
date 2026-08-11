@@ -2,6 +2,7 @@ import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
+import react from 'eslint-plugin-react'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
@@ -25,8 +26,18 @@ export default defineConfig([
         sourceType: 'module',
       },
     },
+    plugins: { react },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      // Bez `jsx-uses-vars` nevidí `no-unused-vars` použití komponenty v JSX:
+      // `<Icon />` neplatilo jako čtení proměnné, takže destrukturovaná
+      // komponenta padala jako nepoužitá. Zbytek pravidel pluginu záměrně
+      // nezapínáme — jde jen o to, aby lint o JSX věděl pravdu.
+      'react/jsx-uses-vars': 'error',
+      'no-unused-vars': 'error',
+      // Hlídá jen hot reload ve vývoji, ne správnost běhu. Splnit ho by
+      // znamenalo rozdělovat soubory (context + provider apod.) — cena vyšší
+      // než užitek, tak ať je vidět, ale neblokuje.
+      'react-refresh/only-export-components': 'warn',
     },
   },
 ])

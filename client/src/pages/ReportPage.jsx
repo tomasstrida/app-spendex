@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Check, X } from 'lucid
 import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
 import { formatExpectedAmount } from '../utils/expectedAmount';
-import { fixedActualTotal, computeMeetingSurplus } from '../utils/meetingBalance';
+import { computeMeetingSurplus } from '../utils/meetingBalance';
 import { unmatchedIncome, unmatchedLabel } from '../utils/unmatchedIncome';
 
 // ── Status budgetu ────────────────────────────────────────────────────────────

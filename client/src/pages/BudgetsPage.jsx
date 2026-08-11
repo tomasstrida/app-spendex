@@ -141,7 +141,7 @@ function windowLabel(ws, we) {
 
 // ── Sekce Typ 2 ───────────────────────────────────────────────────────────────
 
-function Type2Section({ categories, year, onYearChange }) {
+function Type2Section({ categories, year }) {
   const type2Cats = categories.filter(c => c.type === 2);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
