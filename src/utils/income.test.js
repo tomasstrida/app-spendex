@@ -180,6 +180,45 @@ test('alias bez account_id (null) matchne libovolnou destinaci — backward comp
   assert.equal(rows[0].actual, 100000);
 });
 
+test('alias bez account_id sečte platby od stejného odesílatele na RŮZNÉ cílové účty', () => {
+  const { db, tmp } = freshDb();
+  seedUser(db);
+  db.prepare("INSERT INTO accounts (id, user_id, name, account_number, role) VALUES (10, 1, 'Hlavní', '1679014138/3030', 'ignored')").run();
+  db.prepare("INSERT INTO accounts (id, user_id, name, account_number, role) VALUES (11, 1, 'Spořicí', '1679014082/3030', 'ignored')").run();
+  db.prepare("INSERT INTO income_sources (user_id, person, planned_amount, match_counterparty_account, sort_order) VALUES (1, 'Martin', 20000, '1812270019/3030', 1)").run();
+  // Stejný odesílatel, dvě různé destinace → dvě skupiny (cp × account_id).
+  const a = db.prepare("INSERT INTO transactions (user_id, account_id, amount, date, description, counterparty_account) VALUES (1, 11, 100, '2026-08-02', 'Libor Bísek', '1812270019/3030')").run().lastInsertRowid;
+  const b = db.prepare("INSERT INTO transactions (user_id, account_id, amount, date, description, counterparty_account) VALUES (1, 10, 20000, '2026-08-06', 'Libor Bísek', '1812270019/3030')").run().lastInsertRowid;
+
+  const { incomeSourcesForPeriod } = require('./income');
+  const rows = incomeSourcesForPeriod(db, 1, '2026-08', 1);
+  cleanup(db, tmp);
+  const m = rows.find(r => r.person === 'Martin');
+  assert.equal(m.actual, 20100, 'alias musí sečíst obě skupiny, ne jen první');
+  assert.equal(m.tx_count, 2);
+  assert.deepEqual([...m.tx_ids].sort((x, y) => x - y), [a, b].sort((x, y) => x - y));
+  // nic nesmí propadnout do auto-only (tichá ztráta v bilanci Schůzky)
+  assert.equal(rows.filter(r => r.id == null).length, 0);
+});
+
+test('specifičtější alias (s account_id) má přednost před aliasem bez omezení', () => {
+  const { db, tmp } = freshDb();
+  seedUser(db);
+  db.prepare("INSERT INTO accounts (id, user_id, name, account_number, role) VALUES (10, 1, 'Hlavní', '1679014138/3030', 'ignored')").run();
+  db.prepare("INSERT INTO accounts (id, user_id, name, account_number, role) VALUES (11, 1, 'Spořicí', '1679014082/3030', 'ignored')").run();
+  // Obecný alias (bez destinace) je v pořadí první, specifický druhý.
+  db.prepare("INSERT INTO income_sources (user_id, person, planned_amount, match_counterparty_account, account_id, sort_order) VALUES (1, 'Obecný', 0, '1812270019/3030', NULL, 1)").run();
+  db.prepare("INSERT INTO income_sources (user_id, person, planned_amount, match_counterparty_account, account_id, sort_order) VALUES (1, 'Na spořicí', 0, '1812270019/3030', 11, 2)").run();
+  db.prepare("INSERT INTO transactions (user_id, account_id, amount, date, description, counterparty_account) VALUES (1, 10, 20000, '2026-08-06', 'Libor Bísek', '1812270019/3030')").run();
+  db.prepare("INSERT INTO transactions (user_id, account_id, amount, date, description, counterparty_account) VALUES (1, 11, 100, '2026-08-02', 'Libor Bísek', '1812270019/3030')").run();
+
+  const { incomeSourcesForPeriod } = require('./income');
+  const rows = incomeSourcesForPeriod(db, 1, '2026-08', 1);
+  cleanup(db, tmp);
+  assert.equal(rows.find(r => r.person === 'Na spořicí').actual, 100);
+  assert.equal(rows.find(r => r.person === 'Obecný').actual, 20000);
+});
+
 test('normCounterparty: kompletní číslo účtu = předčíslí + číslo + kód banky, ořezávají se jen mezery', () => {
   const { normCounterparty } = require('./income');
   // kompletní číslo se zachová celé

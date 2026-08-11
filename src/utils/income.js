@@ -90,79 +90,76 @@ function incomeSourcesForPeriod(db, userId, period, billingDay) {
   const sources = db.prepare(
     'SELECT id, person, planned_amount, match_pattern, match_counterparty_account, account_id, sort_order FROM income_sources WHERE user_id = ? ORDER BY sort_order ASC, id ASC'
   ).all(userId);
-  const usedSourceIds = new Set();
   const groupSource = new Map();
+  // Agregace per zdroj: jeden alias může posbírat VÍC skupin. Odesílatel může
+  // v období poslat víc plateb a klidně na různé cílové účty — dřívější model
+  // „1 alias = 1 skupina" nechal zbytek propadnout do auto-only, odkud ho
+  // Schůzka (striktní whitelist) tiše vyhodila z bilance.
+  const sourceAgg = new Map();
 
   function matchAccountConstraint(alias, g) {
     if (alias.account_id == null) return true;
     return alias.account_id === g.account_id;
   }
 
+  // Ze shodných kandidátů vyhrává specifičtější, tj. ten s omezením na cílový
+  // účet — jinak by obecný alias (account_id = null) sebral i skupinu, pro
+  // kterou existuje vlastní zdroj.
+  function preferSpecific(candidates) {
+    return candidates.find(s => s.account_id != null) || candidates[0] || null;
+  }
+
   for (const g of groups.values()) {
     let matched = null;
     if (g.counterparty) {
-      matched = sources.find(s => {
-        if (usedSourceIds.has(s.id)) return false;
+      matched = preferSpecific(sources.filter(s => {
         const sn = normCounterparty(s.match_counterparty_account);
         if (!sn || sn !== g.counterparty) return false;
         return matchAccountConstraint(s, g);
-      });
+      }));
     }
     if (!matched) {
-      matched = sources.find(s => {
-        if (!s.match_pattern || usedSourceIds.has(s.id)) return false;
+      matched = preferSpecific(sources.filter(s => {
+        if (!s.match_pattern) return false;
         if (!matchAccountConstraint(s, g)) return false;
         const p = s.match_pattern;
         for (const d of g.descriptions) {
           if (d && d.indexOf(p) >= 0) return true;
         }
         return false;
-      });
+      }));
     }
     if (matched) {
       groupSource.set(g.key, matched);
-      usedSourceIds.add(matched.id);
+      let agg = sourceAgg.get(matched.id);
+      if (!agg) {
+        agg = { total: 0, tx_count: 0, tx_ids: [] };
+        sourceAgg.set(matched.id, agg);
+      }
+      agg.total += g.total;
+      agg.tx_count += g.tx_count;
+      agg.tx_ids.push(...g.tx_ids);
     }
   }
 
   const out = [];
   for (const s of sources) {
     const accountName = s.account_id != null ? (accountNameById.get(s.account_id) || null) : null;
-    if (!usedSourceIds.has(s.id)) {
-      out.push({
-        id: s.id,
-        person: s.person,
-        planned_amount: s.planned_amount,
-        match_pattern: s.match_pattern,
-        match_counterparty_account: s.match_counterparty_account,
-        account_id: s.account_id,
-        account_name: accountName,
-        actual: 0,
-        tx_count: 0,
-        tx_ids: [],
-        status: s.planned_amount > 0 ? incomeStatus(s.planned_amount, 0, 0) : null,
-        sort_order: s.sort_order,
-      });
-    } else {
-      let g = null;
-      for (const [key, src] of groupSource.entries()) {
-        if (src.id === s.id) { g = groups.get(key); break; }
-      }
-      out.push({
-        id: s.id,
-        person: s.person,
-        planned_amount: s.planned_amount,
-        match_pattern: s.match_pattern,
-        match_counterparty_account: s.match_counterparty_account,
-        account_id: s.account_id,
-        account_name: accountName,
-        actual: g.total,
-        tx_count: g.tx_count,
-        tx_ids: g.tx_ids,
-        status: s.planned_amount > 0 ? incomeStatus(s.planned_amount, g.total, g.tx_count) : null,
-        sort_order: s.sort_order,
-      });
-    }
+    const agg = sourceAgg.get(s.id) || { total: 0, tx_count: 0, tx_ids: [] };
+    out.push({
+      id: s.id,
+      person: s.person,
+      planned_amount: s.planned_amount,
+      match_pattern: s.match_pattern,
+      match_counterparty_account: s.match_counterparty_account,
+      account_id: s.account_id,
+      account_name: accountName,
+      actual: agg.total,
+      tx_count: agg.tx_count,
+      tx_ids: agg.tx_ids,
+      status: s.planned_amount > 0 ? incomeStatus(s.planned_amount, agg.total, agg.tx_count) : null,
+      sort_order: s.sort_order,
+    });
   }
 
   const autoOnly = [];
