@@ -7,6 +7,7 @@ import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
 import { formatExpectedAmount } from '../utils/expectedAmount';
 import { fixedActualTotal, computeMeetingSurplus } from '../utils/meetingBalance';
+import { unmatchedIncome, unmatchedLabel } from '../utils/unmatchedIncome';
 
 // ── Status budgetu ────────────────────────────────────────────────────────────
 
@@ -229,6 +230,9 @@ export default function ReportPage() {
 
   // Striktní whitelist: do bilance i sekce Příjmy vstupují jen ručně aliasované zdroje
   const aliasedSources   = incomeSources.filter(s => s.id != null);
+  // Zbytek (auto-only) do bilance nevstupuje — ale musí být vidět, že existuje,
+  // jinak chybějící příjem na stránce nijak nepoznáš.
+  const unmatched = unmatchedIncome(incomeSources);
   const totalPlanned = aliasedSources.reduce((s, i) => s + (i.planned_amount || 0), 0);
   const totalType1Budget = budgets.reduce((s, b) => s + b.amount, 0);
   // Očekávaný měsíční příspěvek do fondů (Typ 3)
@@ -479,6 +483,16 @@ export default function ReportPage() {
                   );
                 })}
               </div>
+            )}
+            {unmatched.count > 0 && (
+              <Link
+                to={txLink(unmatched.tx_ids.length ? `tx_ids=${unmatched.tx_ids.join(',')}` : 'direction=in')}
+                className="report-income-warning"
+                title="Klik: příchozí platby, které nepatří k žádnému zdroji příjmu">
+                <span aria-hidden="true">⚠️</span>
+                <span>{unmatchedLabel(unmatched.count)} – není v bilanci</span>
+                <span className="report-income-amount">{formatCurrency(unmatched.total)}</span>
+              </Link>
             )}
             <div className="report-subtotal">
               <span>Příjmy celkem</span>

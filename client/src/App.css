@@ -557,6 +557,24 @@
 .report-income-person { font-weight: 500; min-width: 80px; }
 .report-income-amount { margin-left: auto; font-weight: 600; }
 
+/* Varování: příchozí platby mimo definované zdroje (nejsou v bilanci).
+   Oranžová = stejný semafor jako „hrozí přečerpání" u teploměrů. */
+.report-income-warning {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  border-radius: 8px;
+  border: 1px solid #f9731666;
+  background: #f9731614;
+  color: var(--text);
+  text-decoration: none;
+  transition: background 0.12s;
+}
+.report-income-warning:hover { background: #f9731626; text-decoration: none; }
+
 /* Income form */
 .income-form { margin-bottom: 12px; }
 .income-form-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
