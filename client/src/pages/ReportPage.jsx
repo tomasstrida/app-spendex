@@ -202,20 +202,28 @@ export default function ReportPage() {
     }).finally(() => setLoading(false));
   }, [period]);
 
-  function handleIncomeSaved(row) {
-    if (editIncome) {
-      setIncomeSources(prev => prev.map(i => i.id === row.id ? { ...i, ...row } : i));
-      setEditIncome(null);
-    } else {
-      setIncomeSources(prev => [...prev, { ...row, actual: 0, tx_count: 0, status: null }]);
-      setShowIncomeForm(false);
-    }
+  // Skutečnost u zdroje (actual / tx_count / tx_ids / status) počítá backend —
+  // párování protistrany × cílového účtu z lokálních dat poskládat nejde. Každá
+  // mutace proto musí sáhnout pro čerstvý stav, jinak řádek lže: nový zdroj by
+  // do reloadu ukazoval 0 Kč, změna matcheru by nechala částku podle starého
+  // pravidla a smazání by zatajilo, že se uvolněná platba vrátila mezi
+  // nezařazené.
+  async function refreshIncome() {
+    if (!period) return;
+    const inc = await fetch(`/api/income?period=${period}`).then(r => r.json());
+    setIncomeSources(inc.sources || []);
+  }
+
+  async function handleIncomeSaved() {
+    setEditIncome(null);
+    setShowIncomeForm(false);
+    await refreshIncome();
   }
 
   async function handleDeleteIncome(id) {
     if (!confirm('Smazat tento příjmový zdroj?')) return;
     const r = await fetch(`/api/income/${id}`, { method: 'DELETE' });
-    if (r.ok) setIncomeSources(prev => prev.filter(i => i.id !== id));
+    if (r.ok) await refreshIncome();
   }
 
   // Výdaje dle typu kategorie (z by_category)
