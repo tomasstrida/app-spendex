@@ -158,20 +158,19 @@ function Type2Section({ categories, year, onYearChange }) {
 
   useEffect(() => { load(); }, [year]);
 
+  // `spent`, `window_from` a `window_to` dopočítává až GET z okna podpoložky —
+  // mutace vracejí syrový řádek. Po každé z nich proto načíst znovu, jinak by
+  // změna okna nechala u položky čerpání spočítané podle starého období.
   async function handleDeleteItem(item) {
     if (!confirm(`Smazat podpoložku "${item.name}"?`)) return;
     const r = await fetch(`/api/budget-items/${item.id}`, { method: 'DELETE' });
-    if (r.ok) setItems(prev => prev.filter(i => i.id !== item.id));
+    if (r.ok) load();
   }
 
-  function handleSaved(savedItem) {
-    if (editItem) {
-      setItems(prev => prev.map(i => i.id === savedItem.id ? { ...i, ...savedItem } : i));
-      setEditItem(null);
-    } else {
-      load(); // reload with spent
-      setAddingFor(null);
-    }
+  function handleSaved() {
+    setEditItem(null);
+    setAddingFor(null);
+    load();
   }
 
   if (type2Cats.length === 0) return (
@@ -317,18 +316,11 @@ function Type3Section({ categories, year }) {
 
   useEffect(() => { load(); }, [year]);
 
-  function handleSaved(updatedCat) {
-    setFunds(prev => prev.map(f => f.id === updatedCat.id
-      ? {
-          ...f,
-          typical_price: updatedCat.typical_price,
-          frequency_months: updatedCat.frequency_months,
-          monthly_contribution: updatedCat.typical_price && updatedCat.frequency_months
-            ? Math.round(updatedCat.typical_price / updatedCat.frequency_months) : null,
-        }
-      : f
-    ));
+  // `monthly_contribution` počítá /api/categories/fund-status — dopočítávat ho
+  // tady znovu by znamenalo držet stejné pravidlo na dvou místech.
+  function handleSaved() {
     setEditingId(null);
+    load();
   }
 
   const type3Cats = categories.filter(c => c.type === 3);

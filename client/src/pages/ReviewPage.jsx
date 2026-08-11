@@ -25,12 +25,15 @@ export default function ReviewPage() {
   async function changeCategory(tx, categoryId) {
     setBusy(tx.id);
     try {
-      const r = await fetch(`/api/transactions/${tx.id}`, {
+      await fetch(`/api/transactions/${tx.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ category_id: categoryId, subcategory_id: null }),
       });
-      if (r.ok) setItems(prev => prev.filter(i => i.id !== tx.id)); // po přeřazení může zmizet
-      else load();
+      // Ve frontě zůstává každý výdaj z účtu role='ignored' s kategorií typu
+      // 1–3 mimo vyloučené názvy — přeřazení do jiné běžné kategorie tedy
+      // položku klidně ponechá. Odebrat ji lokálně by tvrdilo, že je vyřízená,
+      // a po reloadu by se vrátila. O tom, co ve frontě zbylo, rozhoduje server.
+      load();
     } finally { setBusy(null); }
   }
 
