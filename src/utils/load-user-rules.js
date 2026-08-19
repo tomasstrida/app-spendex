@@ -1,10 +1,11 @@
 'use strict';
-// Načte textová kategorizační pravidla uživatele z DB ve tvaru, který očekává
-// applyRules v `rules.textOverrides`. Pravidla s podmínkou na částku jdou první
-// (specifičtější výjimky jako „benzinky < 200"), pak podle pořadí vložení.
+// Načte textová/protiúčtová kategorizační pravidla uživatele z DB ve tvaru, který
+// očekává applyRules v `rules.textOverrides`. Pravidla s podmínkou na částku jdou
+// první (specifičtější výjimky jako „benzinky < 200"), pak podle pořadí vložení.
 function loadUserRules(db, userId) {
   const rows = db.prepare(`
-    SELECT r.pattern, r.amount_max_abs, r.amount_min_abs, r.subcategory_id, c.name AS category
+    SELECT r.pattern, r.amount_max_abs, r.amount_min_abs, r.subcategory_id,
+           r.match_counterparty_account, r.match_account_id, c.name AS category
     FROM category_rules r
     JOIN categories c ON c.id = r.category_id
     WHERE r.user_id = ?
@@ -15,6 +16,8 @@ function loadUserRules(db, userId) {
     if (r.amount_max_abs != null) o.amount_max_abs = r.amount_max_abs;
     if (r.amount_min_abs != null) o.amount_min_abs = r.amount_min_abs;
     if (r.subcategory_id != null) o.subcategory_id = r.subcategory_id;
+    if (r.match_counterparty_account != null) o.match_counterparty_account = r.match_counterparty_account;
+    if (r.match_account_id != null) o.match_account_id = r.match_account_id;
     return o;
   });
 }

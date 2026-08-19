@@ -45,3 +45,20 @@ test('loadUserRules: pravidlo na neexistující kategorii se nezobrazí (JOIN), 
   const outUser1 = loadUserRules(db, 1);
   assert.equal(outUser1.length, 1); // izolace: uživatel 1 vidí jen své pravidlo
 });
+
+test('loadUserRules: pravidlo s match_counterparty_account/match_account_id se propíše do výstupu', () => {
+  const db = freshDb();
+  const loadUserRules = require('./load-user-rules');
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@x')").run();
+  db.prepare("INSERT INTO categories (id, user_id, name) VALUES (20, 1, 'Y_Uctovani')").run();
+  db.prepare("INSERT INTO accounts (id, user_id, account_number, name) VALUES (7, 1, '1679014031/3030', 'Tom-OSVC')").run();
+  db.prepare(`INSERT INTO category_rules (id, user_id, category_id, pattern, match_counterparty_account, match_account_id)
+              VALUES (3, 1, 20, '', '705-77628031/0710', 7)`).run();
+
+  const out = loadUserRules(db, 1);
+  assert.equal(out.length, 1);
+  assert.deepEqual(out[0], {
+    pattern: '', category: 'Y_Uctovani',
+    match_counterparty_account: '705-77628031/0710', match_account_id: 7,
+  });
+});
