@@ -16,6 +16,8 @@ export default function RulesPage() {
   const [adv, setAdv] = useState(false);
   const [err, setErr] = useState('');
   const [query, setQuery] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [scanning, setScanning] = useState(false);
   const formRef = useRef(null);
   const patternRef = useRef(null);
 
@@ -27,11 +29,14 @@ export default function RulesPage() {
 
   const load = useCallback(async () => {
     try {
-      const [r, c] = await Promise.all([fetch('/api/rules'), fetch('/api/categories')]);
+      const [r, c, s] = await Promise.all([
+        fetch('/api/rules'), fetch('/api/categories'), fetch('/api/rules/suggestions'),
+      ]);
       if (!r.ok || !c.ok) throw new Error('load');
-      const [rj, cj] = [await r.json(), await c.json()];
+      const [rj, cj, sj] = [await r.json(), await c.json(), s.ok ? await s.json() : []];
       setRules(Array.isArray(rj) ? rj : []);
       setCats(Array.isArray(cj) ? cj : []);
+      setSuggestions(Array.isArray(sj) ? sj : []);
     } catch {
       setErr('Nepodařilo se načíst pravidla.');
     }
@@ -109,6 +114,27 @@ export default function RulesPage() {
     load();
   }
 
+  async function approveSuggestion(id) {
+    const res = await fetch(`/api/rules/suggestions/${id}/approve`, { method: 'POST' });
+    if (!res.ok) { setErr((await res.json().catch(() => ({}))).error || 'Chyba.'); return; }
+    load();
+  }
+
+  async function dismissSuggestion(id) {
+    const res = await fetch(`/api/rules/suggestions/${id}/dismiss`, { method: 'POST' });
+    if (!res.ok) { setErr((await res.json().catch(() => ({}))).error || 'Chyba.'); return; }
+    load();
+  }
+
+  async function scanHistory() {
+    setScanning(true);
+    try {
+      const res = await fetch('/api/rules/suggestions/scan', { method: 'POST' });
+      if (!res.ok) { setErr('Chyba při kontrole historie.'); return; }
+      load();
+    } finally { setScanning(false); }
+  }
+
   return (
     <Layout>
       <div className="page-header">
@@ -121,6 +147,44 @@ export default function RulesPage() {
       </p>
 
       {err && <div className="alert alert-error" style={{ marginBottom: 12, maxWidth: 900 }}>{err}</div>}
+
+      <div className="card" style={{ marginBottom: 16, maxWidth: 900 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <strong>Návrhy pravidel</strong>{' '}
+            <span className="text-muted" style={{ fontSize: 12 }}>
+              podle opakujícího se čísla protiúčtu, ne textu
+            </span>
+          </div>
+          <button className="btn btn-ghost" disabled={scanning} onClick={scanHistory}>
+            {scanning ? 'Kontroluji…' : 'Zkontrolovat historii'}
+          </button>
+        </div>
+        {suggestions.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+            {suggestions.map(s => (
+              <div key={s.id} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 8, gap: 12,
+              }}>
+                <div style={{ fontSize: 13 }}>
+                  Protiúčet <strong>{s.counterparty_account}</strong> → {s.category_name}
+                  {s.subcategory_name && <span className="text-muted"> · {s.subcategory_name}</span>}
+                  <span className="text-muted"> ({s.coverage_count}× plateb, {(s.purity * 100).toFixed(0)} % shoda)</span>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                  <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => approveSuggestion(s.id)}>
+                    Založit
+                  </button>
+                  <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => dismissSuggestion(s.id)}>
+                    Zamítnout
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div
         ref={formRef}
