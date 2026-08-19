@@ -114,3 +114,67 @@ test('L3 Splátka půjčky → Pravidelné platby', () => {
   const tx = { counterparty_account: '', ab_category: '', description: 'Splátka půjčky Půjčka 1', note: '', amount: -15000 };
   assert.equal(applyRules(tx, acc('1679014031/3030'), rules).category, 'Pravidelné platby');
 });
+
+test('L3 protiúčet: pravidlo s match_counterparty_account matchne přesné číslo', () => {
+  const r = {
+    ownAccountNumbers: [], internalTransferCategory: 'Převody',
+    textOverrides: [{ pattern: '', category: 'Y_Uctovani', match_counterparty_account: '705-77628031/0710' }],
+    accountRules: {}, abCategoryMap: {}, fallbackCategory: 'Ostatní',
+  };
+  const tx = { description: 'DPH 2026/08', note: '', counterparty_account: '705-77628031/0710', amount: -5000 };
+  assert.equal(applyRules(tx, null, r).category, 'Y_Uctovani');
+});
+
+test('L3 protiúčet: jiné číslo protiúčtu nematchne, padá na fallback', () => {
+  const r = {
+    ownAccountNumbers: [], internalTransferCategory: 'Převody',
+    textOverrides: [{ pattern: '', category: 'Y_Uctovani', match_counterparty_account: '705-77628031/0710' }],
+    accountRules: {}, abCategoryMap: {}, fallbackCategory: 'Ostatní',
+  };
+  const tx = { description: 'DPH 2026/08', note: '', counterparty_account: 'JINY999/0100', amount: -5000 };
+  assert.equal(applyRules(tx, null, r).category, 'Ostatní');
+});
+
+test('L3 protiúčet: mezery v protiúčtu se normalizují stejně jako v L0', () => {
+  const r = {
+    ownAccountNumbers: [], internalTransferCategory: 'Převody',
+    textOverrides: [{ pattern: '', category: 'Y_Uctovani', match_counterparty_account: '705-77628031/0710' }],
+    accountRules: {}, abCategoryMap: {}, fallbackCategory: 'Ostatní',
+  };
+  const tx = { description: '', note: '', counterparty_account: ' 705-77628031 / 0710 ', amount: -100 };
+  assert.equal(applyRules(tx, null, r).category, 'Y_Uctovani');
+});
+
+test('L3 protiúčet + pattern zároveň = AND (obě podmínky musí sedět)', () => {
+  const r = {
+    ownAccountNumbers: [], internalTransferCategory: 'Převody',
+    textOverrides: [{ pattern: 'DPH', category: 'Y_Uctovani', match_counterparty_account: '705-77628031/0710' }],
+    accountRules: {}, abCategoryMap: {}, fallbackCategory: 'Ostatní',
+  };
+  const okTx = { description: 'DPH 2026/08', note: '', counterparty_account: '705-77628031/0710', amount: -100 };
+  assert.equal(applyRules(okTx, null, r).category, 'Y_Uctovani');
+  const wrongText = { description: 'Něco jiného', note: '', counterparty_account: '705-77628031/0710', amount: -100 };
+  assert.equal(applyRules(wrongText, null, r).category, 'Ostatní');
+});
+
+test('L3 protiúčet: match_account_id omezí pravidlo jen na konkrétní vlastní účet', () => {
+  const r = {
+    ownAccountNumbers: [], internalTransferCategory: 'Převody',
+    textOverrides: [{ pattern: '', category: 'Y_Uctovani', match_counterparty_account: 'EXT/0100', match_account_id: 7 }],
+    accountRules: {}, abCategoryMap: {}, fallbackCategory: 'Ostatní',
+  };
+  const tx = { description: '', note: '', counterparty_account: 'EXT/0100', amount: -100 };
+  assert.equal(applyRules(tx, { id: 7, account_number: 'x' }, r).category, 'Y_Uctovani');
+  assert.equal(applyRules(tx, { id: 8, account_number: 'x' }, r).category, 'Ostatní');
+  assert.equal(applyRules(tx, null, r).category, 'Ostatní');
+});
+
+test('pravidlo bez patternu i bez match_counterparty_account nikdy nesedí (obranná pojistka)', () => {
+  const r = {
+    ownAccountNumbers: [], internalTransferCategory: 'Převody',
+    textOverrides: [{ pattern: '', category: 'X' }],
+    accountRules: {}, abCategoryMap: {}, fallbackCategory: 'Ostatní',
+  };
+  const tx = { description: 'cokoliv', note: '', counterparty_account: 'EXT/0100', amount: -100 };
+  assert.equal(applyRules(tx, null, r).category, 'Ostatní');
+});

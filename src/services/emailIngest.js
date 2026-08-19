@@ -39,7 +39,7 @@ function categorize(db, userId, tx, account) {
   // aby přejmenování kategorie v UI nerozbilo L0 detekci převodů.
   const transferName = transferCategoryName(db, userId);
   if (transferName) rules.internalTransferCategory = transferName;
-  const { category: catName, subcategory_id } = applyRules(tx, account ? { account_number: account.account_number } : null, rules);
+  const { category: catName, subcategory_id } = applyRules(tx, account ? { id: account.id, account_number: account.account_number } : null, rules);
   const row = db.prepare('SELECT id FROM categories WHERE user_id = ? AND name = ?').get(userId, catName);
   const categoryId = row ? row.id : null;
   const confident = catName !== rules.fallbackCategory && categoryId != null;
