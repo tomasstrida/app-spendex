@@ -110,3 +110,37 @@ test('dominantní subcategory_id se dopočítá z transakcí v topCat', () => {
   const out = findCounterpartyRuleCandidates(db, 1);
   assert.equal(out[0].subcategory_id, 1);
 });
+
+test('onlyCounterpartyAccount normalizuje obě strany: raw DB whitespace + clean filter param', () => {
+  const db = freshDb(); seedBase(db);
+  const { findCounterpartyRuleCandidates } = require('./counterparty-rule-candidates');
+  // Insert transactions with extra internal whitespace (exactly as codebase encounters it).
+  const rawWithWhitespace = '  705-77628031 / 0710  ';
+  for (let i = 0; i < 3; i++) {
+    db.prepare(`INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account)
+                VALUES (1, 10, -100, '2026-0${i + 1}-01', 'X', @cp)`).run({ cp: rawWithWhitespace });
+  }
+  // Call with clean, normalized form (as a freshly-approved tx might have).
+  const cleanForm = '705-77628031/0710';
+  const out = findCounterpartyRuleCandidates(db, 1, { onlyCounterpartyAccount: cleanForm });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].counterparty_account, '705-77628031/0710');
+  assert.equal(out[0].coverage_count, 3);
+});
+
+test('onlyCounterpartyAccount s raw whitespace param také normalizuje před filtrací', () => {
+  const db = freshDb(); seedBase(db);
+  const { findCounterpartyRuleCandidates } = require('./counterparty-rule-candidates');
+  // Insert transactions with clean form.
+  const clean = '705-77628031/0710';
+  for (let i = 0; i < 3; i++) {
+    db.prepare(`INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account)
+                VALUES (1, 10, -100, '2026-0${i + 1}-01', 'X', @cp)`).run({ cp: clean });
+  }
+  // Call with whitespace-containing param (as manually entered or copy-pasted).
+  const rawWithWhitespace = '  705-77628031 / 0710  ';
+  const out = findCounterpartyRuleCandidates(db, 1, { onlyCounterpartyAccount: rawWithWhitespace });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].counterparty_account, '705-77628031/0710');
+  assert.equal(out[0].coverage_count, 3);
+});

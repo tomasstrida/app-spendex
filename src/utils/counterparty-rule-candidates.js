@@ -2,21 +2,21 @@
 // Detekce kandidátů na pravidlo podle PROTIÚČTU (ne textu) — stejný princip jako
 // scripts/suggest-rules-from-history.cjs (coverage + purity), ale klíčováno přes
 // counterparty_account. Používá se reaktivně (jeden protiúčet po ručním approve)
-// i dávkově (celá история ze stránky Pravidla).
+// i dávkově (celá historie ze stránky Pravidla).
 const normalizeAccount = require('./normalize-account');
 
 const MIN_COVERAGE = 3;
 const MIN_PURITY = 0.90;
 
 function findCounterpartyRuleCandidates(db, userId, { onlyCounterpartyAccount } = {}) {
-  const cpFilter = onlyCounterpartyAccount ? normalizeAccount(onlyCounterpartyAccount) : null;
+  // Fetch all transactions without SQL-level counterparty filtering. Normalization
+  // happens in JS below to avoid one-sided comparison (raw DB vs. normalized filter).
   const rows = db.prepare(`
     SELECT counterparty_account, category_id, subcategory_id
     FROM transactions
     WHERE user_id = @userId AND category_id IS NOT NULL
       AND counterparty_account IS NOT NULL AND counterparty_account != ''
-      ${cpFilter ? 'AND counterparty_account = @cp' : ''}
-  `).all({ userId, cp: cpFilter });
+  `).all({ userId });
 
   const ownAccounts = new Set(
     db.prepare('SELECT account_number FROM accounts WHERE user_id = ?').all(userId)
@@ -38,6 +38,12 @@ function findCounterpartyRuleCandidates(db, userId, { onlyCounterpartyAccount } 
     const cp = normalizeAccount(r.counterparty_account);
     if (!groups.has(cp)) groups.set(cp, []);
     groups.get(cp).push(r);
+  }
+
+  // Apply onlyCounterpartyAccount filter in JS after normalization.
+  if (onlyCounterpartyAccount) {
+    const only = normalizeAccount(onlyCounterpartyAccount);
+    for (const cp of [...groups.keys()]) if (cp !== only) groups.delete(cp);
   }
 
   const candidates = [];
