@@ -199,3 +199,39 @@ test('suggestions: approve cizího návrhu vrací 404', async () => {
   assert.equal(res.status, 404);
   server.close();
 });
+
+// Spec §8: schválení návrhu musí pročistit i frontu — jinak uživatel doklikává
+// zbylé platby téhož protiúčtu ručně, což je bolest, kterou feature řeší.
+test('suggestions: approve přeřadí čekající platby téhož protiúčtu z fronty', async () => {
+  const { app, db } = setup();
+  db.prepare(`INSERT INTO rule_suggestions (user_id, counterparty_account, category_id, coverage_count, purity)
+              VALUES (1, '705-77628031/0710', 10, 3, 1.0)`).run();
+  // Čekající platba na tentýž protiúčet — dosud nezařazená (fallback kategorie).
+  db.prepare(`INSERT INTO email_inbox (user_id, parsed_json, external_id, status)
+              VALUES (1, ?, 'ext-dph-1', 'pending')`)
+    .run(JSON.stringify({ description: 'DPH 2026/09', amount: -5000, date: '2026-09-15',
+                          currency: 'CZK', counterparty_account: '705-77628031/0710' }));
+
+  const { server, base } = await listen(app);
+  const list = await (await fetch(`${base}/api/rules/suggestions`)).json();
+  const res = await fetch(`${base}/api/rules/suggestions/${list[0].id}/approve`, { method: 'POST' });
+  const body = await res.json();
+  server.close();
+
+  assert.equal(res.status, 200);
+  assert.equal(body.recategorized, 1, 'approve má vrátit počet přeřazených položek');
+  const inbox = db.prepare("SELECT status FROM email_inbox WHERE external_id = 'ext-dph-1'").get();
+  assert.equal(inbox.status, 'imported', 'čekající platba měla odejít z fronty');
+  const tx = db.prepare("SELECT category_id FROM transactions WHERE external_id = 'ext-dph-1'").get();
+  assert.equal(tx.category_id, 10, 'platba se měla zařadit do kategorie z návrhu');
+});
+
+test('suggestions: dismiss už vyřešeného návrhu vrací 400', async () => {
+  const { app, db } = setup();
+  db.prepare(`INSERT INTO rule_suggestions (user_id, counterparty_account, category_id, coverage_count, purity, status)
+              VALUES (1, '705-77628031/0710', 10, 3, 1.0, 'approved')`).run();
+  const { server, base } = await listen(app);
+  const res = await fetch(`${base}/api/rules/suggestions/1/dismiss`, { method: 'POST' });
+  server.close();
+  assert.equal(res.status, 400);
+});

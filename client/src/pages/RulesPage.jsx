@@ -88,6 +88,13 @@ export default function RulesPage() {
   }
 
   function startEdit(r) {
+    // Protiúčtová pravidla (pattern='') tenhle formulář needituje — vyžaduje text
+    // v platbě, takže by uložení buď spadlo, nebo by z pravidla udělalo AND(text,
+    // protiúčet) a přestalo by matchovat. Editace = smazat a založit znovu z návrhu.
+    if (r.match_counterparty_account) {
+      setErr('Toto pravidlo je založené na protiúčtu a nedá se tu editovat. Smaž ho a založ znovu přes návrh (sekce Návrhy pravidel nebo review fronta v Importu).');
+      return;
+    }
     setEditId(r.id);
     setForm({
       pattern: r.pattern,
@@ -324,7 +331,11 @@ export default function RulesPage() {
                     background: editId === r.id ? 'var(--surface2, rgba(99,102,241,0.08))' : 'transparent',
                   }}
                 >
-                  <td style={{ padding: '8px 12px', fontWeight: 500 }}>{r.pattern}</td>
+                  <td style={{ padding: '8px 12px', fontWeight: 500 }}>
+                    {r.pattern || (r.match_counterparty_account
+                      ? <span className="text-muted">protiúčet {r.match_counterparty_account}</span>
+                      : '—')}
+                  </td>
                   <td style={{ padding: '8px 12px' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{

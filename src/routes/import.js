@@ -138,7 +138,9 @@ router.post('/confirm', requireAuth, writeLimiter, (req, res) => {
     db.prepare('SELECT id, name FROM categories WHERE user_id = ?').all(req.dataUserId)
       .map(r => [r.name, r.id])
   );
-  const account = resolvedAccountNumber ? { account_number: resolvedAccountNumber } : null;
+  // `id` je nutné pro pravidla omezená na konkrétní vlastní účet (match_account_id) —
+  // stejný tvar jako předává categorize() v services/emailIngest.js.
+  const account = resolvedAccountNumber ? { id: resolvedAccountId, account_number: resolvedAccountNumber } : null;
 
   db.transaction(() => {
     for (const t of transactions) {

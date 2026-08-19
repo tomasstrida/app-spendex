@@ -57,7 +57,10 @@ const report = {};
 db.exec('BEGIN');
 try {
   // 1. WIPE v FK-bezpečném pořadí
-  for (const t of ['budget_items', 'annual_budgets', 'budgets', 'category_rules',
+  // rule_suggestions musí pryč spolu s category_rules — jinak by po rebuildu zůstaly
+  // approved/dismissed návrhy a candidate finder by je už nikdy znovu nenabídl,
+  // přestože odpovídající pravidlo bylo smazáno.
+  for (const t of ['budget_items', 'annual_budgets', 'budgets', 'category_rules', 'rule_suggestions',
     'airbank_category_mappings', 'transactions', 'fixed_expenses', 'income', 'income_sources',
     'accounts', 'categories']) {
     db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(USER_ID);

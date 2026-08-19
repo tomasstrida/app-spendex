@@ -1,10 +1,15 @@
 const express = require('express');
 const router = express.Router();
+const rateLimit = require('express-rate-limit');
 const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
 const { ownsSubcategory: ownsSubcategoryShared } = require('../utils/subcategory-ownership');
 const { findCounterpartyRuleCandidates } = require('../utils/counterparty-rule-candidates');
 const { upsertRuleSuggestions, getSuggestion, listPendingSuggestions } = require('../services/ruleSuggestions');
+const { recategorizePending } = require('../services/emailIngest');
+
+// Návrhové routy jedou přes limiter — /suggestions/scan projíždí celou historii.
+const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
 // Ověří, že kategorie patří uživateli
 function ownsCategory(userId, categoryId) {
@@ -37,6 +42,7 @@ router.get('/', requireAuth, (req, res) => {
   const rows = db.prepare(`
     SELECT r.id, r.pattern, r.category_id, r.amount_max_abs, r.amount_min_abs,
            r.subcategory_id, sc.name AS subcategory_name,
+           r.match_counterparty_account, r.match_account_id,
            c.name AS category_name, c.color AS category_color
     FROM category_rules r
     JOIN categories c ON c.id = r.category_id
@@ -107,19 +113,19 @@ router.delete('/:id', requireAuth, (req, res) => {
 });
 
 // GET /api/rules/suggestions — pending návrhy pravidel (protiúčet → kategorie)
-router.get('/suggestions', requireAuth, (req, res) => {
+router.get('/suggestions', requireAuth, writeLimiter, (req, res) => {
   res.json(listPendingSuggestions(db, req.dataUserId));
 });
 
 // POST /api/rules/suggestions/scan — projede celou historii, založí/aktualizuje pending návrhy
-router.post('/suggestions/scan', requireAuth, (req, res) => {
+router.post('/suggestions/scan', requireAuth, writeLimiter, (req, res) => {
   const candidates = findCounterpartyRuleCandidates(db, req.dataUserId);
   const ids = upsertRuleSuggestions(db, req.dataUserId, candidates);
   res.json({ ok: true, found: ids.length });
 });
 
 // POST /api/rules/suggestions/:id/approve — založí category_rules pravidlo z návrhu
-router.post('/suggestions/:id/approve', requireAuth, (req, res) => {
+router.post('/suggestions/:id/approve', requireAuth, writeLimiter, (req, res) => {
   const s = getSuggestion(db, req.dataUserId, req.params.id);
   if (!s) return res.status(404).json({ error: 'Návrh nenalezen.' });
   if (s.status !== 'pending') return res.status(400).json({ error: 'Návrh už je vyřešený.' });
@@ -128,13 +134,23 @@ router.post('/suggestions/:id/approve', requireAuth, (req, res) => {
       VALUES (?, ?, '', ?, ?)`)
     .run(req.dataUserId, s.category_id, s.counterparty_account, s.subcategory_id);
   db.prepare("UPDATE rule_suggestions SET status = 'approved', resolved_at = datetime('now') WHERE id = ?").run(s.id);
-  res.json({ ok: true, rule_id: Number(info.lastInsertRowid) });
+  // Nové pravidlo platí i zpětně na frontu — jinak by uživatel musel zbylé platby
+  // téhož protiúčtu doklikat ručně, což je přesně ta bolest, kterou feature řeší.
+  // Best-effort: selhání nesmí shodit už provedené schválení pravidla.
+  let recategorized = 0;
+  try {
+    recategorized = recategorizePending(db, req.dataUserId);
+  } catch (e) {
+    console.error('[rule-suggestions] recategorizePending po approve:', e && e.message);
+  }
+  res.json({ ok: true, rule_id: Number(info.lastInsertRowid), recategorized });
 });
 
 // POST /api/rules/suggestions/:id/dismiss — trvale zamítne návrh, žádné re-navrhování
-router.post('/suggestions/:id/dismiss', requireAuth, (req, res) => {
+router.post('/suggestions/:id/dismiss', requireAuth, writeLimiter, (req, res) => {
   const s = getSuggestion(db, req.dataUserId, req.params.id);
   if (!s) return res.status(404).json({ error: 'Návrh nenalezen.' });
+  if (s.status !== 'pending') return res.status(400).json({ error: 'Návrh už je vyřešený.' });
   db.prepare("UPDATE rule_suggestions SET status = 'dismissed', resolved_at = datetime('now') WHERE id = ?").run(s.id);
   res.json({ ok: true });
 });

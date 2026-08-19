@@ -350,7 +350,10 @@ function EmailInbox() {
   const unparsed = items.filter(i => i.status === 'unparsed');
   const activeReceipts = appleReceipts.filter(r => r.status !== 'rejected');
 
-  if (items.length === 0 && activeReceipts.length === 0) return null;
+  // `!suggestionBanner` v podmínce: schválení POSLEDNÍ položky fronty vyprázdní items,
+  // ale návrh pravidla se má pořád zobrazit — jinak reaktivní banner nikdy nenaskočí
+  // právě v nejčastějším scénáři (uživatel dočistí frontu 3. opakovanou platbou).
+  if (items.length === 0 && activeReceipts.length === 0 && !suggestionBanner) return null;
 
   return (
     <section style={{ marginBottom: 24 }}>
