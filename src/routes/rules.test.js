@@ -146,3 +146,56 @@ test('PATCH pravidlo s cizí subcategory_id odmítnuto', async () => {
   assert.equal(patched.subcategory_id, null);
   server.close();
 });
+
+test('suggestions: scan najde kandidáta, approve založí category_rules pravidlo', async () => {
+  const { app, db } = setup();
+  for (let i = 0; i < 3; i++) {
+    db.prepare(`INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account)
+                VALUES (1, 10, -5000, '2026-0${i + 1}-15', 'DPH', '705-77628031/0710')`).run();
+  }
+  const { server, base } = await listen(app);
+
+  let res = await fetch(`${base}/api/rules/suggestions/scan`, { method: 'POST' });
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).found, 1);
+
+  res = await fetch(`${base}/api/rules/suggestions`);
+  const list = await res.json();
+  assert.equal(list.length, 1);
+  assert.equal(list[0].counterparty_account, '705-77628031/0710');
+  assert.equal(list[0].category_name, 'Sport'); // fixture kategorie id=10 se jmenuje Sport (viz setup())
+
+  res = await fetch(`${base}/api/rules/suggestions/${list[0].id}/approve`, { method: 'POST' });
+  assert.equal(res.status, 200);
+
+  const rules = await (await fetch(`${base}/api/rules`)).json();
+  assert.equal(rules.length, 1);
+  assert.equal(rules[0].pattern, '');
+
+  res = await fetch(`${base}/api/rules/suggestions`);
+  assert.equal((await res.json()).length, 0); // approved zmizí z pending listu
+  server.close();
+});
+
+test('suggestions: dismiss zavře návrh bez založení pravidla', async () => {
+  const { app, db } = setup();
+  db.prepare(`INSERT INTO rule_suggestions (user_id, counterparty_account, category_id, coverage_count, purity)
+              VALUES (1, '705-77628031/0710', 10, 3, 1.0)`).run();
+  const { server, base } = await listen(app);
+  const list = await (await fetch(`${base}/api/rules/suggestions`)).json();
+  const res = await fetch(`${base}/api/rules/suggestions/${list[0].id}/dismiss`, { method: 'POST' });
+  assert.equal(res.status, 200);
+  assert.equal((await (await fetch(`${base}/api/rules/suggestions`)).json()).length, 0);
+  assert.equal((await (await fetch(`${base}/api/rules`)).json()).length, 0);
+  server.close();
+});
+
+test('suggestions: approve cizího návrhu vrací 404', async () => {
+  const { app, db } = setup();
+  db.prepare(`INSERT INTO rule_suggestions (user_id, counterparty_account, category_id, coverage_count, purity)
+              VALUES (2, '705-77628031/0710', 11, 3, 1.0)`).run();
+  const { server, base } = await listen(app);
+  const res = await fetch(`${base}/api/rules/suggestions/1/approve`, { method: 'POST' });
+  assert.equal(res.status, 404);
+  server.close();
+});

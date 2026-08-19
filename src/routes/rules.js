@@ -3,6 +3,8 @@ const router = express.Router();
 const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
 const { ownsSubcategory: ownsSubcategoryShared } = require('../utils/subcategory-ownership');
+const { findCounterpartyRuleCandidates } = require('../utils/counterparty-rule-candidates');
+const { upsertRuleSuggestions, getSuggestion, listPendingSuggestions } = require('../services/ruleSuggestions');
 
 // Ověří, že kategorie patří uživateli
 function ownsCategory(userId, categoryId) {
@@ -101,6 +103,39 @@ router.delete('/:id', requireAuth, (req, res) => {
     .get(req.params.id, req.dataUserId);
   if (!row) return res.status(404).json({ error: 'Pravidlo nenalezeno.' });
   db.prepare('DELETE FROM category_rules WHERE id = ?').run(row.id);
+  res.json({ ok: true });
+});
+
+// GET /api/rules/suggestions — pending návrhy pravidel (protiúčet → kategorie)
+router.get('/suggestions', requireAuth, (req, res) => {
+  res.json(listPendingSuggestions(db, req.dataUserId));
+});
+
+// POST /api/rules/suggestions/scan — projede celou historii, založí/aktualizuje pending návrhy
+router.post('/suggestions/scan', requireAuth, (req, res) => {
+  const candidates = findCounterpartyRuleCandidates(db, req.dataUserId);
+  const ids = upsertRuleSuggestions(db, req.dataUserId, candidates);
+  res.json({ ok: true, found: ids.length });
+});
+
+// POST /api/rules/suggestions/:id/approve — založí category_rules pravidlo z návrhu
+router.post('/suggestions/:id/approve', requireAuth, (req, res) => {
+  const s = getSuggestion(db, req.dataUserId, req.params.id);
+  if (!s) return res.status(404).json({ error: 'Návrh nenalezen.' });
+  if (s.status !== 'pending') return res.status(400).json({ error: 'Návrh už je vyřešený.' });
+  const info = db.prepare(`INSERT INTO category_rules
+      (user_id, category_id, pattern, match_counterparty_account, subcategory_id)
+      VALUES (?, ?, '', ?, ?)`)
+    .run(req.dataUserId, s.category_id, s.counterparty_account, s.subcategory_id);
+  db.prepare("UPDATE rule_suggestions SET status = 'approved', resolved_at = datetime('now') WHERE id = ?").run(s.id);
+  res.json({ ok: true, rule_id: Number(info.lastInsertRowid) });
+});
+
+// POST /api/rules/suggestions/:id/dismiss — trvale zamítne návrh, žádné re-navrhování
+router.post('/suggestions/:id/dismiss', requireAuth, (req, res) => {
+  const s = getSuggestion(db, req.dataUserId, req.params.id);
+  if (!s) return res.status(404).json({ error: 'Návrh nenalezen.' });
+  db.prepare("UPDATE rule_suggestions SET status = 'dismissed', resolved_at = datetime('now') WHERE id = ?").run(s.id);
   res.json({ ok: true });
 });
 
