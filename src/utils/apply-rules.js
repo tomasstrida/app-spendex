@@ -1,12 +1,7 @@
 'use strict';
 // Čistá funkce: (tx, account, rules) → { category, subcategory_id }.
 // Precedence: L0 Převody → L3 text → L1 účet → L2 AB → fallback.
-
-// Identita účtu = kompletní číslo [předčíslí-]číslo/kódbanky; ořezávají se jen mezery.
-function normalizeAccount(raw) {
-  if (!raw) return '';
-  return String(raw).replace(/\s/g, '');
-}
+const normalizeAccount = require('./normalize-account');
 
 function applyRules(tx, account, rules) {
   // L0 – interní převod
