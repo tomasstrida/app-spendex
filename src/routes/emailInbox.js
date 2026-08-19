@@ -4,6 +4,8 @@ const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
+const { findCounterpartyRuleCandidates } = require('../utils/counterparty-rule-candidates');
+const { upsertRuleSuggestions, getSuggestion } = require('../services/ruleSuggestions');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
@@ -92,7 +94,24 @@ router.post('/:id/approve', requireAuth, writeLimiter, (req, res) => {
     return r;
   })();
 
-  res.json({ ok: true, imported: result.changes > 0 });
+  // Best-effort detekce opakující se platby podle protiúčtu — selhání nesmí
+  // shodit zařazení platby (proto try/catch, stejný vzor jako tryMatchAppleReceipt).
+  let newSuggestion = null;
+  try {
+    if (tx.counterparty_account) {
+      const candidates = findCounterpartyRuleCandidates(db, req.dataUserId, {
+        onlyCounterpartyAccount: tx.counterparty_account,
+      });
+      if (candidates.length > 0) {
+        const [id] = upsertRuleSuggestions(db, req.dataUserId, candidates);
+        if (id) newSuggestion = getSuggestion(db, req.dataUserId, id);
+      }
+    }
+  } catch (e) {
+    console.error('[rule-suggestions] detekce po approve:', e && e.message);
+  }
+
+  res.json({ ok: true, imported: result.changes > 0, newSuggestion });
 });
 
 // DELETE /api/email-inbox/:id — zahodí položku (pending i unparsed)

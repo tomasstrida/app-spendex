@@ -96,6 +96,52 @@ test('owner vidí vše (beze změny)', async () => {
   assert.equal(rows.length, 2);
 });
 
+test('approve: po 3. platbě na stejný protiúčet vrátí newSuggestion', async () => {
+  const { db, tmp } = setup();
+  db.prepare("INSERT INTO categories (id, user_id, name) VALUES (10, 1, 'Y_Uctovani')").run();
+  // 2 historické transakce na stejný protiúčet, jiná kategorie zatím netřeba (purity 100% ze 3)
+  for (let i = 0; i < 2; i++) {
+    db.prepare(`INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account)
+                VALUES (1, 10, -5000, '2026-0${i + 1}-15', 'DPH', '705-77628031/0710')`).run();
+  }
+  db.prepare(`INSERT INTO email_inbox (user_id, parsed_json, status)
+              VALUES (1, ?, 'pending')`)
+    .run(JSON.stringify({ description: 'DPH 2026/03', amount: -5000, date: '2026-03-15', counterparty_account: '705-77628031/0710' }));
+  const row = db.prepare("SELECT id FROM email_inbox WHERE status='pending'").get();
+
+  const l = await listen(appFor(1));
+  const res = await fetch(`${l.base}/api/email-inbox/${row.id}/approve`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ category_id: 10 }),
+  });
+  const body = await res.json();
+  l.server.close(); cleanup(db, tmp);
+
+  assert.equal(res.status, 200);
+  assert.ok(body.newSuggestion);
+  assert.equal(body.newSuggestion.counterparty_account, '705-77628031/0710');
+  assert.equal(body.newSuggestion.coverage_count, 3);
+});
+
+test('approve: bez opakování (jen 1 platba) newSuggestion je null', async () => {
+  const { db, tmp } = setup();
+  db.prepare("INSERT INTO categories (id, user_id, name) VALUES (10, 1, 'Y_Uctovani')").run();
+  db.prepare(`INSERT INTO email_inbox (user_id, parsed_json, status)
+              VALUES (1, ?, 'pending')`)
+    .run(JSON.stringify({ description: 'DPH 2026/03', amount: -5000, date: '2026-03-15', counterparty_account: '705-77628031/0710' }));
+  const row = db.prepare("SELECT id FROM email_inbox WHERE status='pending'").get();
+
+  const l = await listen(appFor(1));
+  const res = await fetch(`${l.base}/api/email-inbox/${row.id}/approve`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ category_id: 10 }),
+  });
+  const body = await res.json();
+  l.server.close(); cleanup(db, tmp);
+
+  assert.equal(body.newSuggestion, null);
+});
+
 test('member /history filtruje stejně', async () => {
   const { db, tmp } = setup();
   db.prepare("INSERT INTO household_members (data_owner_id, user_id) VALUES (1,2)").run();
