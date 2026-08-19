@@ -208,6 +208,7 @@ function EmailInbox() {
   const [busy, setBusy] = useState(null);
   const [celebratingId, setCelebratingId] = useState(null);
   const [appleReceipts, setAppleReceipts] = useState([]);
+  const [suggestionBanner, setSuggestionBanner] = useState(null);
 
   // Mapy pro překlad čísel/id účtů na lidské názvy (řádek „z účtu → na účet").
   const accountNameMap = useMemo(() => buildAccountNameMap(accounts), [accounts]);
@@ -262,6 +263,7 @@ function EmailInbox() {
         body: JSON.stringify({ category_id: categoryId || null }),
       });
       if (!r.ok) return;
+      const data = await r.json();
       // Oslavný feedback: konfety v barvě kategorie + pop, kartička odletí, pak refetch.
       const cat = cats.find(c => c.id === categoryId);
       const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -271,7 +273,20 @@ function EmailInbox() {
       await new Promise(res => setTimeout(res, reduced ? 0 : 450));
       await load();
       setCelebratingId(null);
+      if (data.newSuggestion) setSuggestionBanner(data.newSuggestion);
     } finally { setBusy(null); }
+  }
+
+  async function approveBannerSuggestion() {
+    if (!suggestionBanner) return;
+    await fetch(`/api/rules/suggestions/${suggestionBanner.id}/approve`, { method: 'POST' });
+    setSuggestionBanner(null);
+  }
+
+  async function dismissBannerSuggestion() {
+    if (!suggestionBanner) return;
+    await fetch(`/api/rules/suggestions/${suggestionBanner.id}/dismiss`, { method: 'POST' });
+    setSuggestionBanner(null);
   }
 
   async function remove(item) {
@@ -345,6 +360,27 @@ function EmailInbox() {
           {items.length}
         </span>
       </h2>
+
+      {suggestionBanner && (
+        <div className="alert alert-success" style={{
+          marginBottom: 12, display: 'flex', justifyContent: 'space-between',
+          alignItems: 'center', gap: 12, flexWrap: 'wrap',
+        }}>
+          <span>
+            Tahle platba (protiúčet <strong>{suggestionBanner.counterparty_account}</strong>) se objevila
+            už {suggestionBanner.coverage_count}× a pokaždé šla do kategorie{' '}
+            <strong>{suggestionBanner.category_name}</strong>. Založit pravidlo, aby se příště zařadila automaticky?
+          </span>
+          <span style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={approveBannerSuggestion}>
+              Založit
+            </button>
+            <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={dismissBannerSuggestion}>
+              Ne, díky
+            </button>
+          </span>
+        </div>
+      )}
 
       {awaiting.map(item => {
         let tx = {};
