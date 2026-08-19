@@ -281,3 +281,48 @@ test('apple_receipts: order_id je unikatni per uzivatel, NULL se neomezuje', () 
   try { fs.unlinkSync(tmp + '-wal'); fs.unlinkSync(tmp + '-shm'); } catch { /* ok */ }
   assert.equal(n, 3, 'dva zaznamy bez order_id vedle sebe smi existovat');
 });
+
+test('migrace: category_rules má match_counterparty_account + match_account_id', () => {
+  const tmp = path.join(os.tmpdir(), `spendex-crmatch-${Date.now()}.db`);
+  process.env.DB_PATH = tmp;
+  delete require.cache[require.resolve('../db/connection')];
+  delete require.cache[require.resolve('../db/schema')];
+  const db = require('../db/connection');
+  const { initSchema } = require('../db/schema');
+  initSchema();
+  const cols = db.prepare("PRAGMA table_info(category_rules)").all().map(c => c.name);
+  db.close();
+  fs.unlinkSync(tmp);
+  try { fs.unlinkSync(tmp + '-wal'); fs.unlinkSync(tmp + '-shm'); } catch { /* ok */ }
+  assert.ok(cols.includes('match_counterparty_account'), `chybí match_counterparty_account; má: ${cols.join(',')}`);
+  assert.ok(cols.includes('match_account_id'), `chybí match_account_id; má: ${cols.join(',')}`);
+});
+
+test('migrace vytvoří tabulku rule_suggestions s UNIQUE(user_id, counterparty_account)', () => {
+  const tmp = path.join(os.tmpdir(), `spendex-rulesugg-${Date.now()}.db`);
+  process.env.DB_PATH = tmp;
+  delete require.cache[require.resolve('../db/connection')];
+  delete require.cache[require.resolve('../db/schema')];
+  const db = require('../db/connection');
+  const { initSchema } = require('../db/schema');
+  initSchema();
+  const cols = db.prepare("PRAGMA table_info(rule_suggestions)").all().map(c => c.name);
+  db.prepare("INSERT INTO users (id, email) VALUES (1,'a@b.cz')").run();
+  db.prepare("INSERT INTO categories (id, user_id, name) VALUES (5,1,'Ostatní')").run();
+  db.prepare(`INSERT INTO rule_suggestions (user_id, counterparty_account, category_id, coverage_count, purity)
+              VALUES (1, '705-77628031/0710', 5, 3, 1.0)`).run();
+  let threw = false;
+  try {
+    db.prepare(`INSERT INTO rule_suggestions (user_id, counterparty_account, category_id, coverage_count, purity)
+                VALUES (1, '705-77628031/0710', 5, 4, 1.0)`).run();
+  } catch { threw = true; }
+  db.close();
+  fs.unlinkSync(tmp);
+  try { fs.unlinkSync(tmp + '-wal'); fs.unlinkSync(tmp + '-shm'); } catch { /* ok */ }
+  assert.deepEqual(
+    cols.sort(),
+    ['category_id', 'coverage_count', 'created_at', 'counterparty_account', 'id', 'purity',
+     'resolved_at', 'status', 'subcategory_id', 'user_id'].sort()
+  );
+  assert.ok(threw, 'druhý INSERT se stejným (user_id, counterparty_account) měl selhat na UNIQUE');
+});

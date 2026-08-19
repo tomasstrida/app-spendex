@@ -415,6 +415,30 @@ function initSchema() {
     // vidět, kolik utratil který.
     'ALTER TABLE apple_receipts ADD COLUMN apple_account TEXT',
     'CREATE INDEX IF NOT EXISTS idx_apple_receipt_account ON apple_receipts(user_id, apple_account)',
+    // Rozšíření category_rules o matchování podle protiúčtu (vedle textového patternu).
+    // match_counterparty_account NULL = pravidlo matchuje jen textem jako dnes.
+    // match_account_id NULL = bez omezení na konkrétní vlastní účet.
+    'ALTER TABLE category_rules ADD COLUMN match_counterparty_account TEXT',
+    'ALTER TABLE category_rules ADD COLUMN match_account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL',
+    // Návrhy pravidel podle opakujícího se protiúčtu (candidate finder je v
+    // src/utils/counterparty-rule-candidates.js). UNIQUE brání duplicitním
+    // návrhům pro stejný protiúčet napříč reaktivním i dávkovým triggerem.
+    `CREATE TABLE IF NOT EXISTS rule_suggestions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      counterparty_account TEXT NOT NULL,
+      category_id INTEGER NOT NULL,
+      subcategory_id INTEGER,
+      coverage_count INTEGER NOT NULL,
+      purity REAL NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT DEFAULT (datetime('now')),
+      resolved_at TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE,
+      FOREIGN KEY (subcategory_id) REFERENCES subcategories(id) ON DELETE SET NULL,
+      UNIQUE(user_id, counterparty_account)
+    )`,
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* sloupec/index/tabulka již existuje nebo nelze aplikovat */ }
