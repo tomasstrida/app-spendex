@@ -5,6 +5,7 @@ import Layout from '../components/Layout';
 import SpendLineChart from '../components/SpendLineChart';
 import { t, formatCurrency } from '../i18n';
 import { assignColors, shortPeriodLabel, signPrefix, periodAverage, summarizeLimit } from '../utils/chartScale';
+import { groupSeriesForLegend } from '../utils/legendGroups';
 
 const DEFAULT_ACTIVE = 5;   // víc křivek naráz už se nedá číst
 
@@ -49,9 +50,13 @@ export default function BudgetHistoryPage() {
   // Barvy se přiřazují CELÉ sadě, ne jen zapnutým sériím — jinak by vypnutí
   // jedné kategorie přebarvilo zbytek grafu.
   const colors = useMemo(() => assignColors(series), [series]);
+  // Legenda (a s ní i pořadí sloupců v tabulce) jede po sekcích podle typu
+  // rozpočtu a uvnitř abecedně. `series` ze serveru zůstává řazená podle součtu —
+  // z ní se bere výchozí výběr top 5.
+  const legendGroups = useMemo(() => groupSeriesForLegend(series), [series]);
   const activeSeries = useMemo(
-    () => series.filter(s => activeIds?.has(s.category_id)),
-    [series, activeIds]
+    () => legendGroups.flatMap(g => g.items).filter(s => activeIds?.has(s.category_id)),
+    [legendGroups, activeIds]
   );
 
   function toggle(id) {
@@ -161,21 +166,28 @@ export default function BudgetHistoryPage() {
               <button className="btn btn-ghost btn-sm" onClick={() => setActiveIds(new Set(series.map(s => s.category_id)))}>Vše</button>
               <button className="btn btn-ghost btn-sm" onClick={() => setActiveIds(new Set())}>Nic</button>
             </div>
-            {series.map(s => {
-              const on = activeIds?.has(s.category_id);
-              return (
-                <button
-                  key={s.category_id}
-                  className={`chart-legend-item${on ? ' on' : ''}`}
-                  aria-pressed={on}
-                  onClick={() => toggle(s.category_id)}
-                >
-                  <span className="chart-legend-key" style={{ background: colors.get(s.category_id) }} />
-                  <span className="chart-legend-name">{s.name}</span>
-                  <span className="chart-legend-total">{signPrefix(s.total)}{formatCurrency(s.total)}</span>
-                </button>
-              );
-            })}
+            {legendGroups.map(group => (
+              <div key={group.key} className="chart-legend-section">
+                <div className="chart-legend-section-label">{group.label}</div>
+                <div className="chart-legend-items">
+                  {group.items.map(s => {
+                    const on = activeIds?.has(s.category_id);
+                    return (
+                      <button
+                        key={s.category_id}
+                        className={`chart-legend-item${on ? ' on' : ''}`}
+                        aria-pressed={on}
+                        onClick={() => toggle(s.category_id)}
+                      >
+                        <span className="chart-legend-key" style={{ background: colors.get(s.category_id) }} />
+                        <span className="chart-legend-name">{s.name}</span>
+                        <span className="chart-legend-total">{signPrefix(s.total)}{formatCurrency(s.total)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

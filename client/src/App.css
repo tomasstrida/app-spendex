@@ -1553,8 +1553,16 @@ a.report-subcat-row:hover { background: var(--bg2); }
 .chart-tooltip-name { color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chart-tooltip-value { margin-left: auto; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-.chart-legend { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.chart-legend-actions { display: flex; gap: 6px; margin-right: 6px; }
+.chart-legend { display: flex; flex-direction: column; gap: 14px; }
+.chart-legend-actions { display: flex; gap: 6px; }
+.chart-legend-section { display: flex; flex-direction: column; gap: 6px; }
+.chart-legend-section-label {
+  font-size: 11px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--text2);
+}
+.chart-legend-items { display: flex; flex-wrap: wrap; gap: 6px; }
 .chart-legend-item {
   display: inline-flex;
   align-items: center;
