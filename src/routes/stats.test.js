@@ -408,13 +408,25 @@ test('budget-history: série seřazené podle součtu sestupně', async () => {
   server.close();
 });
 
-test('budget-history: bez parametrů vrátí posledních 12 období', async () => {
+test('budget-history: bez parametrů začíná lednem roku aktuálního období', async () => {
   const { app } = setup();
   const { server, base } = await listen(app);
   const r = await (await fetch(`${base}/api/stats/budget-history`)).json();
-  assert.equal(r.periods.length, 12);
-  assert.equal(r.periods[11].key, r.to);
+  const year = r.to.split('-')[0];
+  assert.equal(r.from, `${year}-01`);
   assert.equal(r.periods[0].key, r.from);
+  assert.equal(r.periods[r.periods.length - 1].key, r.to);
+  assert.equal(r.periods.length, Number(r.to.split('-')[1]));
+  server.close();
+});
+
+test('budget-history: výchozí rozsah bere rok z OBDOBÍ, ne z kalendáře (billing_day > 1)', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO settings (user_id, billing_day) VALUES (1, 15)").run();
+  const r = await (await fetch(`${base}/api/stats/budget-history`)).json();
+  assert.equal(r.billing_day, 15);
+  assert.equal(r.from, `${r.to.split('-')[0]}-01`, 'from je leden TÉHOŽ roku jako aktuální období');
   server.close();
 });
 

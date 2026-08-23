@@ -321,7 +321,10 @@ function periodIndex(periodKey) {
 router.get('/budget-history', requireAuth, (req, res) => {
   const billingDay = getUserBillingDay(db, req.dataUserId);
   const to = req.query.to || currentPeriodKey(billingDay);
-  const from = req.query.from || shiftPeriodKey(to, -11);
+  // Výchozí rozsah = od ledna roku aktuálního OBDOBÍ (ne kalendářního data) —
+  // při billing_day > 1 je začátkem ledna aktuální období pořád prosincové
+  // a rozsah by jinak přeskočil o rok.
+  const from = req.query.from || `${to.split('-')[0]}-01`;
 
   if (!PERIOD_KEY_RE.test(from) || !PERIOD_KEY_RE.test(to)) {
     return res.status(400).json({ error: 'Parametry from/to musí mít formát YYYY-MM.' });
