@@ -300,4 +300,100 @@ router.get('/overview', requireAuth, (req, res) => {
   });
 });
 
+// ── GET /api/stats/budget-history?from=YYYY-MM&to=YYYY-MM ──────────────────
+// Dlouhodobé vyhodnocení: utraceno po obdobích, jedna série na kategorii.
+// Období se počítají přes getPeriodDates(billingDay, key), NE jako kalendářní
+// měsíce — jinak by při billing_day != 1 čísla nesedla s Měsíčními rozpočty.
+const PERIOD_KEY_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+const MAX_PERIODS = 60;
+
+function shiftPeriodKey(periodKey, delta) {
+  const [y, m] = periodKey.split('-').map(Number);
+  const idx = y * 12 + (m - 1) + delta;
+  return `${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, '0')}`;
+}
+
+function periodIndex(periodKey) {
+  const [y, m] = periodKey.split('-').map(Number);
+  return y * 12 + (m - 1);
+}
+
+router.get('/budget-history', requireAuth, (req, res) => {
+  const billingDay = getUserBillingDay(db, req.dataUserId);
+  const to = req.query.to || currentPeriodKey(billingDay);
+  const from = req.query.from || shiftPeriodKey(to, -11);
+
+  if (!PERIOD_KEY_RE.test(from) || !PERIOD_KEY_RE.test(to)) {
+    return res.status(400).json({ error: 'Parametry from/to musí mít formát YYYY-MM.' });
+  }
+  const count = periodIndex(to) - periodIndex(from) + 1;
+  if (count < 1) return res.status(400).json({ error: 'Parametr from musí být menší nebo roven to.' });
+  if (count > MAX_PERIODS) return res.status(400).json({ error: `Rozsah je omezený na ${MAX_PERIODS} období.` });
+
+  const periods = [];
+  for (let i = 0; i < count; i++) {
+    const key = shiftPeriodKey(from, i);
+    periods.push({ key, ...getPeriodDates(billingDay, key) });
+  }
+
+  // Výdajové série: type=4 (účetní/převody) do vyhodnocení výdajů nepatří —
+  // interní převody nejsou výdaj a `prepaid_purchase` by se dvojil s čerpáním
+  // balíčku, které se níž připočítává ke skutečné kategorii.
+  const spentStmt = db.prepare(`
+    SELECT t.category_id AS category_id, COALESCE(SUM(-t.amount), 0) AS spent
+    FROM transactions t
+    JOIN categories c ON c.id = t.category_id AND c.user_id = t.user_id
+    WHERE t.user_id = ? AND t.date >= ? AND t.date <= ? AND c.type != 4
+    ${SPENDING_AND}
+    GROUP BY t.category_id
+  `);
+
+  // Čerpání předplacených balíčků se počítá stejně jako `budget_spent`
+  // v /api/budgets — aby graf a Měsíční rozpočty ukazovaly totéž číslo.
+  const prepaidStmt = db.prepare(`
+    SELECT p.category_id AS category_id, COALESCE(SUM(d.amount), 0) AS spent
+    FROM prepaid_draws d
+    JOIN prepaid_packages p ON p.id = d.package_id AND p.user_id = d.user_id
+    WHERE d.user_id = ? AND d.date >= ? AND d.date <= ?
+    GROUP BY p.category_id
+  `);
+
+  const byCat = new Map(); // category_id → number[] (index = pořadí období)
+  const bump = (catId, i, value) => {
+    if (catId == null || !value) return;
+    if (!byCat.has(catId)) byCat.set(catId, new Array(count).fill(0));
+    byCat.get(catId)[i] += value;
+  };
+
+  periods.forEach((p, i) => {
+    for (const row of spentStmt.all(req.dataUserId, p.start, p.end)) bump(row.category_id, i, row.spent);
+    for (const row of prepaidStmt.all(req.dataUserId, p.start, p.end)) bump(row.category_id, i, row.spent);
+  });
+
+  const meta = new Map(
+    db.prepare('SELECT id, name, color, icon, type FROM categories WHERE user_id = ?')
+      .all(req.dataUserId)
+      .map(c => [c.id, c])
+  );
+
+  const series = [...byCat.entries()]
+    .filter(([, values]) => values.some(v => v !== 0))
+    .map(([categoryId, values]) => {
+      const c = meta.get(categoryId) || {};
+      return {
+        category_id: categoryId,
+        name: c.name || `#${categoryId}`,
+        color: c.color || null,
+        icon: c.icon || null,
+        type: c.type ?? 1,
+        values,
+        total: values.reduce((a, b) => a + b, 0),
+      };
+    })
+    .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, 'cs'));
+
+  res.json({ from, to, billing_day: billingDay, periods, series });
+});
+
+
 module.exports = router;

@@ -19,6 +19,7 @@ import {
   Receipt,
   SearchCheck,
   Ticket,
+  TrendingUp,
 } from 'lucide-react';
 
 const navGroups = [
@@ -29,6 +30,7 @@ const navGroups = [
       { to: '/report',       icon: ClipboardList,   label: t.nav.report },
       { to: '/savings',      icon: Landmark,        label: t.nav.savings },
       { to: '/annual-budgets', icon: CalendarRange, label: t.nav.annualBudgets },
+      { to: '/budget-history', icon: TrendingUp,   label: t.nav.budgetHistory },
       { to: '/transactions', icon: ArrowLeftRight,  label: t.nav.transactions },
     ],
   },

@@ -1499,3 +1499,84 @@ a.report-subcat-row:hover { background: var(--bg2); }
 .apple-receipt-status--ambiguous { color: #f59e0b; }
 .apple-receipt-candidates { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .apple-receipt-actions { display: flex; gap: 6px; margin-top: 8px; }
+
+/* ── Vývoj výdajů (spojnicový graf) ── */
+.chart-filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.chart-filter { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text2); }
+.chart-filter .input { min-width: 150px; }
+
+.chart-card { display: flex; flex-direction: column; gap: 16px; transition: opacity .15s ease; }
+.chart-card.is-loading { opacity: .55; }
+
+.chart-wrap { position: relative; width: 100%; }
+.chart-svg { display: block; width: 100%; outline: none; }
+.chart-svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+/* Mřížka je hairline a plná — čárkovaná by se četla jako práh, ne jako mřížka. */
+.chart-grid-line { stroke: var(--border); stroke-width: 1; }
+.chart-axis-line { stroke: var(--text2); stroke-width: 1; opacity: .55; }
+.chart-crosshair { stroke: var(--text2); stroke-width: 1; opacity: .5; pointer-events: none; }
+
+.chart-tick { fill: var(--text2); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart-tick-y { text-anchor: end; dominant-baseline: middle; }
+.chart-tick-x { text-anchor: middle; }
+
+/* 2px prstenec v barvě podkladu drží body čitelné i tam, kde se křivky kříží. */
+.chart-dot { stroke: var(--bg2); stroke-width: 2; }
+.chart-dot-link { cursor: pointer; }
+
+/* Popisek nosí textovou barvu, ne barvu série — identitu nese konec křivky vedle. */
+.chart-end-label { fill: var(--text); font-size: 11px; }
+
+.chart-tooltip {
+  position: absolute;
+  top: 12px;
+  z-index: 5;
+  min-width: 180px;
+  max-width: 260px;
+  padding: 10px 12px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  pointer-events: none;
+}
+.chart-tooltip-period { font-size: 11px; color: var(--text2); margin-bottom: 6px; }
+.chart-tooltip-row { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 2px 0; }
+.chart-tooltip-key { flex: none; width: 12px; height: 2px; border-radius: 1px; }
+.chart-tooltip-name { color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chart-tooltip-value { margin-left: auto; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.chart-legend { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chart-legend-actions { display: flex; gap: 6px; margin-right: 6px; }
+.chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text2);
+  font-size: 12px;
+  cursor: pointer;
+  opacity: .55;
+}
+.chart-legend-item:hover { border-color: var(--text2); }
+.chart-legend-item.on { opacity: 1; color: var(--text); background: var(--bg3); }
+.chart-legend-key { flex: none; width: 10px; height: 10px; border-radius: 3px; }
+.chart-legend-total { color: var(--text2); font-variant-numeric: tabular-nums; }
+
+.chart-table-scroll { overflow-x: auto; }
+.chart-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.chart-table th, .chart-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.chart-table th { color: var(--text2); font-weight: 500; text-align: left; }
+.chart-table th .chart-legend-key { display: inline-block; margin-right: 6px; vertical-align: middle; }
+.chart-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.chart-table .strong { font-weight: 600; color: var(--text); }

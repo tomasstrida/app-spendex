@@ -331,3 +331,99 @@ test('savings: shodné datum má při párování přednost před posunutým', a
   assert.equal(stats.savings.transfers.length, 2);
   server.close();
 });
+
+// ── GET /api/stats/budget-history ─────────────────────────────────────────
+// Dlouhodobé vyhodnocení: utraceno po obdobích, jedna série na kategorii.
+
+test('budget-history: rozdělí výdaje do období podle billing_day', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("UPDATE settings SET billing_day = 15 WHERE user_id = 1").run();
+  db.prepare("INSERT INTO settings (user_id, billing_day) SELECT 1, 15 WHERE NOT EXISTS (SELECT 1 FROM settings WHERE user_id = 1)").run();
+  db.prepare("INSERT INTO categories (id,user_id,name,type,color) VALUES (30,1,'Potraviny',1,'#ff0000')").run();
+  // 2026-06-20 → období 2026-06; 2026-07-10 → pořád období 2026-06 (billing_day 15)
+  db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES \
+    (1,30,-100,'2026-06-20','a'),(1,30,-200,'2026-07-10','b'),(1,30,-50,'2026-07-20','c')").run();
+  const r = await (await fetch(`${base}/api/stats/budget-history?from=2026-06&to=2026-07`)).json();
+  assert.deepEqual(r.periods.map(p => p.key), ['2026-06', '2026-07']);
+  assert.equal(r.billing_day, 15);
+  const s = r.series.find(x => x.category_id === 30);
+  assert.deepEqual(s.values, [300, 50]);
+  assert.equal(s.total, 350);
+  assert.equal(s.color, '#ff0000');
+  server.close();
+});
+
+test('budget-history: refund se v rámci kategorie odečte', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type) VALUES (31,1,'Oblečení',1)").run();
+  db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES \
+    (1,31,-1000,'2026-07-05','nákup'),(1,31,400,'2026-07-20','vratka')").run();
+  const r = await (await fetch(`${base}/api/stats/budget-history?from=2026-07&to=2026-07`)).json();
+  assert.deepEqual(r.series.find(x => x.category_id === 31).values, [600]);
+  server.close();
+});
+
+test('budget-history: účetní kategorie (type=4) a kategorie bez pohybu se nevrací', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type) VALUES (32,1,'Převody interní',4),(33,1,'Nic',1)").run();
+  db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES (1,32,-5000,'2026-07-05','převod')").run();
+  const r = await (await fetch(`${base}/api/stats/budget-history?from=2026-07&to=2026-07`)).json();
+  assert.equal(r.series.find(x => x.category_id === 32), undefined, 'type=4 do výdajových sérií nepatří');
+  assert.equal(r.series.find(x => x.category_id === 33), undefined, 'kategorie bez pohybu se vynechá');
+  server.close();
+});
+
+test('budget-history: čerpání předplaceného balíčku se počítá do kategorie', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type) VALUES (34,1,'Masáže',1)").run();
+  const pkg = db.prepare("INSERT INTO prepaid_packages (user_id,category_id,name,total_amount,units_total,unit_amount) VALUES (1,34,'10 vstupů',5000,10,500)").run().lastInsertRowid;
+  db.prepare("INSERT INTO prepaid_draws (user_id,package_id,date,units,amount) VALUES (1,?,'2026-07-04',1,500),(1,?,'2026-08-04',1,500)").run(pkg, pkg);
+  const r = await (await fetch(`${base}/api/stats/budget-history?from=2026-07&to=2026-08`)).json();
+  assert.deepEqual(r.series.find(x => x.category_id === 34).values, [500, 500]);
+  server.close();
+});
+
+test('budget-history: fáze A — výdaj z OSVČ účtu se nezapočítá', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type) VALUES (35,1,'Jídlo',1)").run();
+  const inc = db.prepare("INSERT INTO accounts (user_id,account_number,name,role) VALUES (1,'800/3030','OSVC','income')").run().lastInsertRowid;
+  db.prepare("INSERT INTO transactions (user_id,category_id,account_id,amount,date,description) VALUES (1,35,?,-900,'2026-07-05','z OSVC'),(1,35,NULL,-100,'2026-07-06','z běžného')").run(inc);
+  const r = await (await fetch(`${base}/api/stats/budget-history?from=2026-07&to=2026-07`)).json();
+  assert.deepEqual(r.series.find(x => x.category_id === 35).values, [100]);
+  server.close();
+});
+
+test('budget-history: série seřazené podle součtu sestupně', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type) VALUES (36,1,'Malá',1),(37,1,'Velká',1)").run();
+  db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES (1,36,-100,'2026-07-05','a'),(1,37,-9000,'2026-07-05','b')").run();
+  const r = await (await fetch(`${base}/api/stats/budget-history?from=2026-07&to=2026-07`)).json();
+  assert.deepEqual(r.series.map(s => s.category_id), [37, 36]);
+  server.close();
+});
+
+test('budget-history: bez parametrů vrátí posledních 12 období', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const r = await (await fetch(`${base}/api/stats/budget-history`)).json();
+  assert.equal(r.periods.length, 12);
+  assert.equal(r.periods[11].key, r.to);
+  assert.equal(r.periods[0].key, r.from);
+  server.close();
+});
+
+test('budget-history: validace vstupů', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  assert.equal((await fetch(`${base}/api/stats/budget-history?from=2026-13&to=2026-07`)).status, 400);
+  assert.equal((await fetch(`${base}/api/stats/budget-history?from=cerven&to=2026-07`)).status, 400);
+  assert.equal((await fetch(`${base}/api/stats/budget-history?from=2026-08&to=2026-07`)).status, 400);
+  assert.equal((await fetch(`${base}/api/stats/budget-history?from=2000-01&to=2026-07`)).status, 400);
+  server.close();
+});

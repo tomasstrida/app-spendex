@@ -10,6 +10,7 @@ const cs = {
     report: 'Schůzka',
     savings: 'Spořicí účet',
     annualBudgets: 'Roční budgety',
+    budgetHistory: 'Vývoj výdajů',
     accounts: 'Účty',
     import: 'Import',
     duplicates: 'Duplicity',

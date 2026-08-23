@@ -14,6 +14,7 @@ import ReportPage from './pages/ReportPage';
 import SavingsPage from './pages/SavingsPage';
 import ReviewPage from './pages/ReviewPage';
 import AnnualBudgetsPage from './pages/AnnualBudgetsPage';
+import BudgetHistoryPage from './pages/BudgetHistoryPage';
 import DuplicatesPage from './pages/DuplicatesPage';
 import AccountsPage from './pages/AccountsPage';
 import RulesPage from './pages/RulesPage';
@@ -110,6 +111,7 @@ export default function App() {
             <Route path="/report"       element={<R el={<ReportPage />} />} />
             <Route path="/savings"      element={<R el={<SavingsPage />} />} />
             <Route path="/annual-budgets" element={<R el={<AnnualBudgetsPage />} />} />
+            <Route path="/budget-history" element={<R el={<BudgetHistoryPage />} />} />
             <Route path="/accounts"     element={<R el={<AccountsPage />} />} />
             <Route path="/import"       element={<R el={<ImportPage />} />} />
             <Route path="/duplicates"  element={<R el={<DuplicatesPage />} />} />
