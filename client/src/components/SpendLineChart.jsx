@@ -14,11 +14,16 @@ import { niceScale, formatTick, shortPeriodLabel, signPrefix } from '../utils/ch
 //    barevná značka vedle textu,
 //  • přímé popisky jen u ≤4 zapnutých sérií a jen když se nepřekrývají,
 //  • hodnota je vždy dostupná i bez hoveru (tabulkový pohled na stránce).
+//
+// U JEDNÉ zapnuté série se navíc kreslí částka u každého bodu a čárkovaná čára
+// měsíčního limitu. Číslo u každého bodu je jinak anti-pattern (u víc sérií je
+// z toho nečitelná změť), u jedné křivky je ale čitelné a uživatel ho chce.
 
 const PAD = { top: 16, right: 24, bottom: 34, left: 64 };
 const LABEL_PAD_RIGHT = 112;   // místo na přímé popisky u konců křivek
 const MAX_DIRECT_LABELS = 4;
 const LABEL_MIN_GAP = 14;      // px — pod tím se popisky překrývají
+const MAX_VALUE_LABELS = 24;   // víc období = popisky u bodů by kolidovaly
 
 export default function SpendLineChart({ periods, series, colors, onPointClick, height = 320 }) {
   const wrapRef = useRef(null);
@@ -39,8 +44,15 @@ export default function SpendLineChart({ periods, series, colors, onPointClick, 
   const n = periods.length;
   const plotH = Math.max(10, height - PAD.top - PAD.bottom);
 
+  // Limit se kreslí jen u jediné zapnuté série — jinak by čar bylo dvakrát tolik
+  // než kategorií.
+  const soloSeries = series.length === 1 ? series[0] : null;
+  const limits = soloSeries?.limits || null;
+  const showValueLabels = !!soloSeries && n <= MAX_VALUE_LABELS;
+
   const all = series.flatMap(s => s.values);
-  const { min, max, ticks } = niceScale(Math.min(...all, 0), Math.max(...all, 0));
+  const scaleInput = limits ? [...all, ...limits.filter(v => v != null)] : all;
+  const { min, max, ticks } = niceScale(Math.min(...scaleInput, 0), Math.max(...scaleInput, 0));
 
   const y = v => PAD.top + ((max - v) / (max - min || 1)) * plotH;
 
@@ -79,6 +91,28 @@ export default function SpendLineChart({ periods, series, colors, onPointClick, 
   const tooltipRows = active == null ? [] : series
     .map(s => ({ id: s.category_id, name: s.name, value: s.values[active] ?? 0 }))
     .sort((a, b) => b.value - a.value);
+
+  // Limit může u některých období chybět (přepsání bez defaultu) — čára se tam
+  // přeruší místo toho, aby přeskočila přes díru.
+  const limitSegments = [];
+  if (limits) {
+    let current = [];
+    limits.forEach((v, i) => {
+      if (v == null) { if (current.length) limitSegments.push(current); current = []; return; }
+      current.push({ i, v });
+    });
+    if (current.length) limitSegments.push(current);
+  }
+  const limitLabelAt = limits ? limits.find(v => v != null) ?? null : null;
+
+  // Půlka kroku na obě strany od bodu období — u krajních období se schod
+  // zarovná s okrajem plochy, aby čára nekončila ve vzduchu.
+  const halfStep = n <= 1 ? plotW / 2 : plotW / (n - 1) / 2;
+  const stepPoints = seg => seg.flatMap(({ i, v }, k) => {
+    const left = k === 0 ? Math.max(PAD.left, x(i) - halfStep) : x(i) - halfStep;
+    const right = k === seg.length - 1 ? Math.min(PAD.left + plotW, x(i) + halfStep) : x(i) + halfStep;
+    return [`${left},${y(v)}`, `${right},${y(v)}`];
+  }).join(' ');
 
   // Tooltip drží uvnitř grafu — u pravého okraje se překlopí doleva.
   const tipLeft = active == null ? 0 : x(active);
@@ -147,6 +181,28 @@ export default function SpendLineChart({ periods, series, colors, onPointClick, 
               </g>
             );
           })}
+
+          {/* měsíční limit — čárkovaně, aby se četl jako práh, ne jako další série */}
+          {limits && limitSegments.map((seg, si) => (
+            // Schody, ne šikmá čára: limit platí pro celé období a mezi obdobími
+            // skočí. Interpolace by tvrdila, že se rozpočet měnil postupně.
+            <polyline
+              key={si}
+              className="chart-limit-line"
+              fill="none"
+              points={stepPoints(seg)}
+            />
+          ))}
+          {limits && limitLabelAt != null && (
+            <text x={PAD.left + 4} y={y(limitLabelAt) - 7} className="chart-limit-label">limit</text>
+          )}
+
+          {/* částky u bodů — jen u jediné série */}
+          {showValueLabels && soloSeries.values.map((v, i) => (
+            <text key={i} x={x(i)} y={Math.max(PAD.top + 9, y(v) - 12)} className="chart-value-label">
+              {signPrefix(v)}{formatTick(Math.abs(v))}
+            </text>
+          ))}
 
           {/* přímé popisky konců křivek */}
           {labelsFit && endLabels.map(l => (

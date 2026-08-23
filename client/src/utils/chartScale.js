@@ -96,3 +96,26 @@ export function shortPeriodLabel(periodKey) {
 export function signPrefix(value) {
   return value < 0 ? '−' : '';
 }
+
+/**
+ * Průměr za období. Dělí se počtem VŠECH období v rozsahu včetně těch s nulou —
+ * u sezónní kategorie (0, 0, 25 195, 8 896) by průměr přes „jen měsíce s výdajem"
+ * lhal směrem nahoru.
+ */
+export function periodAverage(values) {
+  if (!values || !values.length) return 0;
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+/**
+ * Shrnutí měsíčního limitu za rozsah. Limit se může lišit období od období
+ * (přepsání rozpočtu), proto rozpětí místo jediného čísla.
+ * @returns {{min:number,max:number,varies:boolean}|null} null = žádný limit
+ */
+export function summarizeLimit(limits) {
+  const set = (limits || []).filter(v => v != null);
+  if (!set.length) return null;
+  const min = Math.min(...set);
+  const max = Math.max(...set);
+  return { min, max, varies: min !== max };
+}

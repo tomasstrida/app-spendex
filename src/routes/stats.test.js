@@ -427,3 +427,47 @@ test('budget-history: validace vstupů', async () => {
   assert.equal((await fetch(`${base}/api/stats/budget-history?from=2000-01&to=2026-07`)).status, 400);
   server.close();
 });
+
+test('budget-history: limits berou default rozpočet a přepsání pro konkrétní období', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type) VALUES (50,1,'Potraviny',1)").run();
+  db.prepare("INSERT INTO budgets (user_id,category_id,month,amount) VALUES (1,50,'default',8000),(1,50,'2026-07',12000)").run();
+  db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES (1,50,-100,'2026-06-05','a')").run();
+  const r = await (await fetch(`${base}/api/stats/budget-history?from=2026-06&to=2026-08`)).json();
+  assert.deepEqual(r.series.find(s => s.category_id === 50).limits, [8000, 12000, 8000]);
+  server.close();
+});
+
+test('budget-history: kategorie bez měsíčního rozpočtu má limits null', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type) VALUES (51,1,'Oblečení',2)").run();
+  db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES (1,51,-500,'2026-07-05','a')").run();
+  const r = await (await fetch(`${base}/api/stats/budget-history?from=2026-07&to=2026-07`)).json();
+  assert.equal(r.series.find(s => s.category_id === 51).limits, null);
+  server.close();
+});
+
+test('budget-history: přepsání bez defaultu nechá ostatní období bez limitu', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type) VALUES (52,1,'Sport',1)").run();
+  db.prepare("INSERT INTO budgets (user_id,category_id,month,amount) VALUES (1,52,'2026-07',3000)").run();
+  db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES (1,52,-500,'2026-07-05','a')").run();
+  const r = await (await fetch(`${base}/api/stats/budget-history?from=2026-06&to=2026-07`)).json();
+  assert.deepEqual(r.series.find(s => s.category_id === 52).limits, [null, 3000]);
+  server.close();
+});
+
+test('budget-history: rozpočet cizího uživatele se nepromítne', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO users (id, email) VALUES (2,'x@x')").run();
+  db.prepare("INSERT INTO categories (id,user_id,name,type) VALUES (53,1,'Zábava',1)").run();
+  db.prepare("INSERT INTO budgets (user_id,category_id,month,amount) VALUES (2,53,'default',9999)").run();
+  db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES (1,53,-500,'2026-07-05','a')").run();
+  const r = await (await fetch(`${base}/api/stats/budget-history?from=2026-07&to=2026-07`)).json();
+  assert.equal(r.series.find(s => s.category_id === 53).limits, null);
+  server.close();
+});

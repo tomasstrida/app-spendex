@@ -4,7 +4,7 @@ import { BarChart3, Table2 } from 'lucide-react';
 import Layout from '../components/Layout';
 import SpendLineChart from '../components/SpendLineChart';
 import { t, formatCurrency } from '../i18n';
-import { assignColors, shortPeriodLabel, signPrefix } from '../utils/chartScale';
+import { assignColors, shortPeriodLabel, signPrefix, periodAverage, summarizeLimit } from '../utils/chartScale';
 
 const DEFAULT_ACTIVE = 5;   // víc křivek naráz už se nedá číst
 
@@ -68,6 +68,11 @@ export default function BudgetHistoryPage() {
     navigate(`/transactions?period=${key}&category_id=${categoryId}&spending_only=1`);
   }
 
+  // Souhrnná čísla dávají smysl jen u jediné vybrané kategorie — u víc sérií
+  // by „průměr" a „limit" nebylo jasné, čeho se týkají.
+  const solo = activeSeries.length === 1 ? activeSeries[0] : null;
+  const soloLimit = solo ? summarizeLimit(solo.limits) : null;
+
   return (
     <Layout>
       <div className="page-header">
@@ -110,6 +115,36 @@ export default function BudgetHistoryPage() {
         // Při načítání nového rozsahu zůstává předchozí vykreslení ztlumené —
         // žádný skeleton a žádný poskok layoutu.
         <div className={`card chart-card${loading ? ' is-loading' : ''}`}>
+          {solo && (
+            <div className="chart-stats">
+              <div className="chart-stat">
+                <span className="chart-stat-label">Celkem za období</span>
+                <span className="chart-stat-value">{signPrefix(solo.total)}{formatCurrency(solo.total)}</span>
+                <span className="chart-stat-note">{solo.name}</span>
+              </div>
+              <div className="chart-stat">
+                <span className="chart-stat-label">Průměr měsíčně</span>
+                <span className="chart-stat-value">
+                  {(() => { const a = periodAverage(solo.values); return <>{signPrefix(a)}{formatCurrency(a)}</>; })()}
+                </span>
+                <span className="chart-stat-note">{periods.length} období včetně nulových</span>
+              </div>
+              <div className="chart-stat">
+                <span className="chart-stat-label">Měsíční limit</span>
+                <span className="chart-stat-value">
+                  {soloLimit
+                    ? (soloLimit.varies
+                        ? `${formatCurrency(soloLimit.min)} – ${formatCurrency(soloLimit.max)}`
+                        : formatCurrency(soloLimit.max))
+                    : '—'}
+                </span>
+                <span className="chart-stat-note">
+                  {soloLimit ? (soloLimit.varies ? 'liší se podle období' : 'rozpočet kategorie') : 'bez měsíčního rozpočtu'}
+                </span>
+              </div>
+            </div>
+          )}
+
           {showTable ? (
             <HistoryTable periods={periods} series={activeSeries} colors={colors} />
           ) : (

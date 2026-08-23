@@ -65,3 +65,22 @@ test('signPrefix: záporná částka dostane minus, kladná a nula ne', async ()
   assert.equal(signPrefix(0), '');
   assert.equal(signPrefix(10), '');
 });
+
+test('periodAverage: dělí počtem VŠECH období včetně nulových', async () => {
+  const { periodAverage } = await import('./chartScale.js');
+  assert.equal(periodAverage([0, 0, 25195, 8895]), 8522.5);
+  assert.equal(periodAverage([]), 0);
+});
+
+test('summarizeLimit: konstantní limit, měnící se limit, žádný limit', async () => {
+  const { summarizeLimit } = await import('./chartScale.js');
+  assert.deepEqual(summarizeLimit([8000, 8000, 8000]), { min: 8000, max: 8000, varies: false });
+  assert.deepEqual(summarizeLimit([8000, 12000, 8000]), { min: 8000, max: 12000, varies: true });
+  assert.equal(summarizeLimit([null, null]), null);
+  assert.equal(summarizeLimit(null), null);
+});
+
+test('summarizeLimit: období bez limitu se do rozpětí nepočítá', async () => {
+  const { summarizeLimit } = await import('./chartScale.js');
+  assert.deepEqual(summarizeLimit([null, 3000]), { min: 3000, max: 3000, varies: false });
+});
