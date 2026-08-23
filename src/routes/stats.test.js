@@ -408,15 +408,16 @@ test('budget-history: série seřazené podle součtu sestupně', async () => {
   server.close();
 });
 
-test('budget-history: bez parametrů začíná lednem roku aktuálního období', async () => {
+test('budget-history: bez parametrů použije defaultHistoryRange (leden, jinak 6 kompletních)', async () => {
   const { app } = setup();
   const { server, base } = await listen(app);
+  const { currentPeriodKey, defaultHistoryRange } = require('../utils/period');
+  const expected = defaultHistoryRange(currentPeriodKey(1), 6);
   const r = await (await fetch(`${base}/api/stats/budget-history`)).json();
-  const year = r.to.split('-')[0];
-  assert.equal(r.from, `${year}-01`);
+  assert.deepEqual({ from: r.from, to: r.to }, expected);
   assert.equal(r.periods[0].key, r.from);
   assert.equal(r.periods[r.periods.length - 1].key, r.to);
-  assert.equal(r.periods.length, Number(r.to.split('-')[1]));
+  assert.ok(r.periods.length >= 6, 'výchozí rozsah nikdy nespadne pod 6 období');
   server.close();
 });
 
@@ -424,9 +425,20 @@ test('budget-history: výchozí rozsah bere rok z OBDOBÍ, ne z kalendáře (bil
   const { db, app } = setup();
   const { server, base } = await listen(app);
   db.prepare("INSERT INTO settings (user_id, billing_day) VALUES (1, 15)").run();
+  const { currentPeriodKey, defaultHistoryRange } = require('../utils/period');
   const r = await (await fetch(`${base}/api/stats/budget-history`)).json();
   assert.equal(r.billing_day, 15);
-  assert.equal(r.from, `${r.to.split('-')[0]}-01`, 'from je leden TÉHOŽ roku jako aktuální období');
+  assert.deepEqual({ from: r.from, to: r.to }, defaultHistoryRange(currentPeriodKey(15), 6));
+  server.close();
+});
+
+test('budget-history: explicitní from se nepřebíjí zálohou na 6 období', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const r = await (await fetch(`${base}/api/stats/budget-history?from=2026-07&to=2026-07`)).json();
+  assert.equal(r.from, '2026-07');
+  assert.equal(r.to, '2026-07');
+  assert.equal(r.periods.length, 1);
   server.close();
 });
 

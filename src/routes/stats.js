@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
-const { getPeriodDates, getUserBillingDay, currentPeriodKey } = require('../utils/period');
+const { getPeriodDates, getUserBillingDay, currentPeriodKey, shiftPeriodKey, periodIndex, defaultHistoryRange } = require('../utils/period');
 const { savingsNet, reserveBalance, savingsAccount, reserveAccount, reservePaidPatterns, mainAccount, variableAccount } = require('../utils/recurring');
 const { SPENDING_AND } = require('../utils/spending-filter');
 const { normCounterparty } = require('../utils/income');
@@ -306,25 +306,16 @@ router.get('/overview', requireAuth, (req, res) => {
 // měsíce — jinak by při billing_day != 1 čísla nesedla s Měsíčními rozpočty.
 const PERIOD_KEY_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const MAX_PERIODS = 60;
-
-function shiftPeriodKey(periodKey, delta) {
-  const [y, m] = periodKey.split('-').map(Number);
-  const idx = y * 12 + (m - 1) + delta;
-  return `${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, '0')}`;
-}
-
-function periodIndex(periodKey) {
-  const [y, m] = periodKey.split('-').map(Number);
-  return y * 12 + (m - 1);
-}
+const MIN_DEFAULT_PERIODS = 6;
 
 router.get('/budget-history', requireAuth, (req, res) => {
   const billingDay = getUserBillingDay(db, req.dataUserId);
-  const to = req.query.to || currentPeriodKey(billingDay);
-  // Výchozí rozsah = od ledna roku aktuálního OBDOBÍ (ne kalendářního data) —
-  // při billing_day > 1 je začátkem ledna aktuální období pořád prosincové
-  // a rozsah by jinak přeskočil o rok.
-  const from = req.query.from || `${to.split('-')[0]}-01`;
+  // Zálohu na krátký rozsah řeší defaultHistoryRange, ale jen když si rozsah
+  // nezvolil uživatel — explicitní parametr se nikdy nepřebíjí.
+  const fallback = defaultHistoryRange(currentPeriodKey(billingDay), MIN_DEFAULT_PERIODS);
+  const explicit = req.query.from || req.query.to;
+  const to = req.query.to || (explicit ? currentPeriodKey(billingDay) : fallback.to);
+  const from = req.query.from || (explicit ? `${to.split('-')[0]}-01` : fallback.from);
 
   if (!PERIOD_KEY_RE.test(from) || !PERIOD_KEY_RE.test(to)) {
     return res.status(400).json({ error: 'Parametry from/to musí mít formát YYYY-MM.' });

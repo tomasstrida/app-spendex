@@ -68,4 +68,41 @@ function periodKeyForDate(billingDay, dateStr) {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
-module.exports = { getPeriodDates, currentPeriodKey, getUserBillingDay, periodKeyForDate };
+/**
+ * Posune periodKey o `delta` měsíců. "2026-01" + (-1) → "2025-12".
+ */
+function shiftPeriodKey(periodKey, delta) {
+  const [y, m] = periodKey.split('-').map(Number);
+  const idx = y * 12 + (m - 1) + delta;
+  return `${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, '0')}`;
+}
+
+/** Pořadové číslo období pro porovnávání a odečítání rozsahů. */
+function periodIndex(periodKey) {
+  const [y, m] = periodKey.split('-').map(Number);
+  return y * 12 + (m - 1);
+}
+
+/**
+ * Výchozí rozsah pro dlouhodobé grafy: od ledna roku aktuálního OBDOBÍ
+ * (ne kalendářního data — při billing_day > 1 je začátkem ledna aktuálním
+ * obdobím ještě prosinec) po aktuální období.
+ *
+ * Kdyby takový rozsah vyšel kratší než `minPeriods`, přepne se na posledních
+ * `minPeriods` KOMPLETNÍCH období — běžící období se v tom případě nezobrazí,
+ * aby krátký graf neuzavíral srovnání nedokončeným měsícem.
+ *
+ * @param {string} currentKey aktuální periodKey ("YYYY-MM")
+ * @param {number} minPeriods minimální počet období
+ * @returns {{ from: string, to: string }}
+ */
+function defaultHistoryRange(currentKey, minPeriods = 6) {
+  const from = `${currentKey.split('-')[0]}-01`;
+  if (periodIndex(currentKey) - periodIndex(from) + 1 >= minPeriods) {
+    return { from, to: currentKey };
+  }
+  const to = shiftPeriodKey(currentKey, -1);
+  return { from: shiftPeriodKey(to, -(minPeriods - 1)), to };
+}
+
+module.exports = { getPeriodDates, currentPeriodKey, getUserBillingDay, periodKeyForDate, shiftPeriodKey, periodIndex, defaultHistoryRange };
