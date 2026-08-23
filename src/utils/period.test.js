@@ -33,13 +33,22 @@ test('shiftPeriodKey: přes hranici roku oběma směry', () => {
   assert.equal(shiftPeriodKey('2026-03', 0), '2026-03');
 });
 
-test('defaultHistoryRange: od ledna, když je období dost', () => {
-  assert.deepEqual(defaultHistoryRange('2026-08', 6), { from: '2026-01', to: '2026-08' });
-  assert.deepEqual(defaultHistoryRange('2026-06', 6), { from: '2026-01', to: '2026-06' });
+test('defaultHistoryRange: končí posledním KOMPLETNÍM obdobím, ne běžícím', () => {
+  assert.deepEqual(defaultHistoryRange('2026-08', 6), { from: '2026-01', to: '2026-07' });
+  assert.deepEqual(defaultHistoryRange('2026-12', 6), { from: '2026-01', to: '2026-11' });
 });
 
-test('defaultHistoryRange: pod 6 období → posledních 6 KOMPLETNÍCH (běžící se nezobrazí)', () => {
+test('defaultHistoryRange: pod 6 období → posledních 6 kompletních', () => {
+  assert.deepEqual(defaultHistoryRange('2026-06', 6), { from: '2025-12', to: '2026-05' });
   assert.deepEqual(defaultHistoryRange('2026-03', 6), { from: '2025-09', to: '2026-02' });
   assert.deepEqual(defaultHistoryRange('2026-01', 6), { from: '2025-07', to: '2025-12' });
-  assert.deepEqual(defaultHistoryRange('2026-05', 6), { from: '2025-11', to: '2026-04' });
+});
+
+test('defaultHistoryRange: běžící období není nikdy v rozsahu', () => {
+  for (let m = 1; m <= 12; m++) {
+    const current = `2026-${String(m).padStart(2, '0')}`;
+    const { from, to } = defaultHistoryRange(current, 6);
+    assert.equal(to, shiftPeriodKey(current, -1), `${current}: to musí být předchozí období`);
+    assert.ok(from <= to, `${current}: from nesmí přeskočit to`);
+  }
 });

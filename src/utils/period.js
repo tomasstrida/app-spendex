@@ -84,24 +84,27 @@ function periodIndex(periodKey) {
 }
 
 /**
- * Výchozí rozsah pro dlouhodobé grafy: od ledna roku aktuálního OBDOBÍ
- * (ne kalendářního data — při billing_day > 1 je začátkem ledna aktuálním
- * obdobím ještě prosinec) po aktuální období.
+ * Výchozí rozsah pro dlouhodobé grafy.
  *
- * Kdyby takový rozsah vyšel kratší než `minPeriods`, přepne se na posledních
- * `minPeriods` KOMPLETNÍCH období — běžící období se v tom případě nezobrazí,
- * aby krátký graf neuzavíral srovnání nedokončeným měsícem.
+ * Poslední zobrazené období je VŽDY poslední KOMPLETNÍ, nikdy běžící — rozjetý
+ * měsíc má nutně nižší čísla než uzavřené a v grafu by vypadal jako propad.
+ * Uživatel si běžící měsíc může přidat ručně přes from/to.
  *
- * @param {string} currentKey aktuální periodKey ("YYYY-MM")
+ * Začátek = leden roku aktuálního OBDOBÍ (ne kalendářního data — při
+ * billing_day > 1 je začátkem ledna aktuálním obdobím ještě prosinec).
+ * Kdyby takový rozsah vyšel kratší než `minPeriods`, vezme se posledních
+ * `minPeriods` kompletních období.
+ *
+ * @param {string} currentKey aktuální (běžící) periodKey ("YYYY-MM")
  * @param {number} minPeriods minimální počet období
  * @returns {{ from: string, to: string }}
  */
 function defaultHistoryRange(currentKey, minPeriods = 6) {
-  const from = `${currentKey.split('-')[0]}-01`;
-  if (periodIndex(currentKey) - periodIndex(from) + 1 >= minPeriods) {
-    return { from, to: currentKey };
-  }
   const to = shiftPeriodKey(currentKey, -1);
+  const from = `${currentKey.split('-')[0]}-01`;
+  if (periodIndex(to) - periodIndex(from) + 1 >= minPeriods) {
+    return { from, to };
+  }
   return { from: shiftPeriodKey(to, -(minPeriods - 1)), to };
 }
 
