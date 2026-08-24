@@ -204,3 +204,30 @@ test('protiúčet se silným vzorcem v OBOU směrech (různé kategorie) je neje
   }
   assert.equal(findCounterpartyRuleCandidates(db, 1).length, 0);
 });
+
+// --- systémové účetní kategorie (type=4) se nikdy nenavrhují ---
+
+test('kandidát mířící do systémové kategorie type=4 se nenabízí', () => {
+  const db = freshDb(); seedBase(db);
+  db.prepare("INSERT INTO categories (id, user_id, name, type) VALUES (20, 1, 'Nákup předplacených balíčků', 4)").run();
+  const { findCounterpartyRuleCandidates } = require('./counterparty-rule-candidates');
+  for (let i = 1; i <= 4; i++) {
+    db.prepare(`INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account)
+                VALUES (1, 20, -10000, '2026-0${i}-05', 'balíček 10 vstupů', 'MASERKA/0100')`).run();
+  }
+  assert.equal(findCounterpartyRuleCandidates(db, 1).length, 0);
+});
+
+test('type=4 blokuje jen tu jednu skupinu, ostatní protiúčty se nabízejí dál', () => {
+  const db = freshDb(); seedBase(db);
+  db.prepare("INSERT INTO categories (id, user_id, name, type) VALUES (20, 1, 'Převody interní', 4)").run();
+  const { findCounterpartyRuleCandidates } = require('./counterparty-rule-candidates');
+  for (let i = 1; i <= 4; i++) {
+    db.prepare(`INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account)
+                VALUES (1, 20, -1000, '2026-0${i}-05', 'převod', 'PREVOD/0100'),
+                       (1, 10, -300, '2026-0${i}-06', 'DPH', '705-77628031/0710')`).run();
+  }
+  const out = findCounterpartyRuleCandidates(db, 1);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].counterparty_account, '705-77628031/0710');
+});

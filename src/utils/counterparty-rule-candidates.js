@@ -41,6 +41,15 @@ function findCounterpartyRuleCandidates(db, userId, { onlyCounterpartyAccount } 
                 WHERE user_id = ? AND status IN ('approved', 'dismissed')`).all(userId)
       .map(r => normalizeAccount(r.counterparty_account))
   );
+  // Systémové účetní kategorie (Převody interní, dobití fondu, nákup předplacených
+  // balíčků). Do nich platba nepatří podle PROTISTRANY, ale podle toho, co ta
+  // konkrétní platba znamená: převody řeší identita účtu ve vrstvě L0, dobití fondu
+  // i nákup balíčku jsou vědomá jednorázová rozhodnutí. Stejnému dodavateli přitom
+  // zaplatíš jednou balíček a jindy jedno vstupné — bezesměrové trvalé pravidlo by
+  // tenhle rozdíl zahodilo.
+  const systemCategories = new Set(
+    db.prepare('SELECT id FROM categories WHERE user_id = ? AND type = 4').all(userId).map(c => c.id)
+  );
 
   const groups = new Map(); // normalizovaný protiúčet -> pole řádků
   for (const r of rows) {
@@ -72,6 +81,7 @@ function findCounterpartyRuleCandidates(db, userId, { onlyCounterpartyAccount } 
     if (major.length < MIN_COVERAGE) continue;
 
     const { topCat, purity } = topCategory(major);
+    if (systemCategories.has(topCat)) continue;
     if (purity < MIN_PURITY) continue;
 
     // Když má i opačný směr vlastní silný vzorec s JINOU kategorií, je protiúčet
