@@ -24,6 +24,8 @@ export default function RulesPage() {
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [scanning, setScanning] = useState(false);
+  // Výsledek posledního skenu — bez něj tlačítko při nulovém nálezu neudělá nic viditelného.
+  const [scanMsg, setScanMsg] = useState('');
   // Detail plateb pod návrhem: id → { loading, error, data }. Lazy-load při prvním rozbalení.
   const [expanded, setExpanded] = useState(null);
   const [details, setDetails] = useState({});
@@ -163,9 +165,16 @@ export default function RulesPage() {
 
   async function scanHistory() {
     setScanning(true);
+    setScanMsg('');
     try {
       const res = await fetch('/api/rules/suggestions/scan', { method: 'POST' });
       if (!res.ok) { setErr('Chyba při kontrole historie.'); return; }
+      // Pozor: `found` je počet PENDING návrhů po skenu, ne počet nově vzniklých —
+      // upsert přeskóruje i ty, které už čekaly. Proto neutrální „nalezeno".
+      const found = (await res.json().catch(() => ({}))).found ?? 0;
+      setScanMsg(found > 0
+        ? `Nalezeno návrhů: ${found}.`
+        : 'Nic k automatizaci — v historii není další opakující se protiúčet.');
       load();
     } finally { setScanning(false); }
   }
@@ -191,9 +200,14 @@ export default function RulesPage() {
               podle opakujícího se čísla protiúčtu, ne textu
             </span>
           </div>
-          <button className="btn btn-ghost" disabled={scanning} onClick={scanHistory}>
-            {scanning ? 'Kontroluji…' : 'Zkontrolovat historii'}
-          </button>
+          <div style={{ textAlign: 'right' }}>
+            <button className="btn btn-ghost" disabled={scanning} onClick={scanHistory}>
+              {scanning ? 'Kontroluji…' : 'Zkontrolovat historii'}
+            </button>
+            {scanMsg && (
+              <div className="text-muted" style={{ fontSize: 12, marginTop: 6 }}>{scanMsg}</div>
+            )}
+          </div>
         </div>
         {suggestions.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
