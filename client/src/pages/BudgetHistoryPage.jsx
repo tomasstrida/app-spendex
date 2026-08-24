@@ -6,6 +6,7 @@ import SpendLineChart from '../components/SpendLineChart';
 import { t, formatCurrency } from '../i18n';
 import { assignColors, shortPeriodLabel, signPrefix, periodAverage, summarizeLimit } from '../utils/chartScale';
 import { groupSeriesForLegend } from '../utils/legendGroups';
+import { shouldFlipSign, flipSeriesSign } from '../utils/incomeSign';
 
 const DEFAULT_ACTIVE = 5;   // víc křivek naráz už se nedá číst
 
@@ -67,6 +68,15 @@ export default function BudgetHistoryPage() {
     });
   }
 
+  // Příjmová kategorie má „utraceno" záporné (SUM(-amount)). Když jsou ve výběru
+  // JEN takové série, otočíme znaménko pro ZOBRAZENÍ — graf, tabulka i souhrny
+  // pak čtou jako kladné příjmy. Data ze serveru zůstávají beze změny.
+  const flipped = useMemo(() => shouldFlipSign(activeSeries), [activeSeries]);
+  const displaySeries = useMemo(
+    () => (flipped ? flipSeriesSign(activeSeries) : activeSeries),
+    [flipped, activeSeries]
+  );
+
   function openTransactions(categoryId, periodIndex) {
     const key = periods[periodIndex]?.key;
     if (!key) return;
@@ -75,7 +85,7 @@ export default function BudgetHistoryPage() {
 
   // Souhrnná čísla dávají smysl jen u jediné vybrané kategorie — u víc sérií
   // by „průměr" a „limit" nebylo jasné, čeho se týkají.
-  const solo = activeSeries.length === 1 ? activeSeries[0] : null;
+  const solo = displaySeries.length === 1 ? displaySeries[0] : null;
   const soloLimit = solo ? summarizeLimit(solo.limits) : null;
 
   return (
@@ -151,14 +161,20 @@ export default function BudgetHistoryPage() {
           )}
 
           {showTable ? (
-            <HistoryTable periods={periods} series={activeSeries} colors={colors} />
+            <HistoryTable periods={periods} series={displaySeries} colors={colors} />
           ) : (
             <SpendLineChart
               periods={periods}
-              series={activeSeries}
+              series={displaySeries}
               colors={colors}
               onPointClick={openTransactions}
             />
+          )}
+
+          {flipped && (
+            <div className="text-muted" style={{ fontSize: 12, marginTop: 8 }}>
+              Příjmy se zobrazují jako kladné hodnoty.
+            </div>
           )}
 
           <div className="chart-legend">
