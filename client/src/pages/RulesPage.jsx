@@ -26,6 +26,9 @@ export default function RulesPage() {
   const [scanning, setScanning] = useState(false);
   // Výsledek posledního skenu — bez něj tlačítko při nulovém nálezu neudělá nic viditelného.
   const [scanMsg, setScanMsg] = useState('');
+  // Roste s každým skenem — jako `key` vynutí remount, takže se animace
+  // přehraje znovu i když je text stejný jako minule.
+  const [scanRun, setScanRun] = useState(0);
   // Detail plateb pod návrhem: id → { loading, error, data }. Lazy-load při prvním rozbalení.
   const [expanded, setExpanded] = useState(null);
   const [details, setDetails] = useState({});
@@ -166,6 +169,7 @@ export default function RulesPage() {
   async function scanHistory() {
     setScanning(true);
     setScanMsg('');
+    setScanRun(n => n + 1);
     try {
       const res = await fetch('/api/rules/suggestions/scan', { method: 'POST' });
       if (!res.ok) { setErr('Chyba při kontrole historie.'); return; }
@@ -204,9 +208,7 @@ export default function RulesPage() {
             <button className="btn btn-ghost" disabled={scanning} onClick={scanHistory}>
               {scanning ? 'Kontroluji…' : 'Zkontrolovat historii'}
             </button>
-            {scanMsg && (
-              <div className="text-muted" style={{ fontSize: 12, marginTop: 6 }}>{scanMsg}</div>
-            )}
+            {scanMsg && <div key={scanRun} className="scan-result">{scanMsg}</div>}
           </div>
         </div>
         {suggestions.length > 0 && (
