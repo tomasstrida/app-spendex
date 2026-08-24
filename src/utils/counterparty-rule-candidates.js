@@ -8,11 +8,20 @@ const normalizeAccount = require('./normalize-account');
 const MIN_COVERAGE = 3;
 const MIN_PURITY = 0.90;
 
+// Dominantní kategorie a její podíl v seznamu transakcí.
+function topCategory(list) {
+  const counts = new Map();
+  for (const r of list) counts.set(r.category_id, (counts.get(r.category_id) || 0) + 1);
+  let topCat = null, topN = 0;
+  for (const [catId, n] of counts) if (n > topN) { topN = n; topCat = catId; }
+  return { topCat, purity: list.length ? topN / list.length : 0 };
+}
+
 function findCounterpartyRuleCandidates(db, userId, { onlyCounterpartyAccount } = {}) {
   // Fetch all transactions without SQL-level counterparty filtering. Normalization
   // happens in JS below to avoid one-sided comparison (raw DB vs. normalized filter).
   const rows = db.prepare(`
-    SELECT counterparty_account, category_id, subcategory_id
+    SELECT counterparty_account, category_id, subcategory_id, amount
     FROM transactions
     WHERE user_id = @userId AND category_id IS NOT NULL
       AND counterparty_account IS NOT NULL AND counterparty_account != ''
@@ -49,18 +58,29 @@ function findCounterpartyRuleCandidates(db, userId, { onlyCounterpartyAccount } 
   const candidates = [];
   for (const [cp, list] of groups) {
     if (ownAccounts.has(cp) || existingRuleAccounts.has(cp) || resolvedAccounts.has(cp)) continue;
-    const total = list.length;
-    if (total < MIN_COVERAGE) continue;
 
-    const catCounts = new Map();
-    for (const r of list) catCounts.set(r.category_id, (catCounts.get(r.category_id) || 0) + 1);
-    let topCat = null, topN = 0;
-    for (const [catId, n] of catCounts) if (n > topN) { topN = n; topCat = catId; }
-    const purity = topN / total;
+    // Purity se počítá UVNITŘ dominantního směru platby. Ojedinělá vratka od
+    // dodavatele (jiná kategorie, opačné znaménko) jinak trvale sráží skóre pod
+    // práh a protiúčet se nikdy nenavrhne — viz ČSSZ: 8× odchozí „Mimo systém"
+    // + 1× příchozí přeplatek v „Příjmech" = 0,889 < 0,90.
+    // Samotné pravidlo zůstává bezesměrové (vratka má padnout do stejné
+    // kategorie jako výdaj) — mění se jen skórování kandidáta.
+    const outgoing = list.filter(r => r.amount < 0);
+    const incoming = list.filter(r => r.amount >= 0);
+    const major = outgoing.length >= incoming.length ? outgoing : incoming;
+    const minor = major === outgoing ? incoming : outgoing;
+    if (major.length < MIN_COVERAGE) continue;
+
+    const { topCat, purity } = topCategory(major);
     if (purity < MIN_PURITY) continue;
 
+    // Když má i opačný směr vlastní silný vzorec s JINOU kategorií, je protiúčet
+    // nejednoznačný (platím i dostávám) — bezesměrové pravidlo by jeden ze
+    // směrů přeštítkovalo špatně, takže radši nenavrhujeme nic.
+    if (minor.length >= MIN_COVERAGE && topCategory(minor).topCat !== topCat) continue;
+
     const subCounts = new Map();
-    for (const r of list) {
+    for (const r of major) {
       if (r.category_id !== topCat || r.subcategory_id == null) continue;
       subCounts.set(r.subcategory_id, (subCounts.get(r.subcategory_id) || 0) + 1);
     }
@@ -71,7 +91,7 @@ function findCounterpartyRuleCandidates(db, userId, { onlyCounterpartyAccount } 
       counterparty_account: cp,
       category_id: topCat,
       subcategory_id: topSub,
-      coverage_count: total,
+      coverage_count: major.length,
       purity,
     });
   }

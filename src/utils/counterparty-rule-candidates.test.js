@@ -144,3 +144,63 @@ test('onlyCounterpartyAccount s raw whitespace param také normalizuje před fil
   assert.equal(out[0].counterparty_account, '705-77628031/0710');
   assert.equal(out[0].coverage_count, 3);
 });
+
+// --- purity se počítá uvnitř dominantního směru platby (ČSSZ scénář) ---
+
+test('jedna příchozí vratka nesmí shodit purity odchozích plateb (ČSSZ scénář)', () => {
+  const db = freshDb(); seedBase(db);
+  const { findCounterpartyRuleCandidates } = require('./counterparty-rule-candidates');
+  for (let i = 1; i <= 8; i++) {
+    db.prepare(`INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account)
+                VALUES (1, 10, -14000, '2026-${String(i).padStart(2, '0')}-24', 'sociální pojištění', '1011-7921021/0710')`).run();
+  }
+  // vratka přeplatku od ČSSZ, uživatelem zařazená do Příjmů (jiná kategorie)
+  db.prepare(`INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account)
+              VALUES (1, 11, 8688, '2026-04-21', 'vratka', '1011-7921021/0710')`).run();
+
+  const out = findCounterpartyRuleCandidates(db, 1);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].counterparty_account, '1011-7921021/0710');
+  assert.equal(out[0].category_id, 10);
+  assert.equal(out[0].coverage_count, 8); // jen dominantní směr
+  assert.equal(out[0].purity, 1);
+});
+
+test('purity se uvnitř dominantního směru pořád vyhodnocuje', () => {
+  const db = freshDb(); seedBase(db);
+  const { findCounterpartyRuleCandidates } = require('./counterparty-rule-candidates');
+  db.prepare(`INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account)
+              VALUES (1, 10, -100, '2026-01-01', 'A', 'ZZ/0100'), (1, 10, -100, '2026-02-01', 'B', 'ZZ/0100'),
+                     (1, 10, -100, '2026-03-01', 'C', 'ZZ/0100'), (1, 11, -100, '2026-04-01', 'D', 'ZZ/0100')`).run();
+  assert.equal(findCounterpartyRuleCandidates(db, 1).length, 0); // 3/4 = 75 % < 90 %
+});
+
+test('příchozí-dominantní protiúčet (příjmy) se nabízí dál', () => {
+  const db = freshDb(); seedBase(db);
+  const { findCounterpartyRuleCandidates } = require('./counterparty-rule-candidates');
+  for (let i = 1; i <= 4; i++) {
+    db.prepare(`INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account)
+                VALUES (1, 11, 20000, '2026-0${i}-10', 'mzda', '156580590/0300')`).run();
+  }
+  db.prepare(`INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account)
+              VALUES (1, 10, -500, '2026-05-10', 'vrácení', '156580590/0300')`).run();
+
+  const out = findCounterpartyRuleCandidates(db, 1);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].category_id, 11);
+  assert.equal(out[0].coverage_count, 4);
+});
+
+test('protiúčet se silným vzorcem v OBOU směrech (různé kategorie) je nejednoznačný → nenabízí se', () => {
+  const db = freshDb(); seedBase(db);
+  const { findCounterpartyRuleCandidates } = require('./counterparty-rule-candidates');
+  for (let i = 1; i <= 4; i++) {
+    db.prepare(`INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account)
+                VALUES (1, 10, -300, '2026-0${i}-05', 'platím', 'PP/0100')`).run();
+  }
+  for (let i = 1; i <= 3; i++) {
+    db.prepare(`INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account)
+                VALUES (1, 11, 300, '2026-0${i}-20', 'posílá', 'PP/0100')`).run();
+  }
+  assert.equal(findCounterpartyRuleCandidates(db, 1).length, 0);
+});
