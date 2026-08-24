@@ -25,6 +25,30 @@ function buildTxWhere(query) {
   if (direction === 'in')  where += ' AND t.amount > 0';
   if (direction === 'out') where += ' AND t.amount < 0';
 
+  // Zdroj / Cíl podle účtu domácnosti. Zrcadlí client/src/utils/accountFlow.js:
+  // u ODCHOZÍ platby je zdrojem náš účet a cílem protistrana, u PŘÍCHOZÍ se
+  // strany otočí. Díky tomu „zdroj = Společný" najde i převod na jiný můj účet.
+  // Protiúčet se porovnává bez mezer (v transactions jsou syrové hodnoty typu
+  // '705-77628031 / 0710') — zrcadlí utils/normalize-account.js, který také
+  // odstraňuje jen whitespace. Číslo účtu se dotahuje korelovaným poddotazem
+  // scopovaným na t.user_id, takže cizí account_id nikdy nic nevrátí.
+  const CP_NORM = "REPLACE(REPLACE(t.counterparty_account, ' ', ''), CHAR(9), '')";
+  const ACC_NUM = "(SELECT REPLACE(REPLACE(a2.account_number, ' ', ''), CHAR(9), '') FROM accounts a2 WHERE a2.id = ? AND a2.user_id = t.user_id)";
+  const flowAccountId = (raw) => {
+    const n = Number(raw);
+    return Number.isInteger(n) && n > 0 ? n : null;
+  };
+  const srcId = flowAccountId(query.source_account_id);
+  if (srcId !== null) {
+    where += ` AND ((t.amount < 0 AND t.account_id = ?) OR (t.amount >= 0 AND ${CP_NORM} = ${ACC_NUM}))`;
+    params.push(srcId, srcId);
+  }
+  const tgtId = flowAccountId(query.target_account_id);
+  if (tgtId !== null) {
+    where += ` AND ((t.amount >= 0 AND t.account_id = ?) OR (t.amount < 0 AND ${CP_NORM} = ${ACC_NUM}))`;
+    params.push(tgtId, tgtId);
+  }
+
   // Přesný filtr: protistrana začíná zadaným číslem účtu (např. „1679014082"
   // matchne „1679014082/3030"). Užívá Schůzka pro klik na „Skutečně naspořeno".
   if (counterparty !== undefined && String(counterparty).trim() !== '') {

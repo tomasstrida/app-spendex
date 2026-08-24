@@ -88,6 +88,8 @@ export default function TransactionsPage() {
   const [appliedSearch, setAppliedSearch] = useState(search);
   const [counterparty, setCounterparty] = useState(searchParams.get('counterparty') || '');
   const [direction, setDirection] = useState(searchParams.get('direction') || '');
+  const [sourceAccountId, setSourceAccountId] = useState(searchParams.get('source_account_id') || '');
+  const [targetAccountId, setTargetAccountId] = useState(searchParams.get('target_account_id') || '');
   const [matchPatterns, setMatchPatterns] = useState(searchParams.get('match_patterns') || '');
   const [spendingOnly, setSpendingOnly] = useState(searchParams.get('spending_only') === '1');
   const [offFund, setOffFund] = useState(searchParams.get('off_fund') === '1');
@@ -174,6 +176,8 @@ export default function TransactionsPage() {
     if (appliedSearch.trim() !== '') params.set('q', appliedSearch.trim());
     if (counterparty.trim() !== '') params.set('counterparty', counterparty.trim());
     if (direction === 'in' || direction === 'out') params.set('direction', direction);
+    if (sourceAccountId !== '') params.set('source_account_id', sourceAccountId);
+    if (targetAccountId !== '') params.set('target_account_id', targetAccountId);
     if (matchPatterns.trim() !== '') params.set('match_patterns', matchPatterns.trim());
     if (spendingOnly) params.set('spending_only', '1');
     if (offFund) params.set('off_fund', '1');
@@ -182,7 +186,7 @@ export default function TransactionsPage() {
     if (appleMerchant) params.set('apple_merchant', '1');
     params.set('limit', String(PAGE_SIZE));
     return params;
-  }, [filterCats, filterSubcatId, appliedAmountMin, appliedAmountMax, appliedSearch, counterparty, direction, matchPatterns, spendingOnly, offFund, txIds, appleAccount, appleMerchant]);
+  }, [filterCats, filterSubcatId, appliedAmountMin, appliedAmountMax, appliedSearch, counterparty, direction, sourceAccountId, targetAccountId, matchPatterns, spendingOnly, offFund, txIds, appleAccount, appleMerchant]);
 
   // Filtr podle subkategorie dává smysl jen když je ve filtru vybraná právě
   // jedna konkrétní kategorie (ne „bez kategorie", ne víc kategorií najednou).
@@ -356,6 +360,8 @@ export default function TransactionsPage() {
     setSearch('');
     setCounterparty('');
     setDirection('');
+    setSourceAccountId('');
+    setTargetAccountId('');
     setMatchPatterns('');
     setSpendingOnly(false);
     setOffFund(false);
@@ -639,7 +645,7 @@ export default function TransactionsPage() {
       </div>
 
       <div className="tx-filters">
-        {(counterparty || direction === 'in' || direction === 'out' || matchPatterns || spendingOnly || offFund || txIds || appleAccount || appleMerchant) && (
+        {(counterparty || direction === 'in' || direction === 'out' || sourceAccountId || targetAccountId || matchPatterns || spendingOnly || offFund || txIds || appleAccount || appleMerchant) && (
           <div style={{ marginBottom: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {appleAccount && (
               <span className="tx-chip tx-chip-active" style={{ cursor: 'default' }}>
@@ -675,6 +681,32 @@ export default function TransactionsPage() {
                   onClick={() => setCounterparty('')}
                   style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, marginLeft: 6, display: 'inline-flex', alignItems: 'center' }}
                   title="Zrušit filtr protistrany"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            )}
+            {sourceAccountId && (
+              <span className="tx-chip tx-chip-active" style={{ cursor: 'default' }}>
+                Zdroj: {accountById.get(Number(sourceAccountId)) || sourceAccountId}
+                <button
+                  type="button"
+                  onClick={() => setSourceAccountId('')}
+                  style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, marginLeft: 6, display: 'inline-flex', alignItems: 'center' }}
+                  title="Zrušit filtr zdroje"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            )}
+            {targetAccountId && (
+              <span className="tx-chip tx-chip-active" style={{ cursor: 'default' }}>
+                Cíl: {accountById.get(Number(targetAccountId)) || targetAccountId}
+                <button
+                  type="button"
+                  onClick={() => setTargetAccountId('')}
+                  style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, marginLeft: 6, display: 'inline-flex', alignItems: 'center' }}
+                  title="Zrušit filtr cíle"
                 >
                   <X size={12} />
                 </button>
@@ -823,6 +855,28 @@ export default function TransactionsPage() {
           </div>
         )}
         <div className="tx-amount-filter">
+          <span className="tx-filter-label">Zdroj → cíl:</span>
+          <select
+            className="input tx-flow-select"
+            value={sourceAccountId}
+            onChange={e => setSourceAccountId(e.target.value)}
+            title="Odkud peníze odešly"
+          >
+            <option value="">— jakýkoli zdroj —</option>
+            {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+          <span className="text-muted" style={{ fontSize: 13 }}>→</span>
+          <select
+            className="input tx-flow-select"
+            value={targetAccountId}
+            onChange={e => setTargetAccountId(e.target.value)}
+            title="Kam peníze přišly"
+          >
+            <option value="">— jakýkoli cíl —</option>
+            {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        </div>
+        <div className="tx-amount-filter">
           <span className="tx-filter-label">Částka:</span>
           <input
             className="input tx-amount-input"
@@ -844,7 +898,25 @@ export default function TransactionsPage() {
             onChange={e => setAmountMax(e.target.value)}
           />
           <span className="text-muted" style={{ fontSize: 12 }}>Kč</span>
-          {(filterCats.size > 0 || filterSubcatId !== '' || amountMin !== '' || amountMax !== '' || search !== '' || counterparty !== '' || direction !== '' || matchPatterns !== '' || spendingOnly || offFund || txIds || appleAccount || appleMerchant) && (
+          {/* Znaménko částky — mapuje se na stávající filtr `direction` (in/out),
+              který doteď šel nastavit jen z URL (prokliky ze Schůzky). */}
+          <div className="tx-direction-toggle">
+            {[
+              { value: '',    label: 'Vše' },
+              { value: 'in',  label: 'Jen příjmy' },
+              { value: 'out', label: 'Jen výdaje' },
+            ].map(o => (
+              <button
+                key={o.value || 'all'}
+                type="button"
+                className={`tx-chip${direction === o.value ? ' tx-chip-active' : ''}`}
+                onClick={() => setDirection(o.value)}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          {(filterCats.size > 0 || filterSubcatId !== '' || amountMin !== '' || amountMax !== '' || search !== '' || counterparty !== '' || direction !== '' || sourceAccountId !== '' || targetAccountId !== '' || matchPatterns !== '' || spendingOnly || offFund || txIds || appleAccount || appleMerchant) && (
             <button
               type="button"
               className="btn btn-ghost tx-filter-clear"

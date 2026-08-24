@@ -1599,3 +1599,13 @@ a.report-subcat-row:hover { background: var(--bg2); }
 .chart-stat-label { font-size: 11px; color: var(--text2); }
 .chart-stat-value { font-size: 18px; font-weight: 600; color: var(--text); }
 .chart-stat-note { font-size: 11px; color: var(--text2); }
+
+/* Filtr toku peněz (Zdroj → cíl) a přepínač znaménka částky v Transakcích */
+.tx-flow-select { max-width: 190px; font-size: 13px; padding: 6px 8px; }
+.tx-direction-toggle { display: flex; gap: 6px; margin-left: 12px; }
+.tx-direction-toggle .tx-chip { cursor: pointer; }
+
+@media (max-width: 768px) {
+  .tx-flow-select { max-width: none; flex: 1; min-width: 0; }
+  .tx-direction-toggle { margin-left: 0; width: 100%; }
+}

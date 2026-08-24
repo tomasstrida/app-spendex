@@ -644,3 +644,76 @@ test('GET /ids vrátí ID celé vyfiltrované sady, ne jen první stránky', asy
   assert.deepEqual([...body.ids].sort((x, y) => x - y), [hit1, hit2].sort((x, y) => x - y));
   assert.equal(body.total, 2);
 });
+
+// --- filtry Zdroj / Cíl (zrcadlí accountFlow: u odchozí platby je zdroj náš účet,
+//     u příchozí se strany otočí) ---
+
+function setupFlow() {
+  const ctx = setup();
+  const { db } = ctx;
+  db.prepare(`INSERT INTO accounts (id, user_id, account_number, name) VALUES
+    (100, 1, '1679014023/3030', 'Společný'), (101, 1, '1679014082/3030', 'Spořicí')`).run();
+  const mk = (accId, amount, cp, desc) => Number(db.prepare(
+    `INSERT INTO transactions (user_id, category_id, account_id, amount, date, description, counterparty_account)
+     VALUES (1, 5, ?, ?, '2026-07-01', ?, ?)`).run(accId, amount, desc, cp).lastInsertRowid);
+  return {
+    ...ctx,
+    ext_out: mk(100, -500, '999999/0100', 'nákup ze Společného'),
+    transfer_out: mk(100, -1000, '1679014082/3030', 'převod na Spořicí'),
+    transfer_in: mk(101, 1000, '1679014023/3030', 'převod ze Společného'),
+    ext_in: mk(101, 300, '888888/0800', 'úrok'),
+    ws_in: mk(101, 700, '1679014023 / 3030', 'převod s mezerami v protiúčtu'),
+  };
+}
+
+const idsOf = async (base, qs) => (await (await fetch(`${base}/api/transactions?${qs}`)).json()).map(t => t.id).sort((a, b) => a - b);
+
+test('filtr Zdroj: odchozí z účtu + příchozí OD účtu (obě strany otočení)', async () => {
+  const f = setupFlow();
+  const { server, base } = await listen(f.app);
+  const got = await idsOf(base, 'source_account_id=100');
+  server.close();
+  assert.deepEqual(got, [f.ext_out, f.transfer_out, f.transfer_in, f.ws_in].sort((a, b) => a - b));
+});
+
+test('filtr Cíl: příchozí na účet + odchozí NA účet', async () => {
+  const f = setupFlow();
+  const { server, base } = await listen(f.app);
+  const got = await idsOf(base, 'target_account_id=101');
+  server.close();
+  assert.deepEqual(got, [f.transfer_out, f.transfer_in, f.ext_in, f.ws_in].sort((a, b) => a - b));
+});
+
+test('filtr Zdroj + Cíl současně = převod mezi dvěma vlastními účty', async () => {
+  const f = setupFlow();
+  const { server, base } = await listen(f.app);
+  const got = await idsOf(base, 'source_account_id=100&target_account_id=101');
+  server.close();
+  assert.deepEqual(got, [f.transfer_out, f.transfer_in, f.ws_in].sort((a, b) => a - b));
+});
+
+test('filtr Zdroj normalizuje mezery v protiúčtu (syrová data z importu)', async () => {
+  const f = setupFlow();
+  const { server, base } = await listen(f.app);
+  const got = await idsOf(base, 'source_account_id=100&direction=in');
+  server.close();
+  assert.ok(got.includes(f.ws_in), 'protiúčet s mezerami se musí spárovat');
+});
+
+test('filtr Zdroj: cizí account_id nevrátí nic (izolace mezi uživateli)', async () => {
+  const f = setupFlow();
+  f.db.prepare("INSERT INTO users (id, email) VALUES (2,'cizi@x')").run();
+  f.db.prepare("INSERT INTO accounts (id, user_id, account_number, name) VALUES (200, 2, '1679014023/3030', 'Cizí')").run();
+  const { server, base } = await listen(f.app);
+  const got = await idsOf(base, 'source_account_id=200');
+  server.close();
+  assert.deepEqual(got, []);
+});
+
+test('filtry Zdroj/Cíl platí i pro GET /ids (hromadný výběr)', async () => {
+  const f = setupFlow();
+  const { server, base } = await listen(f.app);
+  const body = await (await fetch(`${base}/api/transactions/ids?source_account_id=100&target_account_id=101`)).json();
+  server.close();
+  assert.equal(body.total, 3);
+});
