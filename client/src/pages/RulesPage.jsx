@@ -1,11 +1,17 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Plus, Pencil, Trash2, Check, X, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, Check, X, Search, ChevronRight, ChevronDown, AlertTriangle } from 'lucide-react';
 import Layout from '../components/Layout';
+import { formatCurrency } from '../i18n';
 
 const EMPTY = { pattern: '', category_id: '', subcategory_id: '', amount_max_abs: '', amount_min_abs: '' };
 
 // Necitlivé na velikost písmen i diakritiku (konvence appky – viz unaccent_lower).
 const norm = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric', year: '2-digit' }) : '');
+
+// České plurály 1 / 2–4 / 5+.
+const mismatchLabel = (n) => (n === 1 ? '1 platba má' : n < 5 ? `${n} platby mají` : `${n} plateb má`);
 
 export default function RulesPage() {
   const [rules, setRules] = useState([]);
@@ -18,6 +24,9 @@ export default function RulesPage() {
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [scanning, setScanning] = useState(false);
+  // Detail plateb pod návrhem: id → { loading, error, data }. Lazy-load při prvním rozbalení.
+  const [expanded, setExpanded] = useState(null);
+  const [details, setDetails] = useState({});
   const formRef = useRef(null);
   const patternRef = useRef(null);
 
@@ -121,15 +130,34 @@ export default function RulesPage() {
     load();
   }
 
+  // Rozbalí/sbalí detail plateb návrhu. Data se tahají až při prvním rozbalení
+  // a drží se v cache — sbalení a znovurozbalení už síť netrápí.
+  async function toggleDetail(id) {
+    if (expanded === id) { setExpanded(null); return; }
+    setExpanded(id);
+    if (details[id]) return;
+    setDetails(d => ({ ...d, [id]: { loading: true } }));
+    try {
+      const res = await fetch(`/api/rules/suggestions/${id}/transactions`);
+      if (!res.ok) throw new Error('load');
+      const data = await res.json();
+      setDetails(d => ({ ...d, [id]: { data } }));
+    } catch {
+      setDetails(d => ({ ...d, [id]: { error: 'Nepodařilo se načíst platby.' } }));
+    }
+  }
+
   async function approveSuggestion(id) {
     const res = await fetch(`/api/rules/suggestions/${id}/approve`, { method: 'POST' });
     if (!res.ok) { setErr((await res.json().catch(() => ({}))).error || 'Chyba.'); return; }
+    if (expanded === id) setExpanded(null);
     load();
   }
 
   async function dismissSuggestion(id) {
     const res = await fetch(`/api/rules/suggestions/${id}/dismiss`, { method: 'POST' });
     if (!res.ok) { setErr((await res.json().catch(() => ({}))).error || 'Chyba.'); return; }
+    if (expanded === id) setExpanded(null);
     load();
   }
 
@@ -170,23 +198,39 @@ export default function RulesPage() {
         {suggestions.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
             {suggestions.map(s => (
-              <div key={s.id} style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 8, gap: 12,
-              }}>
-                <div style={{ fontSize: 13 }}>
-                  Protiúčet <strong>{s.counterparty_account}</strong> → {s.category_name}
-                  {s.subcategory_name && <span className="text-muted"> · {s.subcategory_name}</span>}
-                  <span className="text-muted"> ({s.coverage_count}× plateb, {(s.purity * 100).toFixed(0)} % shoda)</span>
-                </div>
-                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                  <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => approveSuggestion(s.id)}>
-                    Založit
+              <div key={s.id} style={{ border: '1px solid var(--border)', borderRadius: 8 }}>
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '8px 12px', gap: 12,
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => toggleDetail(s.id)}
+                    title="Zobrazit historické platby tohoto protiúčtu"
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, textAlign: 'left',
+                      background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'inherit',
+                    }}
+                  >
+                    {expanded === s.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    <span>
+                      Protiúčet <strong>{s.counterparty_account}</strong> → {s.category_name}
+                      {s.subcategory_name && <span className="text-muted"> · {s.subcategory_name}</span>}
+                      <span className="text-muted"> ({s.coverage_count}× plateb, {(s.purity * 100).toFixed(0)} % shoda)</span>
+                    </span>
                   </button>
-                  <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => dismissSuggestion(s.id)}>
-                    Zamítnout
-                  </button>
+                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                    <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => approveSuggestion(s.id)}>
+                      Založit
+                    </button>
+                    <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => dismissSuggestion(s.id)}>
+                      Zamítnout
+                    </button>
+                  </div>
                 </div>
+                {expanded === s.id && (
+                  <SuggestionDetail state={details[s.id]} />
+                )}
               </div>
             ))}
           </div>
@@ -369,5 +413,75 @@ export default function RulesPage() {
         )}
       </div>
     </Layout>
+  );
+}
+
+// Rozbalený detail návrhu: všechny historické platby daného protiúčtu.
+// Řádky s jinou kategorií jsou zvýrazněné — právě ty pravidlo přeštítkuje,
+// protože protiúčtové pravidlo je bezesměrové (zasáhne i příchozí vratky).
+function SuggestionDetail({ state }) {
+  const wrap = { borderTop: '1px solid var(--border)', padding: '10px 12px' };
+  if (!state || state.loading) return <div style={wrap} className="text-muted">Načítám platby…</div>;
+  if (state.error) return <div style={wrap} className="text-muted">{state.error}</div>;
+
+  const { transactions = [], mismatch_count: mismatch = 0, suggested_category_name: target } = state.data || {};
+  if (!transactions.length) return <div style={wrap} className="text-muted">Žádné platby k zobrazení.</div>;
+
+  const th = { textAlign: 'left', fontWeight: 600, padding: '4px 8px', whiteSpace: 'nowrap' };
+  const td = { padding: '4px 8px', verticalAlign: 'top' };
+  // Oranžová = stejný semafor jako u teploměrů a varování na Schůzce.
+  const WARN = '#f97316';
+
+  return (
+    <div style={wrap}>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr className="text-muted">
+              <th style={th}>Datum</th>
+              <th style={th}>Popis</th>
+              <th style={{ ...th, textAlign: 'right' }}>Částka</th>
+              <th style={th}>Kategorie</th>
+              <th style={th}>Účet</th>
+              <th style={th}>VS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {transactions.map(tx => (
+              <tr
+                key={tx.id}
+                style={{
+                  borderTop: '1px solid var(--border)',
+                  background: tx.matches_suggestion ? 'transparent' : '#f9731614',
+                }}
+              >
+                <td style={{ ...td, whiteSpace: 'nowrap' }}>{fmtDate(tx.date)}</td>
+                <td style={td}>{tx.description || tx.place || tx.note || '—'}</td>
+                <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  {tx.amount < 0 ? '−' : '+'}{formatCurrency(Math.abs(tx.amount))}
+                </td>
+                <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                  {!tx.matches_suggestion && (
+                    <AlertTriangle size={12} color={WARN} style={{ verticalAlign: '-2px', marginRight: 4 }} />
+                  )}
+                  {tx.category_name || 'nezařazeno'}
+                </td>
+                <td style={{ ...td, whiteSpace: 'nowrap' }} className="text-muted">{tx.account_name || '—'}</td>
+                <td style={{ ...td, whiteSpace: 'nowrap' }} className="text-muted">{tx.variable_symbol || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {mismatch > 0 && (
+        <div style={{ marginTop: 8, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <AlertTriangle size={14} color={WARN} style={{ flexShrink: 0 }} />
+          <span>
+            {mismatchLabel(mismatch)} jinou kategorii — pravidlo {mismatch === 1 ? 'ji' : 'je'} přeštítkuje
+            na <strong>{target}</strong>.
+          </span>
+        </div>
+      )}
+    </div>
   );
 }

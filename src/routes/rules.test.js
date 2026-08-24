@@ -235,3 +235,81 @@ test('suggestions: dismiss už vyřešeného návrhu vrací 400', async () => {
   server.close();
   assert.equal(res.status, 400);
 });
+
+// --- detail plateb pod návrhem pravidla (podklad pro rozhodnutí) ---
+
+test('suggestions/transactions: vrátí všechny platby protiúčtu, date DESC, s příznakem neshody', async () => {
+  const { app, db } = setup();
+  db.prepare("INSERT INTO categories (id, user_id, name) VALUES (12, 1, 'Příjmy')").run();
+  db.prepare("INSERT INTO accounts (id, user_id, account_number, name) VALUES (5, 1, '1679014031/3030', 'Tom-OSVC')").run();
+  db.prepare(`INSERT INTO rule_suggestions (user_id, counterparty_account, category_id, coverage_count, purity)
+              VALUES (1, '1011-7921021/0710', 10, 3, 1.0)`).run();
+  db.prepare(`INSERT INTO transactions (user_id, category_id, account_id, amount, date, description, counterparty_account, variable_symbol)
+              VALUES (1, 10, 5, -14000, '2026-06-24', 'sociální pojištění', '1011-7921021/0710', '12563718'),
+                     (1, 10, 5, -14000, '2026-07-24', 'sociální pojištění', '1011-7921021/0710', '12563718'),
+                     (1, 12, 5,   8688, '2026-04-21', 'vratka přeplatku',   '1011-7921021/0710', NULL)`).run();
+  // cizí protiúčet nesmí prosáknout
+  db.prepare(`INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account)
+              VALUES (1, 10, -100, '2026-08-01', 'jiný', '999999/0100')`).run();
+
+  const { server, base } = await listen(app);
+  const list = await (await fetch(`${base}/api/rules/suggestions`)).json();
+  const res = await fetch(`${base}/api/rules/suggestions/${list[0].id}/transactions`);
+  const body = await res.json();
+  server.close();
+
+  assert.equal(res.status, 200);
+  assert.equal(body.transactions.length, 3);
+  assert.deepEqual(body.transactions.map(t => t.date), ['2026-07-24', '2026-06-24', '2026-04-21']);
+  assert.equal(body.transactions[0].category_name, 'Sport');
+  assert.equal(body.transactions[0].account_name, 'Tom-OSVC');
+  assert.equal(body.transactions[0].variable_symbol, '12563718');
+  assert.equal(body.transactions[0].matches_suggestion, true);
+  assert.equal(body.transactions[2].matches_suggestion, false, 'vratka má jinou kategorii');
+  assert.equal(body.mismatch_count, 1, 'kolik plateb pravidlo přeštítkuje');
+  assert.equal(body.suggested_category_name, 'Sport');
+});
+
+test('suggestions/transactions: normalizuje protiúčet na obou stranách (raw whitespace v DB)', async () => {
+  const { app, db } = setup();
+  db.prepare(`INSERT INTO rule_suggestions (user_id, counterparty_account, category_id, coverage_count, purity)
+              VALUES (1, '705-77628031/0710', 10, 3, 1.0)`).run();
+  db.prepare(`INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account)
+              VALUES (1, 10, -100, '2026-01-01', 'DPH', '  705-77628031 / 0710  ')`).run();
+
+  const { server, base } = await listen(app);
+  const list = await (await fetch(`${base}/api/rules/suggestions`)).json();
+  const res = await fetch(`${base}/api/rules/suggestions/${list[0].id}/transactions`);
+  const body = await res.json();
+  server.close();
+
+  assert.equal(res.status, 200);
+  assert.equal(body.transactions.length, 1);
+});
+
+test('suggestions/transactions: cizí návrh vrací 404', async () => {
+  const { app, db } = setup();
+  db.prepare(`INSERT INTO rule_suggestions (user_id, counterparty_account, category_id, coverage_count, purity)
+              VALUES (2, '705-77628031/0710', 11, 3, 1.0)`).run();
+  const { server, base } = await listen(app);
+  const res = await fetch(`${base}/api/rules/suggestions/1/transactions`);
+  server.close();
+  assert.equal(res.status, 404);
+});
+
+test('suggestions/transactions: nevrací transakce jiného uživatele se stejným protiúčtem', async () => {
+  const { app, db } = setup();
+  db.prepare(`INSERT INTO rule_suggestions (user_id, counterparty_account, category_id, coverage_count, purity)
+              VALUES (1, '705-77628031/0710', 10, 3, 1.0)`).run();
+  db.prepare(`INSERT INTO transactions (user_id, category_id, amount, date, description, counterparty_account)
+              VALUES (1, 10, -100, '2026-01-01', 'moje', '705-77628031/0710'),
+                     (2, 11, -100, '2026-01-02', 'cizí', '705-77628031/0710')`).run();
+
+  const { server, base } = await listen(app);
+  const list = await (await fetch(`${base}/api/rules/suggestions`)).json();
+  const body = await (await fetch(`${base}/api/rules/suggestions/${list[0].id}/transactions`)).json();
+  server.close();
+
+  assert.equal(body.transactions.length, 1);
+  assert.equal(body.transactions[0].description, 'moje');
+});

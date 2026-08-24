@@ -7,6 +7,7 @@ const { ownsSubcategory: ownsSubcategoryShared } = require('../utils/subcategory
 const { findCounterpartyRuleCandidates } = require('../utils/counterparty-rule-candidates');
 const { upsertRuleSuggestions, getSuggestion, listPendingSuggestions } = require('../services/ruleSuggestions');
 const { recategorizePending } = require('../services/emailIngest');
+const normalizeAccount = require('../utils/normalize-account');
 
 // Návrhové routy jedou přes limiter — /suggestions/scan projíždí celou historii.
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
@@ -122,6 +123,35 @@ router.post('/suggestions/scan', requireAuth, writeLimiter, (req, res) => {
   const candidates = findCounterpartyRuleCandidates(db, req.dataUserId);
   const ids = upsertRuleSuggestions(db, req.dataUserId, candidates);
   res.json({ ok: true, found: ids.length });
+});
+
+// GET /api/rules/suggestions/:id/transactions — historické platby daného protiúčtu
+// jako podklad pro rozhodnutí. Bez limiteru: rozbalení detailu je běžná interakce.
+// Filtr protiúčtu se dělá v JS přes normalizeAccount — v `transactions` jsou syrové
+// hodnoty ('  705-77628031 / 0710  '), takže SQL porovnání by je minulo.
+router.get('/suggestions/:id/transactions', requireAuth, (req, res) => {
+  const s = getSuggestion(db, req.dataUserId, req.params.id);
+  if (!s) return res.status(404).json({ error: 'Návrh nenalezen.' });
+
+  const target = normalizeAccount(s.counterparty_account);
+  const rows = db.prepare(`
+    SELECT t.id, t.date, t.description, t.note, t.place, t.amount, t.variable_symbol,
+           t.tx_type, t.source, t.category_id, t.counterparty_account,
+           c.name AS category_name, c.color AS category_color, a.name AS account_name
+    FROM transactions t
+    LEFT JOIN categories c ON c.id = t.category_id
+    LEFT JOIN accounts a ON a.id = t.account_id
+    WHERE t.user_id = ? AND t.counterparty_account IS NOT NULL AND t.counterparty_account != ''
+    ORDER BY t.date DESC, t.id DESC
+  `).all(req.dataUserId)
+    .filter(r => normalizeAccount(r.counterparty_account) === target)
+    .map(r => ({ ...r, matches_suggestion: r.category_id === s.category_id }));
+
+  res.json({
+    transactions: rows,
+    mismatch_count: rows.filter(r => !r.matches_suggestion).length,
+    suggested_category_name: s.category_name,
+  });
 });
 
 // POST /api/rules/suggestions/:id/approve — založí category_rules pravidlo z návrhu
