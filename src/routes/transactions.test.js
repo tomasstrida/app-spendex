@@ -532,3 +532,115 @@ test('GET /export: IBAN protiúčtu bez interní shody se propíše do Obchodní
   assert.equal(row.split(';')[3], 'CZ6530300000001679014138', 'IBAN protiúčtu se zobrazí holý, i když nezačíná číslicí');
   server.close();
 });
+
+// --- hromadná změna kategorie ---
+
+function setupBulk() {
+  const ctx = setup();
+  ctx.db.prepare("INSERT INTO categories (id, user_id, name) VALUES (6,1,'Sport'),(7,1,'Jídlo')").run();
+  ctx.db.prepare("INSERT INTO users (id, email) VALUES (2,'cizi@x')").run();
+  ctx.db.prepare("INSERT INTO categories (id, user_id, name) VALUES (8,2,'Cizí kat')").run();
+  return ctx;
+}
+
+const mkTx = (db, { cat = 5, date = '2026-07-01', desc = 'X', amount = -100, user = 1 } = {}) =>
+  Number(db.prepare('INSERT INTO transactions (user_id, category_id, amount, date, description) VALUES (?,?,?,?,?)')
+    .run(user, cat, amount, date, desc).lastInsertRowid);
+
+test('bulk-category: přeřadí všechny vybrané a vynuluje subkategorii', async () => {
+  const { db, app } = setupBulk();
+  const subId = Number(db.prepare("INSERT INTO subcategories (user_id, category_id, name) VALUES (1,5,'ChatGPT')").run().lastInsertRowid);
+  const a = mkTx(db), b = mkTx(db), c = mkTx(db);
+  db.prepare('UPDATE transactions SET subcategory_id = ? WHERE id = ?').run(subId, a);
+  const { server, base } = await listen(app);
+
+  const res = await fetch(`${base}/api/transactions/bulk-category`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ids: [a, b, c], category_id: 6 }),
+  });
+  const body = await res.json();
+  server.close();
+
+  assert.equal(res.status, 200);
+  assert.equal(body.updated, 3);
+  assert.equal(body.skipped_prepaid, 0);
+  const rows = db.prepare('SELECT id, category_id, subcategory_id FROM transactions WHERE id IN (?,?,?)').all(a, b, c);
+  assert.ok(rows.every(r => r.category_id === 6), 'všechny mají novou kategorii');
+  assert.ok(rows.every(r => r.subcategory_id === null), 'subkategorie se vynulovala');
+});
+
+test('bulk-category: platby z předplaceného balíčku se přeskočí, zbytek projde', async () => {
+  const { db, app } = setupBulk();
+  const locked = mkTx(db), free1 = mkTx(db), free2 = mkTx(db);
+  db.prepare(`INSERT INTO prepaid_packages (user_id, transaction_id, category_id, name, total_amount, units_total, unit_amount)
+              VALUES (1, ?, 5, 'Balíček', 1000, 10, 100)`).run(locked);
+  const { server, base } = await listen(app);
+
+  const res = await fetch(`${base}/api/transactions/bulk-category`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ids: [locked, free1, free2], category_id: 6 }),
+  });
+  const body = await res.json();
+  server.close();
+
+  assert.equal(res.status, 200);
+  assert.equal(body.updated, 2);
+  assert.equal(body.skipped_prepaid, 1);
+  assert.equal(db.prepare('SELECT category_id FROM transactions WHERE id = ?').get(locked).category_id, 5,
+    'zamčená platba zůstala v původní kategorii');
+});
+
+test('bulk-category: cizí transakce v seznamu → 400 a nic se nezmění', async () => {
+  const { db, app } = setupBulk();
+  const mine = mkTx(db);
+  const theirs = mkTx(db, { cat: 8, user: 2 });
+  const { server, base } = await listen(app);
+
+  const res = await fetch(`${base}/api/transactions/bulk-category`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ids: [mine, theirs], category_id: 6 }),
+  });
+  server.close();
+
+  assert.equal(res.status, 400);
+  assert.equal(db.prepare('SELECT category_id FROM transactions WHERE id = ?').get(mine).category_id, 5,
+    'při odmítnutí se nesmí změnit ani vlastní transakce');
+});
+
+test('bulk-category: cizí kategorie → 400', async () => {
+  const { db, app } = setupBulk();
+  const a = mkTx(db);
+  const { server, base } = await listen(app);
+  const res = await fetch(`${base}/api/transactions/bulk-category`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ids: [a], category_id: 8 }),
+  });
+  server.close();
+  assert.equal(res.status, 400);
+});
+
+test('bulk-category: prázdný seznam ID → 400', async () => {
+  const { app } = setupBulk();
+  const { server, base } = await listen(app);
+  const res = await fetch(`${base}/api/transactions/bulk-category`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ids: [], category_id: 6 }),
+  });
+  server.close();
+  assert.equal(res.status, 400);
+});
+
+test('GET /ids vrátí ID celé vyfiltrované sady, ne jen první stránky', async () => {
+  const { db, app } = setupBulk();
+  const hit1 = mkTx(db, { cat: 6, desc: 'ROHLIK' });
+  const hit2 = mkTx(db, { cat: 6, desc: 'ROHLIK' });
+  mkTx(db, { cat: 7, desc: 'jiná kategorie' });
+  mkTx(db, { cat: 6, desc: 'ROHLIK', user: 2 }); // cizí uživatel
+  const { server, base } = await listen(app);
+
+  const body = await (await fetch(`${base}/api/transactions/ids?category_ids=6`)).json();
+  server.close();
+
+  assert.deepEqual([...body.ids].sort((x, y) => x - y), [hit1, hit2].sort((x, y) => x - y));
+  assert.equal(body.total, 2);
+});

@@ -53,6 +53,12 @@ function formatDate(iso) {
   return d.toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' });
 }
 
+// České plurály pro hlášky hromadné akce.
+// „u 1 transakce" (genitiv sg.) vs. „u 5 transakcí" (genitiv pl.)
+const txGen = (n) => (n === 1 ? '1 transakce' : `${n} transakcí`);
+// „Změněna 1 transakce" / „Změněny 3 transakce" / „Změněno 12 transakcí"
+const txChanged = (n) => (n === 1 ? 'Změněna 1 transakce' : n < 5 ? `Změněny ${n} transakce` : `Změněno ${n} transakcí`);
+
 export default function TransactionsPage() {
   const [searchParams] = useSearchParams();
   const urlFrom = searchParams.get('from');
@@ -116,6 +122,10 @@ export default function TransactionsPage() {
   const [colPickerOpen, setColPickerOpen] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [bulkCatId, setBulkCatId] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState('');
+  const [selectingAll, setSelectingAll] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const pickerRef = useRef();
@@ -230,14 +240,20 @@ export default function TransactionsPage() {
       .finally(() => setLoading(false));
   }, [period, customMode, customFrom, customTo, buildFilterParams]);
 
+  // Parametry aktuálního filtru vč. časového rozsahu. Sdílí je donačítání
+  // i výběr celé vyfiltrované sady (GET /ids), ať se nemůžou rozejít.
+  const currentFilterParams = useCallback(() => {
+    const baseParams = customMode && customFrom && customTo
+      ? { from: customFrom, to: customTo }
+      : (periodStart && periodEnd ? { from: periodStart, to: periodEnd } : {});
+    return buildFilterParams(new URLSearchParams(baseParams));
+  }, [customMode, customFrom, customTo, periodStart, periodEnd, buildFilterParams]);
+
   const loadMore = useCallback(() => {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
     const offset = transactions.length;
-    const baseParams = customMode && customFrom && customTo
-      ? { from: customFrom, to: customTo }
-      : (periodStart && periodEnd ? { from: periodStart, to: periodEnd } : {});
-    const params = buildFilterParams(new URLSearchParams(baseParams));
+    const params = currentFilterParams();
     params.set('offset', String(offset));
     fetch(`/api/transactions?${params}`)
       .then(r => r.json())
@@ -246,7 +262,7 @@ export default function TransactionsPage() {
         setHasMore(data.length === PAGE_SIZE);
       })
       .finally(() => setLoadingMore(false));
-  }, [loadingMore, hasMore, transactions.length, customMode, customFrom, customTo, periodStart, periodEnd, buildFilterParams]);
+  }, [loadingMore, hasMore, transactions.length, currentFilterParams]);
 
   useEffect(() => { loadTransactions(); }, [loadTransactions]);
 
@@ -348,12 +364,45 @@ export default function TransactionsPage() {
     setAppleMerchant(false);
   }
 
-  function toggleSelectAll() {
-    if (selected.size === transactions.length) {
+  // „Označit vše" = celá vyfiltrovaná sada, ne jen načtená stránka. Dokud je
+  // všechno načtené (hasMore=false), stačí lokální seznam; jinak si doptáme
+  // zbylá ID na serveru, ať výběr odpovídá filtru a ne velikosti stránky.
+  async function toggleSelectAll() {
+    if (allSelected) { setSelected(new Set()); return; }
+    if (!hasMore) { setSelected(new Set(transactions.map(t => t.id))); return; }
+    setSelectingAll(true);
+    try {
+      const r = await fetch(`/api/transactions/ids?${currentFilterParams()}`);
+      if (!r.ok) throw new Error('ids');
+      const { ids } = await r.json();
+      setSelected(new Set(ids));
+    } catch {
+      setSelected(new Set(transactions.map(t => t.id))); // fallback: aspoň načtené
+    } finally { setSelectingAll(false); }
+  }
+
+  async function handleBulkCategory() {
+    const cat = categories.find(c => String(c.id) === String(bulkCatId));
+    if (!cat) return;
+    if (!confirm(`Změnit kategorii u ${txGen(selected.size)} na „${cat.name}"?`)) return;
+    setBulkBusy(true);
+    setBulkMsg('');
+    try {
+      const r = await fetch('/api/transactions/bulk-category', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [...selected], category_id: cat.id }),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) { setBulkMsg(body.error || 'Hromadnou změnu se nepodařilo provést.'); return; }
+      setBulkMsg(body.skipped_prepaid
+        ? `${txChanged(body.updated)} na „${cat.name}", ${txGen(body.skipped_prepaid)} přeskočeno (patří k předplacenému balíčku).`
+        : `${txChanged(body.updated)} na „${cat.name}".`);
+      setBulkCatId('');
       setSelected(new Set());
-    } else {
-      setSelected(new Set(transactions.map(t => t.id)));
-    }
+      // Refetch, ne lokální dopočet — kategorie ovlivňuje server-počítaná pole.
+      loadTransactions();
+    } finally { setBulkBusy(false); }
   }
 
   async function saveCatQuick(tx, categoryId) {
@@ -490,7 +539,9 @@ export default function TransactionsPage() {
 
   const total = transactions.reduce((s, t) => s + t.amount, 0);
   const cols = ALL_COLS.filter(c => visibleCols.includes(c.key));
-  const allSelected = transactions.length > 0 && selected.size === transactions.length;
+  // Pozor: výběr může být NADmnožinou načtených řádků (označena celá vyfiltrovaná
+  // sada, zobrazená je jen první stránka) — proto every(), ne porovnání velikostí.
+  const allSelected = transactions.length > 0 && transactions.every(t => selected.has(t.id));
   const someSelected = selected.size > 0 && !allSelected;
 
   return (
@@ -824,9 +875,28 @@ export default function TransactionsPage() {
             </span>
           </div>
 
+          {bulkMsg && <div key={bulkMsg} className="bulk-result">{bulkMsg}</div>}
+
           {selected.size > 0 && (
             <div className="tx-bulk-bar">
               <span className="text-muted" style={{ fontSize: 13 }}>Označeno: <strong style={{ color: 'var(--text)' }}>{selected.size}</strong></span>
+              <select
+                className="input"
+                style={{ maxWidth: 220 }}
+                value={bulkCatId}
+                disabled={bulkBusy}
+                onChange={e => setBulkCatId(e.target.value)}
+              >
+                <option value="">— změnit kategorii na —</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <button
+                className="btn btn-primary"
+                onClick={handleBulkCategory}
+                disabled={bulkBusy || !bulkCatId}
+              >
+                {bulkBusy ? 'Měním…' : 'Změnit kategorii'}
+              </button>
               <button
                 className="btn btn-danger"
                 onClick={handleDeleteSelected}
@@ -846,6 +916,8 @@ export default function TransactionsPage() {
                   type="checkbox"
                   className="tx-checkbox"
                   checked={allSelected}
+                  disabled={selectingAll}
+                  title="Označit vše, co odpovídá filtru"
                   ref={el => { if (el) el.indeterminate = someSelected; }}
                   onChange={toggleSelectAll}
                 />

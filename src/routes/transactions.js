@@ -180,6 +180,25 @@ router.get('/', requireAuth, (req, res) => {
   res.json(rows);
 });
 
+// GET /api/transactions/ids?... — jen ID celé vyfiltrované sady (stejné filtry
+// jako GET /, bez limitu a offsetu). Slouží hromadným akcím: klient si díky tomu
+// může označit i to, co ještě nemá načtené, a zná přesný počet (GET / vrací jen
+// stránku, takže z něj celkový počet nejde poznat).
+// Musí být PŘED parametrickými routami.
+router.get('/ids', requireAuth, (req, res) => {
+  const { where, params } = buildTxWhere(req.query);
+  // Aliasy c a sc jsou povinné — fulltextový filtr `q` v buildTxWhere sahá i na
+  // názvy kategorie a subkategorie (viz varování u buildTxWhere).
+  const rows = db.prepare(`SELECT t.id
+    FROM transactions t
+    LEFT JOIN categories c ON t.category_id = c.id
+    LEFT JOIN subcategories sc ON t.subcategory_id = sc.id AND sc.user_id = t.user_id
+    WHERE t.user_id = ?${where}
+    ORDER BY t.date DESC, t.id DESC`).all(req.dataUserId, ...params);
+  const ids = rows.map(r => r.id);
+  res.json({ ids, total: ids.length });
+});
+
 // GET /api/transactions/export?... — CSV export (stejné filtry jako GET /, bez limitu).
 // Musí být PŘED parametrickými routami. Oddělovač ';' + UTF-8 BOM kvůli českému Excelu.
 router.get('/export', requireAuth, (req, res) => {
@@ -274,6 +293,44 @@ router.post('/', requireAuth, writeLimiter, (req, res) => {
 });
 
 // PATCH /api/transactions/:id
+// PATCH /api/transactions/bulk-category  body: { ids: [...], category_id }
+// Hromadné přeřazení kategorie u vybraných transakcí. Musí být PŘED PATCH /:id,
+// jinak by parametrická routa pohltila i tuhle cestu.
+router.patch('/bulk-category', requireAuth, writeLimiter, (req, res) => {
+  const { ids, category_id } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Neplatná data.' });
+  if (category_id === undefined || category_id === null) return res.status(400).json({ error: 'Chybí kategorie.' });
+
+  const catOwned = db.prepare('SELECT 1 FROM categories WHERE id = ? AND user_id = ?').get(category_id, req.dataUserId);
+  if (!catOwned) return res.status(400).json({ error: 'Neplatná kategorie.' });
+
+  const ph = ids.map(() => '?').join(',');
+  const owned = db.prepare(`SELECT id FROM transactions WHERE user_id = ? AND id IN (${ph})`)
+    .all(req.dataUserId, ...ids);
+  if (owned.length !== ids.length) {
+    return res.status(400).json({ error: 'Některá transakce nepatří uživateli.' });
+  }
+
+  // Zdrojové platby předplacených balíčků se přeskakují, ne odmítají — jinak by
+  // jedna zamčená platba ve výběru shodila celou hromadnou akci. Důvod blokace
+  // je stejný jako u PATCH /:id (dvojí započtení čerpání do rozpočtu).
+  const locked = new Set(
+    db.prepare(`SELECT transaction_id FROM prepaid_packages
+                WHERE user_id = ? AND transaction_id IN (${ph})`)
+      .all(req.dataUserId, ...ids).map(r => r.transaction_id)
+  );
+  const target = owned.map(r => r.id).filter(id => !locked.has(id));
+  if (target.length === 0) return res.json({ updated: 0, skipped_prepaid: locked.size });
+
+  // Subkategorie se nuluje — patřila pod starou kategorii. Stejně to dělá
+  // inline editace v seznamu i Revize zařazení.
+  const tph = target.map(() => '?').join(',');
+  const result = db.prepare(`UPDATE transactions SET category_id = ?, subcategory_id = NULL
+     WHERE user_id = ? AND id IN (${tph})`).run(category_id, req.dataUserId, ...target);
+
+  res.json({ updated: result.changes, skipped_prepaid: locked.size });
+});
+
 router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
   const tx = db.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
   if (!tx) return res.status(404).json({ error: 'Transakce nenalezena.' });
