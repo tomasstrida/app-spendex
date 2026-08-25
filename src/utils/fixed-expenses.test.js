@@ -429,3 +429,23 @@ test('fixedExpensesForPeriod: řádek bez shody má prázdné tx_ids', () => {
   cleanup(db, tmp);
   assert.deepEqual(rows.find(r => r.name === 'Nic').tx_ids, []);
 });
+
+test('extra_income: platba v systémové kategorii se nespáruje s fixní platbou', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.cz')").run();
+  db.prepare("INSERT INTO categories (id,user_id,name,type,system_role) VALUES (30,1,'Mimořádné příjmy',4,'extra_income')").run();
+  db.prepare("INSERT INTO fixed_expenses (user_id, name, amount, sort_order, match_pattern) VALUES (1, 'PRE elektřina', 3000, 1, 'PRE')").run();
+  // odchozí platba v systémové kategorii — pattern by na ni jinak sedl
+  db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description) VALUES (1, 30, -3000, '2026-04-05', 'PRE vratka')").run();
+
+  // POZOR: signatura je (db, userId, period) — TŘI argumenty. Billing day si
+  // funkce načítá sama přes getUserBillingDay().
+  const { fixedExpensesForPeriod } = require('./fixed-expenses');
+  const rows = fixedExpensesForPeriod(db, 1, '2026-04');
+  const pre = rows.find(r => r.name === 'PRE elektřina');
+
+  assert.ok(pre, 'definovaná fixní platba se v seznamu ukáže vždy');
+  assert.equal(pre.tx_count, 0, 'platba v systémové kategorii se nesmí spárovat');
+  assert.equal(pre.actual, 0);
+  cleanup(db, tmp);
+});

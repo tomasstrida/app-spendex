@@ -584,6 +584,34 @@ function initSchema() {
       }
     } catch { /* selhání bootstrapu pro jednoho uživatele – ostatní pokračují */ }
   }
+
+  // Bootstrap kategorie extra_income (Mimořádné příjmy). Stejná pravidla jako
+  // fund_topup a prepaid_purchase výš: jen pro uživatele, kteří UŽ MAJÍ kategorie
+  // (v household sharingu je má jen data owner), stejnojmenná uživatelská
+  // kategorie se povýší místo vkládání, idempotentní.
+  //
+  // Jediná systémová kategorie na PŘÍJMOVÉ straně – proto zelená a ikona daru.
+  const EXTRA_INCOME_NAME = 'Mimořádné příjmy';
+  const extraIncomeOwners = db.prepare(`
+    SELECT DISTINCT user_id FROM categories
+    WHERE user_id NOT IN (SELECT user_id FROM categories WHERE system_role = 'extra_income')
+  `).all();
+  const promoteExtraIncome = db.prepare("UPDATE categories SET type = 4, system_role = 'extra_income' WHERE id = ?");
+  const insExtraIncome = db.prepare(`
+    INSERT INTO categories (user_id, name, type, color, icon, system_role)
+    VALUES (?, ?, 4, '#10b981', 'Gift', 'extra_income')
+  `);
+  for (const o of extraIncomeOwners) {
+    try {
+      const existing = findByName.get(o.user_id, EXTRA_INCOME_NAME);
+      if (existing) {
+        promoteExtraIncome.run(existing.id);
+        deleteBudgets.run(o.user_id, existing.id);
+      } else {
+        insExtraIncome.run(o.user_id, EXTRA_INCOME_NAME);
+      }
+    } catch { /* selhání bootstrapu pro jednoho uživatele – ostatní pokračují */ }
+  }
 }
 
 module.exports = { initSchema };

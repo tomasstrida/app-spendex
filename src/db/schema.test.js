@@ -326,3 +326,49 @@ test('migrace vytvoří tabulku rule_suggestions s UNIQUE(user_id, counterparty_
   );
   assert.ok(threw, 'druhý INSERT se stejným (user_id, counterparty_account) měl selhat na UNIQUE');
 });
+
+test('extra_income: bootstrap kategorie vznikne jen uživateli s kategoriemi a je idempotentní', () => {
+  const tmp = path.join(os.tmpdir(), `spendex-extra-bootstrap-${Date.now()}.db`);
+  process.env.DB_PATH = tmp;
+  delete require.cache[require.resolve('../db/connection')];
+  delete require.cache[require.resolve('../db/schema')];
+  const db = require('../db/connection');
+  require('../db/schema').initSchema();
+  db.prepare("INSERT INTO users (id, email) VALUES (1,'a@x'),(2,'b@x')").run();
+  db.prepare("INSERT INTO categories (user_id, name) VALUES (1,'Jídlo')").run();
+  require('../db/schema').initSchema();
+  require('../db/schema').initSchema();
+  const rows = db.prepare("SELECT user_id, name, type, color, icon FROM categories WHERE system_role = 'extra_income'").all();
+  db.close();
+  fs.unlinkSync(tmp);
+  try { fs.unlinkSync(tmp + '-wal'); fs.unlinkSync(tmp + '-shm'); } catch { /* ok */ }
+  assert.equal(rows.length, 1, 'právě jedna kategorie extra_income (jen pro user 1)');
+  assert.equal(rows[0].user_id, 1);
+  assert.equal(rows[0].type, 4);
+  assert.equal(rows[0].name, 'Mimořádné příjmy');
+  assert.equal(rows[0].color, '#10b981');
+  assert.equal(rows[0].icon, 'Gift');
+});
+
+test('extra_income: stejnojmenná uživatelská kategorie se povýší, nevznikne duplicita', () => {
+  const tmp = path.join(os.tmpdir(), `spendex-extra-promote-${Date.now()}.db`);
+  process.env.DB_PATH = tmp;
+  delete require.cache[require.resolve('../db/connection')];
+  delete require.cache[require.resolve('../db/schema')];
+  const db = require('../db/connection');
+  require('../db/schema').initSchema();
+  db.prepare("INSERT INTO users (id, email) VALUES (1,'a@x')").run();
+  const id = db.prepare("INSERT INTO categories (user_id, name, type) VALUES (1,'Mimořádné příjmy',1)").run().lastInsertRowid;
+  db.prepare("INSERT INTO budgets (user_id, category_id, month, amount) VALUES (1,?, 'default', 500)").run(id);
+  require('../db/schema').initSchema();
+  const rows = db.prepare("SELECT id, type, system_role FROM categories WHERE user_id = 1 AND name = 'Mimořádné příjmy'").all();
+  const budgets = db.prepare('SELECT COUNT(*) AS n FROM budgets WHERE category_id = ?').get(id);
+  db.close();
+  fs.unlinkSync(tmp);
+  try { fs.unlinkSync(tmp + '-wal'); fs.unlinkSync(tmp + '-shm'); } catch { /* ok */ }
+  assert.equal(rows.length, 1, 'nevznikla duplicita');
+  assert.equal(rows[0].id, id);
+  assert.equal(rows[0].type, 4);
+  assert.equal(rows[0].system_role, 'extra_income');
+  assert.equal(budgets.n, 0, 'mrtvý měsíční budget se smaže');
+});
