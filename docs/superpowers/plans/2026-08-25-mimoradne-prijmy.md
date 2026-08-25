@@ -212,8 +212,10 @@ test('extra_income: platba v systémové kategorii se nespáruje s fixní platbo
   // odchozí platba v systémové kategorii — pattern by na ni jinak sedl
   db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description) VALUES (1, 30, -3000, '2026-04-05', 'PRE vratka')").run();
 
+  // POZOR: signatura je (db, userId, period) — TŘI argumenty. Billing day si
+  // funkce načítá sama přes getUserBillingDay().
   const { fixedExpensesForPeriod } = require('./fixed-expenses');
-  const rows = fixedExpensesForPeriod(db, 1, '2026-04', 1);
+  const rows = fixedExpensesForPeriod(db, 1, '2026-04');
   const pre = rows.find(r => r.name === 'PRE elektřina');
 
   assert.ok(pre, 'definovaná fixní platba se v seznamu ukáže vždy');
@@ -223,7 +225,7 @@ test('extra_income: platba v systémové kategorii se nespáruje s fixní platbo
 });
 ```
 
-Ověř si při psaní skutečný název exportu a signaturu ve `src/utils/fixed-expenses.js` — pokud se `fixedExpensesForPeriod` volá jinak nebo bere jiné argumenty, uprav volání podle stávajících testů v témž souboru, ne podle tohoto úryvku.
+Export i signatura jsou ověřené: `module.exports = { fixedExpensesForPeriod }`, `fixedExpensesForPeriod(db, userId, period)`. Sloupce `amount_min` / `amount_max` jsou nullable (přidané přes ALTER TABLE), takže INSERT bez nich projde.
 
 Run: `node --test --test-force-exit src/utils/fixed-expenses.test.js`
 Expected: PASS napoprvé (guard už existuje).
