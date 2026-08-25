@@ -46,9 +46,9 @@ function fixedExpensesForPeriod(db, userId, period) {
   // Výjimka `include_transfers = 1`: řádek sám JE převodem (účelová dotace). Na
   // jeden vlastní účet chodí víc dotací s různým účelem, takže je rozliší jen
   // text v poznámce — číslo účtu by je sečetlo dohromady.
-  // Systémové kategorie (categories.system_role — fund_topup, prepaid_purchase)
-  // jsou technické a nesmí se párovat s fixními platbami: jinak by se stejný
-  // odliv počítal dvakrát (jednou jako fixní platba, jednou vlastním řádkem bilance).
+  // Jakákoli systémová kategorie (categories.system_role je neprázdné) je technická
+  // a nesmí se párovat s fixními platbami: jinak by se stejný odliv počítal dvakrát
+  // (jednou jako fixní platba, jednou vlastním řádkem bilance).
   const matchByDesc = db.prepare(`
     SELECT t.id, t.amount
     FROM transactions t

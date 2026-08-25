@@ -70,8 +70,9 @@ router.put('/', requireAuth, writeLimiter, (req, res) => {
   const { category_id, period, amount, scope = 'all' } = req.body;
   if (!category_id || !period || amount == null) return res.status(400).json({ error: 'category_id, period a amount jsou povinné.' });
 
-  const cat = db.prepare('SELECT id FROM categories WHERE id = ? AND user_id = ?').get(category_id, req.dataUserId);
+  const cat = db.prepare('SELECT id, system_role FROM categories WHERE id = ? AND user_id = ?').get(category_id, req.dataUserId);
   if (!cat) return res.status(404).json({ error: 'Kategorie nenalezena.' });
+  if (cat.system_role) return res.status(400).json({ error: 'Systémová kategorie nemůže mít rozpočet.' });
 
   db.prepare(`
     INSERT INTO budgets (user_id, category_id, month, amount)

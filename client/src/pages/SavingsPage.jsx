@@ -43,7 +43,7 @@ export default function SavingsPage() {
   // Plánovaný přebytek ze Schůzky — stejná pravda přes sdílený helper.
   // `totalToSavings` (ne `surplus`): mimořádné příjmy patří do plánu spoření,
   // jinak by se plán rozešel se Schůzkou přesně o jednorázovou částku.
-  const { totalToSavings: surplus } = computeMeetingSurplus({
+  const { totalToSavings: toSavings } = computeMeetingSurplus({
     incomeSources,
     fixedExpenses,
     budgetsType1: budgets,
@@ -102,7 +102,7 @@ export default function SavingsPage() {
             <div style={{ borderTop: '1px solid var(--border)', marginTop: 12, paddingTop: 12 }}>
               <div className="report-bilance-row">
                 <span>Na spořicí</span>
-                <span>{surplus >= 0 ? '+' : '−'} {formatCurrency(Math.abs(surplus))}</span>
+                <span>{toSavings >= 0 ? '+' : '−'} {formatCurrency(Math.abs(toSavings))}</span>
               </div>
             </div>
             <div className="text-muted" style={{ fontSize: 12, marginTop: 8 }}>

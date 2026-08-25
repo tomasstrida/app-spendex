@@ -411,10 +411,10 @@ export default function ReportPage() {
               <span>{surplus >= 0 ? '+' : '−'} {formatCurrency(Math.abs(surplus))}</span>
             </div>
             {extraIncomeRow?.category_id && extraIncomeRow.inflow !== 0 && (
-              <Link to={txLink(`category_ids=${extraIncomeRow.category_id}&direction=in`)}
+              <Link to={txLink(`category_ids=${extraIncomeRow.category_id}`)}
                 className="report-bilance-row"
                 style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
-                title="Klik: mimořádné příjmy v tomto období (přeplatky, dary, výhry)">
+                title="Klik: transakce v kategorii Mimořádné příjmy v tomto období (saldo, včetně případných vratek)">
                 <span>{extraIncomeRow.name}</span>
                 <span>{extraIncomeRow.inflow >= 0 ? '+' : '−'} {formatCurrency(Math.abs(extraIncomeRow.inflow))}</span>
               </Link>

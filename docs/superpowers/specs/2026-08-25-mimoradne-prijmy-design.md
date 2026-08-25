@@ -212,8 +212,10 @@ Detaily:
 - Řádek **Mimořádné příjmy** se zobrazí jen když `extra_income.category_id` existuje
   a `inflow !== 0` — stejná podmínka jako u `prepaid_purchase` a `fund_topup`. V měsíci bez
   mimořádného příjmu vypadá stránka přesně jako dnes, jen s přejmenovaným řádkem.
-- Proklik: `category_ids=<id>&direction=in` + `period`. **Musí vézt i `period`** — TransactionsPage
-  AND-uje období z kontextu a bez něj se rozejde součet s výpisem.
+- Proklik: `category_ids=<id>` + `period`, **bez `direction`**. `inflow` je saldo (§4.1) — kdyby
+  proklik filtroval jen `direction=in`, u vráceného přeplatku by vypsal víc transakcí, než kolik
+  udává součet nad ním. **Musí vézt i `period`** — TransactionsPage AND-uje období z kontextu
+  a bez něj se rozejde součet s výpisem.
 - Formátování: `formatCurrency` vrací absolutní hodnotu, takže znaménko se skládá ručně
   (`inflow >= 0 ? '+' : '−'`), stejně jako u `annual_off_fund`.
 - Třída `report-bilance-result` dnes visí na jediném řádku. Nově je výsledný řádek

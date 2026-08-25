@@ -14,6 +14,7 @@ function setup() {
   db.prepare("INSERT INTO users (id, email) VALUES (1,'o@x')").run();
   db.prepare("INSERT INTO categories (id, user_id, name, type) VALUES (5,1,'Sport',1)").run();
   db.prepare("INSERT INTO categories (id, user_id, name, type, system_role) VALUES (7,1,'Nákup předplacených balíčků',4,'prepaid_purchase')").run();
+  db.prepare("INSERT INTO categories (id, user_id, name, type, system_role) VALUES (8,1,'Mimořádné příjmy',4,'extra_income')").run();
   db.prepare("INSERT INTO budgets (user_id, category_id, month, amount) VALUES (1,5,'default',2000)").run();
   db.prepare(`
     INSERT INTO prepaid_packages (id, user_id, category_id, name, total_amount, units_total, unit_amount)
@@ -68,5 +69,19 @@ test('bez cerpani je budget_spent rovno spent', async () => {
   const row = budgets.find(b => b.category_id === 5);
   assert.equal(row.prepaid_spent, 0);
   assert.equal(row.budget_spent, row.spent);
+  server.close();
+});
+
+test('PUT na systemovou kategorii vraci 400 a nezalozi budget', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const res = await fetch(`${base}/api/budgets`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category_id: 8, period: '2026-04', amount: 1000, scope: 'all' }),
+  });
+  assert.equal(res.status, 400);
+  const row = db.prepare("SELECT * FROM budgets WHERE category_id = 8").get();
+  assert.equal(row, undefined, 'systemova kategorie nesmi mit radek v budgets');
   server.close();
 });

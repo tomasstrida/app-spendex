@@ -666,3 +666,31 @@ test('extra_income: sekce Účetní kategorii NEobsahuje (saldo nikdy nevyjde nu
   assert.ok(ids.includes(31), 'uživatelská kategorie převodů v Účetní zůstává');
   server.close();
 });
+
+test('extra_income: v by_category se objeví se záporným spent (SPENDING_FILTER nefiltruje podle typu kategorie)', async () => {
+  // Dokumentuje skutečné chování, ne přání: `by_category` (overview) rozlišuje
+  // jen roli ÚČTU, ne typ kategorie. Mimořádný příjem na účtu role='spending'
+  // proto v by_category NENÍ vynechán — `spent = SUM(-amount)` u kladné částky
+  // vyjde záporně. Klient si s tím poradí tím, že by_category filtruje na
+  // type===2/3, ale samotný agregát to netvrdí — příští úprava SPENDING_FILTER
+  // by to mohla tiše otočit.
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  const accId = db.prepare("INSERT INTO accounts (user_id, account_number, name, role) VALUES (1,'123/0100','Běžný','spending')").run().lastInsertRowid;
+  db.prepare("INSERT INTO categories (id,user_id,name,type,system_role) VALUES (30,1,'Mimořádné příjmy',4,'extra_income')").run();
+  db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description,account_id) VALUES (1,30,8000,'2026-07-05','Přeplatek PRE',?)").run(accId);
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-07`)).json();
+  const row = (stats.by_category || []).find(r => r.id === 30);
+  assert.equal(row.spent, -8000, 'kladný přeplatek dá v by_category záporné spent');
+  server.close();
+});
+
+test('budget-history: mimořádný příjem (type=4) se nevrací', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type,system_role) VALUES (30,1,'Mimořádné příjmy',4,'extra_income')").run();
+  db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES (1,30,8000,'2026-07-05','Přeplatek PRE')").run();
+  const r = await (await fetch(`${base}/api/stats/budget-history?from=2026-07&to=2026-07`)).json();
+  assert.ok(!r.series.some(s => s.category_id === 30), 'extra_income nesmí mít sérii ve Vývoji výdajů');
+  server.close();
+});
