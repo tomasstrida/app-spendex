@@ -690,6 +690,16 @@ a.report-subcat-row:hover { background: var(--bg2); }
   margin-top: 6px;
   border-top: 2px solid var(--border);
 }
+/* Mezisoučet bilance („Provozní přebytek") — vizuálně mezi položkou a výsledkem:
+   oddělený linkou jako výsledek, ale menší a lehčí, aby výsledný řádek zůstal
+   dominantní. */
+.report-bilance-subtotal {
+  font-size: 15px;
+  font-weight: 600;
+  padding-top: 8px;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+}
 
 /* Rozpad převodů na spořicí pod „Skutečně naspořeno" */
 .savings-transfers {

@@ -251,7 +251,8 @@ export default function ReportPage() {
   const fundTopupRow     = stats?.fund_topup || null;
   const annualOffFundRow = stats?.annual_off_fund || null;
   const prepaidRow       = stats?.prepaid_purchase || null;
-  const { totalIncome, totalFixed, totalType1, totalType3, surplus } = computeMeetingSurplus({
+  const extraIncomeRow   = stats?.extra_income || null;
+  const { totalIncome, totalFixed, totalType1, totalType3, surplus, totalToSavings } = computeMeetingSurplus({
     incomeSources,
     fixedExpenses,
     budgetsType1: budgets,
@@ -259,6 +260,7 @@ export default function ReportPage() {
     fundTopup: fundTopupRow?.outflow || 0,
     annualOffFund: annualOffFundRow?.spent || 0,
     prepaidPurchase: prepaidRow?.outflow || 0,
+    extraIncome: extraIncomeRow?.inflow || 0,
   });
   const totalDiff    = Math.round(totalIncome - totalPlanned);
 
@@ -400,9 +402,26 @@ export default function ReportPage() {
                 </span>
               </Link>
             )}
-            <div className={`report-bilance-row report-bilance-result ${surplus >= 0 ? '' : 'text-danger'}`}>
-              <span>Na spořicí (přebytek)</span>
+            {/* Bilance má dva stupně: provozní přebytek je srovnatelný mezi měsíci
+                (jednorázovky do něj nevstupují), mimořádné příjmy se připočtou až
+                do výsledného „Na spořicí". Oba řádky jsou vidět vždy — v měsíci bez
+                mimořádného příjmu ukážou stejné číslo. */}
+            <div className={`report-bilance-row report-bilance-subtotal ${surplus >= 0 ? '' : 'text-danger'}`}>
+              <span>Provozní přebytek</span>
               <span>{surplus >= 0 ? '+' : '−'} {formatCurrency(Math.abs(surplus))}</span>
+            </div>
+            {extraIncomeRow?.category_id && extraIncomeRow.inflow !== 0 && (
+              <Link to={txLink(`category_ids=${extraIncomeRow.category_id}&direction=in`)}
+                className="report-bilance-row"
+                style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                title="Klik: mimořádné příjmy v tomto období (přeplatky, dary, výhry)">
+                <span>{extraIncomeRow.name}</span>
+                <span>{extraIncomeRow.inflow >= 0 ? '+' : '−'} {formatCurrency(Math.abs(extraIncomeRow.inflow))}</span>
+              </Link>
+            )}
+            <div className={`report-bilance-row report-bilance-result ${totalToSavings >= 0 ? '' : 'text-danger'}`}>
+              <span>Na spořicí</span>
+              <span>{totalToSavings >= 0 ? '+' : '−'} {formatCurrency(Math.abs(totalToSavings))}</span>
             </div>
             {(() => {
               const savingsNet = stats?.savings?.net || 0;
