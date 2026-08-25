@@ -9,10 +9,15 @@ import { niceScale, formatTick, shortPeriodLabel, signPrefix } from '../utils/ch
 // v desítkách tisíc vedle zůstatku ve stovkách tisíc by se stejně nedalo číst.
 
 const PAD = { top: 16, right: 24, bottom: 34, left: 72 };
-const LABEL_H = 20;   // prostor pro popisek panelu ("Zůstatek" / "Saldo za období") nad jeho osou
+const LABEL_H = 28;   // vlastní řádek pro popisek panelu ("Zůstatek" / "Saldo za období") nad jeho osou
+const LABEL_GAP = 14; // odstup popisku od prvního gridline — při menším se popisek opticky slévá s horním tickem osy
 const BALANCE_H = 200;
 const NET_H = 140;
 const GAP = 40;   // mezera mezi panely — musí pojmout popisek dolního panelu a opticky oddělit obě osy
+// Strop na šířku pásma jednoho období. Bez něj se pár období roztáhne přes celou
+// stránku a ze sloupců zbydou proužky v prázdné ploše; nad ~12 obdobími se strop
+// neuplatní a graf vyplní šířku jako dřív.
+const MAX_BAND_W = 110;
 
 const COLOR_DERIVED = '#6366f1';
 const COLOR_ACTUAL = '#0ea5e9';
@@ -36,7 +41,11 @@ export default function SavingsHistoryChart({ periods, values, onPeriodClick, cl
   useEffect(() => { setActive(null); }, [periods, values]);
 
   const n = periods.length;
-  const plotW = Math.max(10, width - PAD.left - PAD.right);
+  const availW = Math.max(10, width - PAD.left - PAD.right);
+  // Pásmo = vodorovný díl jednoho období. Když by při malém počtu období vyšlo
+  // širší než strop, plocha grafu se zúží (a osa X skončí dřív) místo toho, aby
+  // se pár sloupců rozprostřelo přes celou stránku.
+  const plotW = n > 0 ? Math.min(availW, n * MAX_BAND_W) : availW;
   // Každý panel má nad svou osou vlastní řádek na popisek (LABEL_H), aby bylo
   // z grafu samotného poznat, který panel je zůstatek a který saldo — ne jen
   // z legendy vedle grafu, ta mluví jen o křivkách zůstatku.
@@ -45,15 +54,20 @@ export default function SavingsHistoryChart({ periods, values, onPeriodClick, cl
   const netTop = balanceTop + balanceH + GAP + LABEL_H;
   const netH = NET_H - PAD.bottom;
   const height = netTop + NET_H;
-  // Popisek sedí 8 px nad prvním gridline svého panelu — konzistentní odstup
+  // Popisek sedí LABEL_GAP nad prvním gridline svého panelu — konzistentní odstup
   // pro oba panely, ať jsou jejich PAD/GAP hodnoty jakékoli.
-  const balanceLabelY = balanceTop - 8;
-  const netLabelY = netTop - 8;
+  const balanceLabelY = balanceTop - LABEL_GAP;
+  const netLabelY = netTop - LABEL_GAP;
 
   // Osa X sdílená oběma panely — střed sloupce i bod křivky leží na stejném x.
-  const x = i => PAD.left + (n === 1 ? plotW / 2 : (plotW * i) / (n - 1));
-  const bandW = n > 0 ? plotW / Math.max(n, 1) : 0;
-  const barW = Math.max(6, Math.min(38, bandW * 0.55));
+  // Body leží ve STŘEDU svého pásma, ne na krajích plochy: jinak by první a
+  // poslední sloupec půlkou přetékal přes osu Y, resp. přes pravý okraj.
+  const bandW = n > 0 ? plotW / n : 0;
+  // Když strop pásma plochu zúžil, vycentrujeme ji — plocha přilepená doleva
+  // s prázdnem vpravo vypadá jako nedokreslený graf, ne jako záměr.
+  const plotLeft = PAD.left + (availW - plotW) / 2;
+  const x = i => plotLeft + bandW * (i + 0.5);
+  const barW = Math.max(10, Math.min(56, bandW * 0.5));
 
   const balanceValues = values.flatMap(v => [
     showDerived ? v.balance_derived : null,
@@ -64,7 +78,14 @@ export default function SavingsHistoryChart({ periods, values, onPeriodClick, cl
   // sérií lhalo o datech ("zůstatek zatím neznáme"), i když existují, jen jsou
   // schované.
   const hasAnyBalanceData = values.some(v => v.balance_derived != null || v.balance_actual != null);
-  const balScale = niceScale(Math.min(...balanceValues, 0), Math.max(...balanceValues, 0));
+  // Osa zůstatku se přizpůsobí rozsahu dat (`anchorZero: false`). Zůstatek se
+  // pohybuje kolem stovek tisíc a jeho kolísání by u osy od nuly zabralo pár
+  // procent výšky panelu — přitom právě ta změna je to, co má horní panel
+  // ukazovat. Sloupce salda v dolním panelu zůstávají kotvené na nule.
+  // Prázdné pole se sem nesmí dostat (Math.min(...[]) je Infinity), proto fallback.
+  const balScale = hasBalance
+    ? niceScale(Math.min(...balanceValues), Math.max(...balanceValues), 5, { anchorZero: false })
+    : niceScale(0, 0);
   const netScale = niceScale(
     Math.min(0, ...values.map(v => v.net)),
     Math.max(0, ...values.map(v => v.net))
@@ -124,15 +145,15 @@ export default function SavingsHistoryChart({ periods, values, onPeriodClick, cl
         onBlur={() => setActive(null)}
       >
         {/* horní panel — zůstatek */}
-        <text x={PAD.left} y={balanceLabelY} className="chart-tick">Zůstatek</text>
+        <text x={plotLeft} y={balanceLabelY} className="chart-tick">Zůstatek</text>
         {hasBalance && balScale.ticks.map(tv => (
           <g key={`b${tv}`}>
-            <line x1={PAD.left} x2={PAD.left + plotW} y1={yBal(tv)} y2={yBal(tv)} className="chart-grid-line" />
-            <text x={PAD.left - 10} y={yBal(tv)} className="chart-tick chart-tick-y">{formatTick(tv)}</text>
+            <line x1={plotLeft} x2={plotLeft + plotW} y1={yBal(tv)} y2={yBal(tv)} className="chart-grid-line" />
+            <text x={plotLeft - 10} y={yBal(tv)} className="chart-tick chart-tick-y">{formatTick(tv)}</text>
           </g>
         ))}
         {!hasAnyBalanceData && (
-          <text x={PAD.left} y={balanceTop + balanceH / 2} className="chart-tick">
+          <text x={plotLeft} y={balanceTop + balanceH / 2} className="chart-tick">
             Zůstatek zatím neznáme — doplní se z notifikací ze spořicího účtu.
           </text>
         )}
@@ -154,14 +175,14 @@ export default function SavingsHistoryChart({ periods, values, onPeriodClick, cl
         ))}
 
         {/* dolní panel — saldo */}
-        <text x={PAD.left} y={netLabelY} className="chart-tick">Saldo za období</text>
+        <text x={plotLeft} y={netLabelY} className="chart-tick">Saldo za období</text>
         {netScale.ticks.map(tv => (
           <g key={`n${tv}`}>
-            <line x1={PAD.left} x2={PAD.left + plotW} y1={yNet(tv)} y2={yNet(tv)} className="chart-grid-line" />
-            <text x={PAD.left - 10} y={yNet(tv)} className="chart-tick chart-tick-y">{formatTick(tv)}</text>
+            <line x1={plotLeft} x2={plotLeft + plotW} y1={yNet(tv)} y2={yNet(tv)} className="chart-grid-line" />
+            <text x={plotLeft - 10} y={yNet(tv)} className="chart-tick chart-tick-y">{formatTick(tv)}</text>
           </g>
         ))}
-        <line x1={PAD.left} x2={PAD.left + plotW} y1={zeroY} y2={zeroY} className="chart-axis-line" />
+        <line x1={plotLeft} x2={plotLeft + plotW} y1={zeroY} y2={zeroY} className="chart-axis-line" />
         {values.map((v, i) => {
           const top = v.net >= 0 ? yNet(v.net) : zeroY;
           const h = Math.abs(yNet(v.net) - zeroY);

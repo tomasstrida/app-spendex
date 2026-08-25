@@ -84,3 +84,22 @@ test('summarizeLimit: období bez limitu se do rozpětí nepočítá', async () 
   const { summarizeLimit } = await import('./chartScale.js');
   assert.deepEqual(summarizeLimit([null, 3000]), { min: 3000, max: 3000, varies: false });
 });
+
+test('niceScale: anchorZero=false nevynucuje nulu a osa sedne na rozsah dat', () => {
+  const s = niceScale(95000, 112000, 5, { anchorZero: false });
+  assert.ok(s.min > 0, `dolní hranice má být nad nulou, je ${s.min}`);
+  assert.ok(s.min <= 95000, 'dolní hranice nesmí useknout nejnižší hodnotu');
+  assert.ok(s.max >= 112000, 'horní hranice nesmí useknout nejvyšší hodnotu');
+});
+
+test('niceScale: výchozí chování zůstává kotvené na nule', () => {
+  const s = niceScale(95000, 112000);
+  assert.equal(s.min, 0);
+  assert.ok(s.ticks.includes(0));
+});
+
+test('niceScale: anchorZero=false zvládne i záporný rozsah', () => {
+  const s = niceScale(-8000, -3000, 5, { anchorZero: false });
+  assert.ok(s.max < 0, `horní hranice má zůstat pod nulou, je ${s.max}`);
+  assert.ok(s.min <= -8000);
+});

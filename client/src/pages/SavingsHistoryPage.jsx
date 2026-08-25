@@ -133,7 +133,7 @@ export default function SavingsHistoryPage() {
                 </button>
                 <button className={`chart-legend-item${showActual ? ' on' : ''}`} aria-pressed={showActual}
                         disabled={!hasActual} onClick={() => setShowActual(v => !v)}>
-                  <span className="chart-legend-key" style={{ background: '#0ea5e9' }} />
+                  <span className="chart-legend-key is-dashed" style={{ color: '#0ea5e9' }} />
                   <span className="chart-legend-name">Zůstatek (z notifikací)</span>
                 </button>
               </div>

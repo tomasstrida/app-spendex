@@ -53,13 +53,25 @@ export function assignColors(series) {
 const STEP_MULTIPLIERS = [1, 2, 2.5, 5, 10];
 
 /**
- * Osa Y s kulatými hodnotami. Nula je vždy tickem (spojnice se čtou od
- * základny), záporné hodnoty (vratka převyšující výdaje) osu rozšíří dolů.
+ * Osa Y s kulatými hodnotami. Ve výchozím stavu je nula vždy tickem (spojnice
+ * a sloupce se čtou od základny), záporné hodnoty (vratka převyšující výdaje)
+ * osu rozšíří dolů.
+ *
+ * `anchorZero: false` nulu nevynucuje a osa se přizpůsobí rozsahu dat. Je to
+ * pro veličiny, kde je zajímavá ZMĚNA, ne poměr k nule — typicky zůstatek účtu,
+ * který se pohybuje kolem stovek tisíc a jehož kolísání by u osy od nuly
+ * zabralo pár procent výšky panelu. U výdajů a salda naopak nula být musí,
+ * jinak useknutá osa zveličí rozdíly.
+ *
+ * @param {{ anchorZero?: boolean }} [opts]
  * @returns {{ min: number, max: number, ticks: number[] }}
  */
-export function niceScale(minValue, maxValue, targetCount = 5) {
-  const lo = Math.min(0, Number.isFinite(minValue) ? minValue : 0);
-  let hi = Math.max(0, Number.isFinite(maxValue) ? maxValue : 0);
+export function niceScale(minValue, maxValue, targetCount = 5, opts = {}) {
+  const anchorZero = opts.anchorZero !== false;
+  const rawLo = Number.isFinite(minValue) ? minValue : 0;
+  const rawHi = Number.isFinite(maxValue) ? maxValue : 0;
+  const lo = anchorZero ? Math.min(0, rawLo) : Math.min(rawLo, rawHi);
+  let hi = anchorZero ? Math.max(0, rawHi) : Math.max(rawLo, rawHi);
   if (hi === lo) hi = lo + 1;
 
   const rough = (hi - lo) / targetCount;

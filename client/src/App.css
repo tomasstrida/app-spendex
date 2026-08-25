@@ -1579,6 +1579,9 @@ a.report-subcat-row:hover { background: var(--bg2); }
 .chart-legend-item:hover { border-color: var(--text2); }
 .chart-legend-item.on { opacity: 1; color: var(--text); background: var(--bg3); }
 .chart-legend-key { flex: none; width: 10px; height: 10px; border-radius: 3px; }
+/* Čárkovaná série musí být v legendě poznat i podle vzorku, ne jen podle barvy —
+   plný čtvereček u přerušované křivky mate. */
+.chart-legend-key.is-dashed { width: 14px; height: 3px; border-radius: 0; background-image: linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px); background-size: 7px 3px; }
 .chart-legend-total { color: var(--text2); font-variant-numeric: tabular-nums; }
 
 .chart-table-scroll { overflow-x: auto; }
