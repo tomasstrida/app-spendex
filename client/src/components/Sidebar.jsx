@@ -20,6 +20,7 @@ import {
   SearchCheck,
   Ticket,
   TrendingUp,
+  LineChart,
 } from 'lucide-react';
 
 const navGroups = [
@@ -31,6 +32,7 @@ const navGroups = [
       { to: '/savings',      icon: Landmark,        label: t.nav.savings },
       { to: '/annual-budgets', icon: CalendarRange, label: t.nav.annualBudgets },
       { to: '/budget-history', icon: TrendingUp,   label: t.nav.budgetHistory },
+      { to: '/savings-history', icon: LineChart,   label: t.nav.savingsHistory },
       { to: '/transactions', icon: ArrowLeftRight,  label: t.nav.transactions },
     ],
   },

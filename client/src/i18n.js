@@ -11,6 +11,7 @@ const cs = {
     savings: 'Spořicí účet',
     annualBudgets: 'Roční budgety',
     budgetHistory: 'Vývoj výdajů',
+    savingsHistory: 'Vývoj spoření',
     accounts: 'Účty',
     import: 'Import',
     duplicates: 'Duplicity',

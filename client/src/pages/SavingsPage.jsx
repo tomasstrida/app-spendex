@@ -60,6 +60,7 @@ export default function SavingsPage() {
     <Layout>
       <div className="page-header">
         <h1 className="page-title">Spořicí účet</h1>
+        <Link className="btn btn-ghost" to="/savings-history">{t.nav.savingsHistory}</Link>
         {period && (
           <div className="month-nav">
             <button className="btn btn-ghost btn-icon" onClick={() => setPeriod(p => addPeriods(p, -1))}>
