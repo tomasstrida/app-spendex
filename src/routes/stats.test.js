@@ -576,3 +576,33 @@ test('savings-history: neplatný rozsah vrátí 400', async () => {
   assert.equal(res.status, 400);
   server.close();
 });
+
+test('savings-history: kotva novější než zobrazený rozsah se dopočítá i mimo něj', async () => {
+  const { db, app, savingsId } = setupSavings();
+  const { server, base } = await listen(app);
+  // pohyb PŘED kotvou ve stejném (srpnovém) období — nesmí se počítat do "after",
+  // ale musí se počítat do net(2026-08) při zpětném odečtu na červenec
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,account_id) VALUES (1,-2000,'2026-08-01','Vyber',?)").run(savingsId);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,account_id,balance_after) VALUES (1,3000,'2026-08-05','Vklad',?,100000)").run(savingsId);
+  const r = await (await fetch(`${base}/api/stats/savings-history?from=2026-06&to=2026-07`)).json();
+  assert.equal(r.anchor.date, '2026-08-05');
+  assert.equal(r.anchor.balance, 100000);
+  // kotva leží MIMO zobrazený rozsah (srpen > červenec); net srpna = 3000 − 2000 = 1000,
+  // červenec (poslední zobrazené období) = anchor.balance − net(2026-08) = 100000 − 1000 = 99000
+  assert.equal(r.values[1].balance_derived, 99000);
+  server.close();
+});
+
+test('savings-history: neexterní noha po kotvě (transfer z běžného účtu) se přičte se správným znaménkem', async () => {
+  const { db, app, savingsId, mainId } = setupSavings();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,account_id,balance_after) VALUES (1,5000,'2026-07-10','Vklad',?,100000)").run(savingsId);
+  // noha zaúčtovaná na BĚŽNÉM účtu (protiúčet = spořicí), datovaná PO kotvě ve stejném
+  // období — cvičí větev `t.external === 0` v dopočtu ("after"), ne přímou nohu na spořicím
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id) VALUES (1,-3000,'2026-07-20','Tomáš Střída',?,?)").run(SAVINGS_ACC, mainId);
+  const r = await (await fetch(`${base}/api/stats/savings-history?from=2026-07&to=2026-07`)).json();
+  // odchozí -3000 z běžného účtu na spořicí = vklad na spořicí (+3000);
+  // 100000 + 3000 = 103000 — otočené znaménko by dalo 97000
+  assert.equal(r.values[0].balance_derived, 103000);
+  server.close();
+});
