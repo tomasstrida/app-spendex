@@ -352,6 +352,11 @@ function initSchema() {
     'ALTER TABLE categories ADD COLUMN system_role TEXT',
     // accounts.is_fund = účet, na kterém se kumulují peníze na roční výdaje
     'ALTER TABLE accounts ADD COLUMN is_fund INTEGER NOT NULL DEFAULT 0',
+    // Vazba roční kategorie na fondový účet, ze kterého se platí. NULL = kategorie
+    // se z fondu nefinancuje (typicky Oblečení placené ze Společného) a do výpočtu
+    // krytí fondu nevstupuje. FK se nepřidává — SQLite ho v ALTER TABLE neumí,
+    // integritu drží validace v PATCH /api/categories a join ve fund-coverage.
+    'ALTER TABLE categories ADD COLUMN fund_account_id INTEGER',
     // Předplacené balíčky: koupím dopředu N jednotek (např. 10 tréninků), postupně
     // čerpám. prepaid_packages = jeden nákup, prepaid_draws = jedno čerpání.
     `CREATE TABLE IF NOT EXISTS prepaid_packages (

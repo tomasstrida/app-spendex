@@ -138,3 +138,65 @@ test('DELETE: kategorii extra_income nelze smazat', async () => {
   assert.equal(res.status, 400);
   assert.ok(still, 'kategorie musí zůstat');
 });
+
+test('PATCH: fund_account_id přijme fondový účet', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO accounts (id,user_id,name,account_number,role,is_fund) VALUES (60,1,'Nepravidelné','1679014074/3030','spending',1)").run();
+  const res = await fetch(`${base}/api/categories/10`, { method:'PATCH', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ fund_account_id: 60 }) });
+  const body = await res.json();
+  server.close();
+  assert.equal(res.status, 200);
+  assert.equal(body.fund_account_id, 60);
+});
+
+test('PATCH: fund_account_id = null vazbu zruší', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO accounts (id,user_id,name,account_number,role,is_fund) VALUES (60,1,'Nepravidelné','1679014074/3030','spending',1)").run();
+  db.prepare('UPDATE categories SET fund_account_id = 60 WHERE id = 10').run();
+  const res = await fetch(`${base}/api/categories/10`, { method:'PATCH', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ fund_account_id: null }) });
+  const body = await res.json();
+  server.close();
+  assert.equal(res.status, 200);
+  assert.equal(body.fund_account_id, null);
+});
+
+test('PATCH: nefondový účet se odmítne', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO accounts (id,user_id,name,account_number,role,is_fund) VALUES (61,1,'Společný','1679014023/3030','spending',0)").run();
+  const res = await fetch(`${base}/api/categories/10`, { method:'PATCH', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ fund_account_id: 61 }) });
+  const body = await res.json();
+  const still = db.prepare('SELECT fund_account_id FROM categories WHERE id = 10').get();
+  server.close();
+  assert.equal(res.status, 400);
+  assert.equal(body.error, 'Účet není fondový.');
+  assert.equal(still.fund_account_id, null, 'vazba se nesmí uložit');
+});
+
+test('PATCH: cizí fondový účet se odmítne', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO accounts (id,user_id,name,account_number,role,is_fund) VALUES (62,2,'Cizí fond','9999999999/3030','spending',1)").run();
+  const res = await fetch(`${base}/api/categories/10`, { method:'PATCH', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ fund_account_id: 62 }) });
+  server.close();
+  assert.equal(res.status, 400);
+});
+
+test('PATCH: bez fund_account_id v těle zůstane stávající vazba', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO accounts (id,user_id,name,account_number,role,is_fund) VALUES (60,1,'Nepravidelné','1679014074/3030','spending',1)").run();
+  db.prepare('UPDATE categories SET fund_account_id = 60 WHERE id = 10').run();
+  const res = await fetch(`${base}/api/categories/10`, { method:'PATCH', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ name: 'Přejmenovaná' }) });
+  const body = await res.json();
+  server.close();
+  assert.equal(body.fund_account_id, 60);
+  assert.equal(body.name, 'Přejmenovaná');
+});

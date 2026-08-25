@@ -82,15 +82,31 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
   const cat = db.prepare('SELECT * FROM categories WHERE id = ? AND user_id = ?').get(req.params.id, req.dataUserId);
   if (!cat) return res.status(404).json({ error: 'Kategorie nenalezena.' });
 
-  const { name, color, icon, type, typical_price, frequency_months } = req.body;
+  const { name, color, icon, type, typical_price, frequency_months, fund_account_id } = req.body;
   // Systémové kategorie (categories.system_role) mají typ pevně daný kódem —
   // přepnutí by rozbilo logiku, která na ně spoléhá (fund_topup = type 4).
   // Název, barvu a ikonu měnit lze.
   const newType = cat.system_role ? cat.type : (type ?? cat.type ?? 1);
+
+  // Vazba na fondový účet: přijme se jen účet téhož uživatele s is_fund = 1, nebo
+  // null (= kategorie se z fondu nefinancuje). Bez FK v DB je tohle jediné místo,
+  // které drží integritu — viz komentář u migrace ve schema.js.
+  let newFundAccountId = cat.fund_account_id;
+  if (fund_account_id !== undefined) {
+    if (fund_account_id === null) {
+      newFundAccountId = null;
+    } else {
+      const acc = db.prepare('SELECT id FROM accounts WHERE id = ? AND user_id = ? AND is_fund = 1')
+        .get(fund_account_id, req.dataUserId);
+      if (!acc) return res.status(400).json({ error: 'Účet není fondový.' });
+      newFundAccountId = acc.id;
+    }
+  }
+
   try {
     db.prepare(`
       UPDATE categories
-      SET name = ?, color = ?, icon = ?, type = ?, typical_price = ?, frequency_months = ?
+      SET name = ?, color = ?, icon = ?, type = ?, typical_price = ?, frequency_months = ?, fund_account_id = ?
       WHERE id = ?
     `).run(
       name ?? cat.name,
@@ -99,6 +115,7 @@ router.patch('/:id', requireAuth, writeLimiter, (req, res) => {
       newType,
       typical_price !== undefined ? (typical_price != null ? parseFloat(typical_price) : null) : cat.typical_price,
       frequency_months !== undefined ? (frequency_months != null ? parseInt(frequency_months) : null) : cat.frequency_months,
+      newFundAccountId,
       cat.id
     );
   } catch (e) {
