@@ -28,6 +28,11 @@ function findSavingsAccountId(db, userId) {
  * `deposits`/`withdrawals` jsou z pohledu spořicího účtu (kladné = přibylo).
  */
 function savingsMovements(db, userId, start, end) {
+  // Interní převod má v DB OBĚ nohy (odchozí z běžného účtu + příchozí na spořicí),
+  // proto se bere jen ta, kde je spořicí protiúčtem — druhá by ho zdvojila.
+  // Peníze, které na spořicí přijdou zvenku (cizí odesílatel) nebo bez protistrany
+  // (kreditní úrok), ale druhou nohu nemají — ty se musí vzít z transakcí zaúčtovaných
+  // přímo na spořicím účtu, jinak by v přehledu chyběly (řádek má `external: 1`).
   const savingsNumber = normCounterparty(savingsAccount);
   const savingsAccountId = findSavingsAccountId(db, userId);
 
@@ -48,6 +53,8 @@ function savingsMovements(db, userId, start, end) {
   // Noha zaúčtovaná na běžném účtu (spořicí je protistrana) je referenční — z ní se
   // pohyb počítá vždy. Noha zaúčtovaná na spořicím účtu se zahodí jen tehdy, když k ní
   // referenční protějšek v datech SKUTEČNĚ existuje (stejné datum, opačná částka, 1:1).
+  // Odvozovat to z protiúčtu nestačí: chybějící protiúčet by převod zdvojil a
+  // nenaimportovaný druhý účet by naopak skutečný pohyb nechal zmizet.
   const pool = rows
     .filter(t => normCounterparty(t.counterparty_account) === savingsNumber)
     .map(t => ({ date: t.date, amount: -t.amount, used: false }));   // částka z pohledu spořicího
