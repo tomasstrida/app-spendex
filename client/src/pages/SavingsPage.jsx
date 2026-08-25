@@ -41,7 +41,9 @@ export default function SavingsPage() {
   const transfers = savings.transfers || [];
 
   // Plánovaný přebytek ze Schůzky — stejná pravda přes sdílený helper.
-  const { surplus } = computeMeetingSurplus({
+  // `totalToSavings` (ne `surplus`): mimořádné příjmy patří do plánu spoření,
+  // jinak by se plán rozešel se Schůzkou přesně o jednorázovou částku.
+  const { totalToSavings: surplus } = computeMeetingSurplus({
     incomeSources,
     fixedExpenses,
     budgetsType1: budgets,
@@ -49,6 +51,7 @@ export default function SavingsPage() {
     fundTopup: stats?.fund_topup?.outflow || 0,
     annualOffFund: stats?.annual_off_fund?.spent || 0,
     prepaidPurchase: stats?.prepaid_purchase?.outflow || 0,
+    extraIncome: stats?.extra_income?.inflow || 0,
   });
 
   function txLink(extra) {
