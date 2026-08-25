@@ -167,8 +167,8 @@ function SavingsTable({ periods, values }) {
               <td className="num">{formatCurrency(values[i].deposits)}</td>
               <td className="num">{formatCurrency(values[i].withdrawals)}</td>
               <td className="num strong">{signPrefix(values[i].net)}{formatCurrency(values[i].net)}</td>
-              <td className="num">{values[i].balance_derived == null ? '—' : formatCurrency(values[i].balance_derived)}</td>
-              <td className="num">{values[i].balance_actual == null ? '—' : formatCurrency(values[i].balance_actual)}</td>
+              <td className="num">{values[i].balance_derived == null ? '—' : `${signPrefix(values[i].balance_derived)}${formatCurrency(values[i].balance_derived)}`}</td>
+              <td className="num">{values[i].balance_actual == null ? '—' : `${signPrefix(values[i].balance_actual)}${formatCurrency(values[i].balance_actual)}`}</td>
             </tr>
           ))}
         </tbody>
