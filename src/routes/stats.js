@@ -6,6 +6,7 @@ const { getPeriodDates, getUserBillingDay, currentPeriodKey, shiftPeriodKey, per
 const { reserveBalance, reserveAccount, reservePaidPatterns, mainAccount, variableAccount } = require('../utils/recurring');
 const { SPENDING_AND } = require('../utils/spending-filter');
 const { savingsMovements, findSavingsAccountId } = require('../utils/savings');
+const { chainBalances } = require('../utils/balance-chain');
 
 // GET /api/stats/overview?period=2026-04
 router.get('/overview', requireAuth, (req, res) => {
@@ -457,9 +458,13 @@ router.get('/savings-history', requireAuth, (req, res) => {
       .filter(t => t.date > anchorRow.date)
       .reduce((acc, t) => acc + (t.external ? t.amount : -t.amount), 0);
 
-    const balances = new Map([[anchorIdx, anchorRow.balance_after + after]]);
-    for (let a = anchorIdx - 1; a >= fromIdx; a--) balances.set(a, balances.get(a + 1) - netAt(a + 1));
-    for (let a = anchorIdx + 1; a <= toIdx; a++) balances.set(a, balances.get(a - 1) + netAt(a));
+    const balances = chainBalances({
+      anchorIndex: anchorIdx,
+      anchorBalance: anchorRow.balance_after + after,
+      fromIndex: fromIdx,
+      toIndex: toIdx,
+      netAt,
+    });
 
     values.forEach((v, i) => {
       const b = balances.get(fromIdx + i);
