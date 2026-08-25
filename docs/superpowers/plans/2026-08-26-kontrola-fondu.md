@@ -1041,10 +1041,10 @@ export default function FundHistoryPage() {
       </div>
 
       {funds.length > 1 && (
-        <div className="filter-chips" style={{ marginBottom: 12 }}>
+        <div className="tx-chip-row" style={{ marginBottom: 12 }}>
           {funds.map(f => (
             <button key={f.id}
-              className={`chip${f.id === accountId ? ' active' : ''}`}
+              className={`tx-chip${f.id === accountId ? ' tx-chip-active' : ''}`}
               onClick={() => setAccountId(f.id)}>
               {f.name}
             </button>
@@ -1100,7 +1100,8 @@ export default function FundHistoryPage() {
           {coverage?.items?.length > 0 && (
             <section className="report-section">
               <div className="report-section-header">Z čeho se skládá „zbývá vyčerpat"</div>
-              <table className="data-table">
+              <div className="chart-table-scroll">
+              <table className="chart-table">
                 <thead>
                   <tr>
                     <th>Položka</th><th>Kategorie</th>
@@ -1120,11 +1121,13 @@ export default function FundHistoryPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </section>
           )}
 
           {showTable ? (
-            <table className="data-table">
+            <div className="chart-table-scroll">
+            <table className="chart-table">
               <thead>
                 <tr><th>Období</th><th className="num">Saldo</th><th className="num">Zůstatek</th></tr>
               </thead>
@@ -1138,6 +1141,7 @@ export default function FundHistoryPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           ) : (
             <SavingsHistoryChart
               periods={periods}
@@ -1153,7 +1157,9 @@ export default function FundHistoryPage() {
 }
 ```
 
-**Než to napíšeš:** ověř si v `client/src/pages/SavingsHistoryPage.jsx` a `client/src/pages/TransactionsPage.jsx`, jak se v tomhle repu jmenují CSS třídy pro chips (`filter-chips` / `chip`) a tabulku (`data-table`, `num`). Pokud se liší, použij ty skutečné — vizuální konzistence je požadavek projektu.
+**CSS třídy jsou ověřené proti `App.css`, neměň je:** přepínač = `tx-chip-row` + `tx-chip` / `tx-chip-active` (globální třídy, používá je i filtr kategorií v Transakcích), tabulky = `chart-table` uvnitř `chart-table-scroll` s `num` na číselných buňkách (vzor: `SavingsTable` v `SavingsHistoryPage.jsx:158-180`). Třídy `filter-chips`, `chip` ani `data-table` v tomhle projektu NEEXISTUJÍ.
+
+**Proklik `openItem` je ověřený:** `TransactionsPage` čte z URL `from`/`to` (řádky 64-65) a zapne jimi free-range režim (`customMode`), který se kombinuje s `category_ids`. Perioda se v tomhle případě neposílá — free-range ji nahrazuje.
 
 - [ ] **Step 4: Zaregistruj route a menu**
 
