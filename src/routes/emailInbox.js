@@ -81,12 +81,12 @@ router.post('/:id/approve', requireAuth, writeLimiter, (req, res) => {
   const result = db.transaction(() => {
     const r = db.prepare(`INSERT OR IGNORE INTO transactions
         (user_id, category_id, amount, currency, date, description, note, source, external_id,
-         tx_time, tx_type, counterparty_account, entered_by, place, account_id, ab_category)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'airbank-email', ?, ?, ?, ?, ?, ?, ?, ?)`)
+         tx_time, tx_type, counterparty_account, entered_by, place, account_id, ab_category, balance_after)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'airbank-email', ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(req.dataUserId, categoryId || null, tx.amount, tx.currency, tx.date, tx.description,
            tx.note || '', row.external_id || null, tx.tx_time || null, tx.tx_type || null,
            tx.counterparty_account || null, tx.entered_by || null, tx.place || null,
-           tx.account_id || null, tx.ab_category || null);
+           tx.account_id || null, tx.ab_category || null, tx.balance_after ?? null);
     // Idempotence: status nastavíme 'imported' i když INSERT OR IGNORE nic nevložil
     // (transakce už existuje, např. ze souběžného CSV importu se shodným external_id).
     // Cíl uživatele je splněn → položku z fronty odebíráme tak jako tak.

@@ -388,3 +388,14 @@ test('releaseHeldCard: platba APPLE.COM uvízlá v awaiting_card se po přiřaze
   assert.equal(receipt.status, 'matched');
   assert.equal(receipt.transaction_id, tx.id);
 });
+
+test('balance_after se uloží do transakce při automatickém importu', () => {
+  const { db, tmp } = freshDb();
+  seed(db);
+  const { ingestEmail } = require('./emailIngest');
+  const r = ingestEmail(db, { userEmail: 'tom@example.com', fromHeader: 'info@airbank.cz', text: INTERNAL });
+  const tx = db.prepare("SELECT balance_after FROM transactions WHERE user_id = 1").get();
+  cleanup(db, tmp);
+  assert.equal(r.status, 'imported');
+  assert.equal(tx.balance_after, 4934.46);
+});

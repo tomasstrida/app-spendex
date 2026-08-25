@@ -9,15 +9,17 @@ const { matchPendingForTransaction } = require('./appleReceipts');
 
 const TX_INSERT = `INSERT OR IGNORE INTO transactions
     (user_id, category_id, subcategory_id, amount, currency, date, description, note, source, external_id,
-     tx_time, tx_type, counterparty_account, entered_by, place, account_id, ab_category, variable_symbol, card_last4)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'airbank-email', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+     tx_time, tx_type, counterparty_account, entered_by, place, account_id, ab_category, variable_symbol, card_last4,
+     balance_after)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'airbank-email', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 function insertTx(db, userId, tx, categoryId, extId, subcategoryId) {
   return db.prepare(TX_INSERT).run(
     userId, categoryId || null, subcategoryId ?? null, tx.amount, tx.currency, tx.date, tx.description, tx.note || '',
     extId || null, tx.tx_time || null, tx.tx_type || null,
     tx.counterparty_account || null, tx.entered_by || null, tx.place || null,
-    tx.account_id ?? null, tx.ab_category || null, tx.variable_symbol || null, tx.card_last4 || null);
+    tx.account_id ?? null, tx.ab_category || null, tx.variable_symbol || null, tx.card_last4 || null,
+    tx.balance_after ?? null);
 }
 
 // Apple platba může mít čekající fakturu — zkusíme ji dorovnat. Best-effort:

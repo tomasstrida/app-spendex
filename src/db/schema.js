@@ -420,6 +420,7 @@ function initSchema() {
     // match_account_id NULL = bez omezení na konkrétní vlastní účet.
     'ALTER TABLE category_rules ADD COLUMN match_counterparty_account TEXT',
     'ALTER TABLE category_rules ADD COLUMN match_account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL',
+    'ALTER TABLE transactions ADD COLUMN balance_after REAL',
     // Návrhy pravidel podle opakujícího se protiúčtu (candidate finder je v
     // src/utils/counterparty-rule-candidates.js). UNIQUE brání duplicitním
     // návrhům pro stejný protiúčet napříč reaktivním i dávkovým triggerem.
