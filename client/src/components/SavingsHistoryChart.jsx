@@ -76,11 +76,35 @@ export default function SavingsHistoryChart({ periods, values, onPeriodClick, sh
     return out.map(pts => pts.join(' '));
   }
 
+  // Klávesová obsluha zrcadlí SpendLineChart.jsx: šipky posouvají aktivní
+  // období, Escape ho ruší, Enter/Mezerník na aktivním období vyvolá stejnou
+  // akci jako klik na sloupec — jinak by se k `onPeriodClick` uživatel bez
+  // myši vůbec nedostal.
+  function handleKey(e) {
+    if (n === 0) return;
+    if (e.key === 'ArrowRight') { setActive(i => Math.min(n - 1, (i ?? -1) + 1)); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft') { setActive(i => Math.max(0, (i ?? n) - 1)); e.preventDefault(); }
+    else if (e.key === 'Escape') setActive(null);
+    else if ((e.key === 'Enter' || e.key === ' ') && active != null && onPeriodClick) {
+      onPeriodClick(active);
+      e.preventDefault();
+    }
+  }
+
   if (!width || !n) return <div className="chart-wrap" ref={wrapRef} style={{ height }} />;
 
   return (
     <div className="chart-wrap" ref={wrapRef}>
-      <svg className="chart-svg" width={width} height={height} role="img" aria-label="Vývoj spoření">
+      <svg
+        className="chart-svg"
+        width={width}
+        height={height}
+        role="img"
+        tabIndex={0}
+        aria-label={`Vývoj spoření, ${n} období. Šipkami vlevo a vpravo projdete jednotlivá období.`}
+        onKeyDown={handleKey}
+        onBlur={() => setActive(null)}
+      >
         {/* horní panel — zůstatek */}
         {hasBalance && balScale.ticks.map(tv => (
           <g key={`b${tv}`}>
@@ -99,8 +123,15 @@ export default function SavingsHistoryChart({ periods, values, onPeriodClick, sh
         {showActual && segments('balance_actual').map((d, i) => (
           <polyline key={`a${i}`} points={d} fill="none" stroke={COLOR_ACTUAL} strokeWidth="2" strokeDasharray="5 4" strokeLinejoin="round" strokeLinecap="round" />
         ))}
+        {/* Osamocený bod (n===1, nebo hodnota bez souseda na obou stranách)
+            nemá s čím spojit čáru — polyline vzniká až od dvou bodů v řadě.
+            Bez vlastní vrstvy bodů by taková hodnota zmizela úplně, přestože
+            existuje. */}
+        {showDerived && values.map((v, i) => v.balance_derived == null ? null : (
+          <circle key={`dp${i}`} cx={x(i)} cy={yBal(v.balance_derived)} r="4" fill={COLOR_DERIVED} className="chart-dot" />
+        ))}
         {showActual && values.map((v, i) => v.balance_actual == null ? null : (
-          <circle key={`ap${i}`} cx={x(i)} cy={yBal(v.balance_actual)} r="4" fill={COLOR_ACTUAL} stroke="var(--bg-card, #fff)" strokeWidth="2" />
+          <circle key={`ap${i}`} cx={x(i)} cy={yBal(v.balance_actual)} r="4" fill={COLOR_ACTUAL} className="chart-dot" />
         ))}
 
         {/* dolní panel — saldo */}
