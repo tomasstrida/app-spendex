@@ -78,8 +78,9 @@ function savingsMovements(db, userId, start, end) {
     .filter(Boolean);
 
   // Pohled spořicího účtu: kladné = přibylo (vklad), záporné = ubylo (výběr).
+  const onSavings = t => (t.external ? t.amount : -t.amount);
   const sav = transfers.reduce((acc, t) => {
-    const v = t.external ? t.amount : -t.amount;
+    const v = onSavings(t);
     if (v > 0) acc.deposits += v;
     else acc.withdrawals += -v;
     return acc;
