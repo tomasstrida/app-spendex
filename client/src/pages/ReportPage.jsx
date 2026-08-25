@@ -437,8 +437,9 @@ export default function ReportPage() {
               );
             })()}
             <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
-              „Na spořicí (přebytek)" = přebytek za období (příjmy minus výdaje). „Skutečně převedeno" = net
-              skutečných pohybů na spořicím účtu (vklady minus výběry).
+              „Provozní přebytek" = příjmy minus výdaje za období, srovnatelné mezi měsíci.
+              „Na spořicí" = provozní přebytek plus mimořádné příjmy (jednorázovky mimo pravidelný rozpočet).
+              „Skutečně převedeno" = net skutečných pohybů na spořicím účtu (vklady minus výběry).
             </div>
           </section>
 
