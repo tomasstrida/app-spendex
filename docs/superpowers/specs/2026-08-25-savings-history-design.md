@@ -228,6 +228,21 @@ Backend (`node --test 'src/**/*.test.js'` — pozor na uvozovky, `src/` samotné
 
 Frontend: `npm run build` musí projít (lint sám nechytí `await` v ne-async callbacku).
 
+## Známá omezení
+
+- **Porovnání kotvy na úrovni dne.** Pohyb, který nastal ve stejný den po kotvícím
+  snapshotu, se do zůstatku kotvícího období nezapočítá. Kotva je vždy nejnovější
+  snapshot, takže pozdějších pohybů je minimum, a `balance_actual` rozdíl zviditelní.
+- **Převod, jehož nohy padnou na obě strany hranice období**, se dedupem uvnitř období
+  nespáruje a započítá se v obou obdobích. V *měsíčním* přehledu je to jednorázová
+  odchylka, ale v *řetězené* křivce zůstatku se z ní stane trvalý posun všech starších
+  období. Data zatím tento případ neobsahují (49 z 49 párů má obě nohy ve stejný den)
+  a druhá křivka takový rozjezd odhalí.
+- **`billing_day ≥ 29`.** `getPeriodDates` ořezává den začátku na délku měsíce, ale
+  `periodKeyForDate` ne, takže se pro krajní dny rozcházejí a kotva by mohla spadnout
+  o období vedle. Nedosažitelné při výchozím `billing_day = 1`; jde o starší nekonzistenci
+  v `utils/period.js`, ne o něco, co zavádí tahle featura.
+
 ## Co není součástí
 
 - Zobecnění na výběr libovolného účtu.
