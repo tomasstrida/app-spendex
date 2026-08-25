@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { formatCurrency } from '../i18n';
-import { niceScale, formatTick, shortPeriodLabel } from '../utils/chartScale';
+import { niceScale, formatTick, shortPeriodLabel, signPrefix } from '../utils/chartScale';
 
 // Dva panely nad sebou se SPOLEČNOU osou X:
 //  • horní — zůstatek (dopočtený plnou čarou, skutečný ze snapshotů čárkovaně),
@@ -9,9 +9,10 @@ import { niceScale, formatTick, shortPeriodLabel } from '../utils/chartScale';
 // v desítkách tisíc vedle zůstatku ve stovkách tisíc by se stejně nedalo číst.
 
 const PAD = { top: 16, right: 24, bottom: 34, left: 72 };
+const LABEL_H = 20;   // prostor pro popisek panelu ("Zůstatek" / "Saldo za období") nad jeho osou
 const BALANCE_H = 200;
 const NET_H = 140;
-const GAP = 24;
+const GAP = 40;   // mezera mezi panely — musí pojmout popisek dolního panelu a opticky oddělit obě osy
 
 const COLOR_DERIVED = '#6366f1';
 const COLOR_ACTUAL = '#0ea5e9';
@@ -35,12 +36,19 @@ export default function SavingsHistoryChart({ periods, values, onPeriodClick, sh
   useEffect(() => { setActive(null); }, [periods, values]);
 
   const n = periods.length;
-  const height = BALANCE_H + GAP + NET_H;
   const plotW = Math.max(10, width - PAD.left - PAD.right);
-  const balanceTop = PAD.top;
+  // Každý panel má nad svou osou vlastní řádek na popisek (LABEL_H), aby bylo
+  // z grafu samotného poznat, který panel je zůstatek a který saldo — ne jen
+  // z legendy vedle grafu, ta mluví jen o křivkách zůstatku.
+  const balanceTop = LABEL_H + PAD.top;
   const balanceH = BALANCE_H - PAD.top;
-  const netTop = BALANCE_H + GAP;
+  const netTop = balanceTop + balanceH + GAP + LABEL_H;
   const netH = NET_H - PAD.bottom;
+  const height = netTop + NET_H;
+  // Popisek sedí 8 px nad prvním gridline svého panelu — konzistentní odstup
+  // pro oba panely, ať jsou jejich PAD/GAP hodnoty jakékoli.
+  const balanceLabelY = balanceTop - 8;
+  const netLabelY = netTop - 8;
 
   // Osa X sdílená oběma panely — střed sloupce i bod křivky leží na stejném x.
   const x = i => PAD.left + (n === 1 ? plotW / 2 : (plotW * i) / (n - 1));
@@ -106,6 +114,7 @@ export default function SavingsHistoryChart({ periods, values, onPeriodClick, sh
         onBlur={() => setActive(null)}
       >
         {/* horní panel — zůstatek */}
+        <text x={PAD.left} y={balanceLabelY} className="chart-tick">Zůstatek</text>
         {hasBalance && balScale.ticks.map(tv => (
           <g key={`b${tv}`}>
             <line x1={PAD.left} x2={PAD.left + plotW} y1={yBal(tv)} y2={yBal(tv)} className="chart-grid-line" />
@@ -135,6 +144,7 @@ export default function SavingsHistoryChart({ periods, values, onPeriodClick, sh
         ))}
 
         {/* dolní panel — saldo */}
+        <text x={PAD.left} y={netLabelY} className="chart-tick">Saldo za období</text>
         {netScale.ticks.map(tv => (
           <g key={`n${tv}`}>
             <line x1={PAD.left} x2={PAD.left + plotW} y1={yNet(tv)} y2={yNet(tv)} className="chart-grid-line" />
@@ -178,8 +188,12 @@ export default function SavingsHistoryChart({ periods, values, onPeriodClick, sh
             onClick={() => onPeriodClick && onPeriodClick(i)}
           >
             <title>
+              {/* formatCurrency bere záměrně absolutní hodnotu (viz i18n.js) —
+                  saldo může být záporné (výběry převýšily vklady), proto
+                  znaménko nese signPrefix zvlášť. Vklady/výběry jsou vždy
+                  nezáporné dílčí součty, tam se signPrefix netýká. */}
               {`${shortPeriodLabel(p.key)}${p.partial ? ' (probíhá)' : ''}\n`}
-              {`Saldo: ${formatCurrency(values[i].net)}\n`}
+              {`Saldo: ${signPrefix(values[i].net)}${formatCurrency(values[i].net)}\n`}
               {`Vklady: ${formatCurrency(values[i].deposits)} · Výběry: ${formatCurrency(values[i].withdrawals)}`}
             </title>
           </rect>
