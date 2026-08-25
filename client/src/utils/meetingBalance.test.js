@@ -157,3 +157,39 @@ test('computeMeetingSurplus vraci prepaidPurchase a zapocita ho do prebytku', ()
   assert.equal(r.totalType1, 10000, 'bilance jede z transakcniho spent, ne z budget_spent');
   assert.equal(r.surplus, 37000);
 });
+
+test('computeMeetingSurplus: totalToSavings = provozní přebytek + mimořádné příjmy', () => {
+  const r = computeMeetingSurplus({
+    incomeSources: [{ id: 1, actual: 100000 }],
+    fixedExpenses: [{ source: 'manual', amount: 40000, actual: 40000, tx_count: 1 }],
+    budgetsType1: [{ spent: 20000 }],
+    byCategory: [],
+    extraIncome: 8000,
+  });
+  assert.equal(r.surplus, 40000, 'provozní přebytek mimořádný příjem NEobsahuje');
+  assert.equal(r.extraIncome, 8000);
+  assert.equal(r.totalToSavings, 48000);
+});
+
+test('computeMeetingSurplus: bez extraIncome se totalToSavings rovná surplus', () => {
+  const r = computeMeetingSurplus({
+    incomeSources: [{ id: 1, actual: 100000 }],
+    fixedExpenses: [],
+    budgetsType1: [{ spent: 20000 }],
+    byCategory: [],
+  });
+  assert.equal(r.extraIncome, 0);
+  assert.equal(r.totalToSavings, r.surplus);
+  assert.equal(r.surplus, 80000);
+});
+
+test('computeMeetingSurplus: záporné saldo mimořádných příjmů přebytek sníží', () => {
+  const r = computeMeetingSurplus({
+    incomeSources: [{ id: 1, actual: 100000 }],
+    fixedExpenses: [],
+    budgetsType1: [{ spent: 20000 }],
+    byCategory: [],
+    extraIncome: -3000,
+  });
+  assert.equal(r.totalToSavings, 77000);
+});

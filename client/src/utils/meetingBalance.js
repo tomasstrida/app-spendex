@@ -33,6 +33,8 @@ export function surplusToSavings({ totalIncome, totalFixed, fundTopup, annualOff
 // i s výsledným přebytkem. Používá Schůzka (ReportPage) i stránka Spořicí účet
 // (SavingsPage) — aby „plán" na obou seděl na stejné číslo.
 // Vstup `budgetsType1` musí být budgets už přefiltrované na typ 1 (jako v ReportPage).
+// `extraIncome` = saldo systémové kategorie extra_income za období (z
+// `/api/stats/overview`); default 0, aby starší volající dostali `totalToSavings === surplus`.
 export function computeMeetingSurplus({
   incomeSources = [],
   fixedExpenses = [],
@@ -41,6 +43,7 @@ export function computeMeetingSurplus({
   fundTopup = 0,
   annualOffFund = 0,
   prepaidPurchase = 0,
+  extraIncome = 0,
 } = {}) {
   // Striktní whitelist: do bilance vstupují jen ručně aliasované zdroje (id != null).
   const totalIncome = incomeSources
@@ -51,8 +54,17 @@ export function computeMeetingSurplus({
   const totalType3 = byCategory
     .filter(c => c.type === 3 && c.spent > 0)
     .reduce((s, c) => s + c.spent, 0);
+  // `surplus` = PROVOZNÍ přebytek: příjmy minus všechny výdaje. Srovnatelný mezi
+  // měsíci, protože jednorázovky do něj nevstupují.
   const surplus = surplusToSavings({
     totalIncome, totalFixed, fundTopup, annualOffFund, prepaidPurchase, totalType1, totalType3,
   });
-  return { totalIncome, totalFixed, fundTopup, annualOffFund, prepaidPurchase, totalType1, totalType3, surplus };
+  // `totalToSavings` = kolik má reálně jít na spořicí, tedy provozní přebytek plus
+  // mimořádné příjmy (přeplatky, dary, výhry — systémová kategorie extra_income).
+  // Schůzka i stránka Spořicí účet musí ukazovat TOHLE číslo, jinak se plán rozejde.
+  const totalToSavings = surplus + extraIncome;
+  return {
+    totalIncome, totalFixed, fundTopup, annualOffFund, prepaidPurchase,
+    totalType1, totalType3, extraIncome, surplus, totalToSavings,
+  };
 }
