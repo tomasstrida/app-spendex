@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
-const { getPeriodDates, getUserBillingDay, currentPeriodKey, shiftPeriodKey, periodIndex, defaultHistoryRange } = require('../utils/period');
+const { getPeriodDates, getUserBillingDay, currentPeriodKey, shiftPeriodKey, periodIndex, defaultHistoryRange, periodKeyForDate } = require('../utils/period');
 const { reserveBalance, reserveAccount, reservePaidPatterns, mainAccount, variableAccount } = require('../utils/recurring');
 const { SPENDING_AND } = require('../utils/spending-filter');
-const { savingsMovements } = require('../utils/savings');
+const { savingsMovements, findSavingsAccountId } = require('../utils/savings');
 
 // GET /api/stats/overview?period=2026-04
 router.get('/overview', requireAuth, (req, res) => {
@@ -329,5 +329,124 @@ router.get('/budget-history', requireAuth, (req, res) => {
   res.json({ from, to, billing_day: billingDay, periods, series });
 });
 
+// ── GET /api/stats/savings-history?from=YYYY-MM&to=YYYY-MM ─────────────────
+// Historie spořicího účtu: přírůstek za období + vývoj zůstatku. Zůstatek se
+// kotví posledním REÁLNÝM snapshotem z AirBank notifikace a od něj se dopočítává
+// oběma směry; skutečné snapshoty se vracejí zvlášť, ať je vidět případný rozdíl.
+router.get('/savings-history', requireAuth, (req, res) => {
+  const billingDay = getUserBillingDay(db, req.dataUserId);
+  // Na rozdíl od /budget-history se zobrazuje i BĚŽÍCÍ období — u spoření je
+  // rozjetý měsíc užitečná informace, ne zavádějící propad.
+  const fallback = defaultHistoryRange(currentPeriodKey(billingDay), MIN_DEFAULT_PERIODS);
+  const to = req.query.to || currentPeriodKey(billingDay);
+  const from = req.query.from || fallback.from;
+
+  if (!PERIOD_KEY_RE.test(from) || !PERIOD_KEY_RE.test(to)) {
+    return res.status(400).json({ error: 'Parametry from/to musí mít formát YYYY-MM.' });
+  }
+  const count = periodIndex(to) - periodIndex(from) + 1;
+  if (count < 1) return res.status(400).json({ error: 'Parametr from musí být menší nebo roven to.' });
+  if (count > MAX_PERIODS) return res.status(400).json({ error: `Rozsah je omezený na ${MAX_PERIODS} období.` });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const periods = [];
+  for (let i = 0; i < count; i++) {
+    const key = shiftPeriodKey(from, i);
+    const dates = getPeriodDates(billingDay, key);
+    periods.push({ key, ...dates, partial: dates.end >= today });
+  }
+
+  const values = periods.map(p => {
+    const m = savingsMovements(db, req.dataUserId, p.start, p.end);
+    return {
+      period: p.key,
+      deposits: m.deposits,
+      withdrawals: m.withdrawals,
+      net: m.net,
+      // tx_ids jsou povinné: součet je JS-počítaný přes dedup noh, takže filtr
+      // podle data a účtu by v Transakcích vrátil i zahozené druhé nohy převodů.
+      tx_ids: m.transfers.map(t => t.id),
+      balance_derived: null,
+      balance_actual: null,
+    };
+  });
+
+  const savingsAccountId = findSavingsAccountId(db, req.dataUserId);
+
+  // Skutečný zůstatek per období = poslední snapshot uvnitř období.
+  if (savingsAccountId) {
+    const snapStmt = db.prepare(`
+      SELECT balance_after FROM transactions
+      WHERE user_id = ? AND account_id = ? AND balance_after IS NOT NULL
+        AND date >= ? AND date <= ?
+      ORDER BY date DESC, COALESCE(tx_time, '') DESC, id DESC
+      LIMIT 1
+    `);
+    periods.forEach((p, i) => {
+      const row = snapStmt.get(req.dataUserId, savingsAccountId, p.start, p.end);
+      values[i].balance_actual = row ? row.balance_after : null;
+    });
+  }
+
+  // Kotva pro dopočet — nejnovější snapshot napříč celou historií, i mimo rozsah.
+  const anchorRow = savingsAccountId
+    ? db.prepare(`
+        SELECT date, balance_after FROM transactions
+        WHERE user_id = ? AND account_id = ? AND balance_after IS NOT NULL
+        ORDER BY date DESC, COALESCE(tx_time, '') DESC, id DESC
+        LIMIT 1
+      `).get(req.dataUserId, savingsAccountId)
+    : null;
+
+  if (anchorRow) {
+    const fromIdx = periodIndex(from);
+    const toIdx = periodIndex(to);
+    const anchorKey = periodKeyForDate(billingDay, anchorRow.date);
+    const anchorIdx = periodIndex(anchorKey);
+
+    // Netto pohyby libovolného období — zobrazená se berou z `values`, období mezi
+    // rozsahem a kotvou (kotva může ležet mimo rozsah) se dopočítají dotazem.
+    const netCache = new Map();
+    values.forEach((v, i) => netCache.set(fromIdx + i, v.net));
+    const netAt = absIdx => {
+      if (!netCache.has(absIdx)) {
+        const d = getPeriodDates(billingDay, shiftPeriodKey(from, absIdx - fromIdx));
+        netCache.set(absIdx, savingsMovements(db, req.dataUserId, d.start, d.end).net);
+      }
+      return netCache.get(absIdx);
+    };
+
+    // Zůstatek ke konci kotvícího období: ke kotvě se přičtou pohyby, které v témže
+    // období nastaly PO ní. Porovnává se na úrovni DNE — kotva je nejnovější snapshot,
+    // takže pozdějších pohybů je minimum a `balance_actual` rozdíl stejně zviditelní.
+    // Dotaz jde přes CELÉ období, ne od data kotvy: dedup noh převodu potřebuje
+    // v okně obě strany, jinak by se osamocená noha započítala podruhé.
+    const anchorDates = getPeriodDates(billingDay, anchorKey);
+    const after = savingsMovements(db, req.dataUserId, anchorDates.start, anchorDates.end)
+      .transfers
+      .filter(t => t.date > anchorRow.date)
+      .reduce((acc, t) => acc + (t.external ? t.amount : -t.amount), 0);
+
+    const balances = new Map([[anchorIdx, anchorRow.balance_after + after]]);
+    for (let a = anchorIdx - 1; a >= fromIdx; a--) balances.set(a, balances.get(a + 1) - netAt(a + 1));
+    for (let a = anchorIdx + 1; a <= toIdx; a++) balances.set(a, balances.get(a - 1) + netAt(a));
+
+    values.forEach((v, i) => {
+      const b = balances.get(fromIdx + i);
+      if (b != null) v.balance_derived = b;
+    });
+  }
+
+  const totals = values.reduce((acc, v) => ({
+    deposits: acc.deposits + v.deposits,
+    withdrawals: acc.withdrawals + v.withdrawals,
+    net: acc.net + v.net,
+  }), { deposits: 0, withdrawals: 0, net: 0 });
+
+  res.json({
+    from, to, billing_day: billingDay, periods, values, totals,
+    anchor: anchorRow ? { date: anchorRow.date, balance: anchorRow.balance_after } : null,
+  });
+});
 
 module.exports = router;

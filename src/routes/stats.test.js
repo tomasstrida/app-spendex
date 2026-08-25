@@ -495,3 +495,84 @@ test('budget-history: rozpočet cizího uživatele se nepromítne', async () => 
   assert.equal(r.series.find(s => s.category_id === 53).limits, null);
   server.close();
 });
+
+// ── GET /api/stats/savings-history ────────────────────────────────────────
+
+test('savings-history: rozdělí pohyby do období a spočítá saldo', async () => {
+  const { db, app, savingsId } = setupSavings();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,account_id) VALUES (1,25000,'2026-06-05','Vklad',?)").run(savingsId);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,account_id) VALUES (1,-5000,'2026-07-10','Vyber',?)").run(savingsId);
+  const r = await (await fetch(`${base}/api/stats/savings-history?from=2026-06&to=2026-07`)).json();
+  assert.deepEqual(r.values.map(v => v.period), ['2026-06', '2026-07']);
+  assert.equal(r.values[0].deposits, 25000);
+  assert.equal(r.values[0].net, 25000);
+  assert.equal(r.values[1].withdrawals, 5000);
+  assert.equal(r.values[1].net, -5000);
+  assert.equal(r.totals.net, 20000);
+  server.close();
+});
+
+test('savings-history: převod s oběma nohama se počítá jednou', async () => {
+  const { db, app, savingsId, mainId } = setupSavings();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id) VALUES (1,-5000,'2026-07-10','Tomáš Střída',?,?)").run(SAVINGS_ACC, mainId);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id) VALUES (1,5000,'2026-07-10','Tomáš Střída',?,?)").run(MAIN_ACC, savingsId);
+  const r = await (await fetch(`${base}/api/stats/savings-history?from=2026-07&to=2026-07`)).json();
+  assert.equal(r.values[0].deposits, 5000, 'jen jedna noha převodu');
+  assert.equal(r.values[0].tx_ids.length, 1);
+  server.close();
+});
+
+test('savings-history: zpětný dopočet zůstatku od kotvy', async () => {
+  const { db, app, savingsId } = setupSavings();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,account_id) VALUES (1,10000,'2026-06-05','Vklad',?)").run(savingsId);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,account_id,balance_after) VALUES (1,5000,'2026-07-20','Vklad',?,100000)").run(savingsId);
+  const r = await (await fetch(`${base}/api/stats/savings-history?from=2026-06&to=2026-07`)).json();
+  assert.equal(r.anchor.balance, 100000);
+  assert.equal(r.values[1].balance_derived, 100000, 'kotvící období končí na kotvě');
+  assert.equal(r.values[0].balance_derived, 95000, 'předchozí období = 100000 − 5000');
+  assert.equal(r.values[1].balance_actual, 100000);
+  assert.equal(r.values[0].balance_actual, null, 'období bez snapshotu nedopočítává skutečnost');
+  server.close();
+});
+
+test('savings-history: kotva uprostřed období započítá i pozdější pohyby', async () => {
+  const { db, app, savingsId } = setupSavings();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,account_id,balance_after) VALUES (1,5000,'2026-07-10','Vklad',?,100000)").run(savingsId);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,account_id) VALUES (1,-2000,'2026-07-25','Vyber',?)").run(savingsId);
+  const r = await (await fetch(`${base}/api/stats/savings-history?from=2026-07&to=2026-07`)).json();
+  assert.equal(r.values[0].balance_derived, 98000);
+  server.close();
+});
+
+test('savings-history: bez snapshotu je anchor null a zůstatek se nedopočítává', async () => {
+  const { db, app, savingsId } = setupSavings();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,account_id) VALUES (1,5000,'2026-07-10','Vklad',?)").run(savingsId);
+  const r = await (await fetch(`${base}/api/stats/savings-history?from=2026-07&to=2026-07`)).json();
+  assert.equal(r.anchor, null);
+  assert.equal(r.values[0].balance_derived, null);
+  server.close();
+});
+
+test('savings-history: snapshot z jiného účtu se do zůstatku nepromítne', async () => {
+  const { db, app, savingsId, mainId } = setupSavings();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account,account_id,balance_after) VALUES (1,-5000,'2026-07-10','Tomáš Střída',?,?,4321)").run(SAVINGS_ACC, mainId);
+  const r = await (await fetch(`${base}/api/stats/savings-history?from=2026-07&to=2026-07`)).json();
+  assert.equal(r.anchor, null, 'zůstatek běžného účtu není zůstatek spořicího');
+  assert.equal(r.values[0].balance_actual, null);
+  assert.equal(r.values[0].deposits, 5000, 'pohyb se ale započítá');
+  server.close();
+});
+
+test('savings-history: neplatný rozsah vrátí 400', async () => {
+  const { app } = setupSavings();
+  const { server, base } = await listen(app);
+  const res = await fetch(`${base}/api/stats/savings-history?from=2026-13&to=2026-07`);
+  assert.equal(res.status, 400);
+  server.close();
+});
