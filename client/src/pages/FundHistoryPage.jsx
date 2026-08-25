@@ -115,7 +115,7 @@ export default function FundHistoryPage() {
               <div className="fund-coverage-rows">
                 <div className="fund-coverage-row">
                   <span>Zůstatek k {coverage.balance_date}</span>
-                  <span>{formatCurrency(coverage.balance)}</span>
+                  <span>{signPrefix(coverage.balance)}{formatCurrency(coverage.balance)}</span>
                 </div>
                 <div className="fund-coverage-row">
                   <span>Zbývá vyčerpat do konce roku</span>
@@ -164,7 +164,7 @@ export default function FundHistoryPage() {
                   <tr key={v.period}>
                     <td>{shortPeriodLabel(periods[i]?.key || v.period)}</td>
                     <td className="num">{signPrefix(v.net)} {formatCurrency(Math.abs(v.net))}</td>
-                    <td className="num">{v.balance_derived == null ? '—' : formatCurrency(v.balance_derived)}</td>
+                    <td className="num">{v.balance_derived == null ? '—' : `${signPrefix(v.balance_derived)}${formatCurrency(v.balance_derived)}`}</td>
                   </tr>
                 ))}
               </tbody>
