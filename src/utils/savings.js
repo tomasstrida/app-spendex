@@ -5,6 +5,9 @@ const { savingsAccount, savingsNet } = require('./recurring');
 // Obě nohy interního převodu jsou v datech: noha na běžném účtu (spořicí je
 // protistrana) a noha zaúčtovaná přímo na spořicím účtu. Bez párování by se
 // každý převod počítal dvakrát.
+// Párovací okno: obě nohy nesou datum zaúčtování téhož převodu, takže v datech
+// vycházejí na stejný den (ověřeno na celé historii: 49 z 49 párů). Tolerance je
+// pojistka pro případ, kdy banka strany zaúčtuje přes půlnoc nebo přes víkend.
 const PAIR_WINDOW_DAYS = 3;
 const dayDiff = (a, b) => Math.abs(Date.parse(a) - Date.parse(b)) / 86400000;
 
@@ -28,6 +31,9 @@ function savingsMovements(db, userId, start, end) {
   const savingsNumber = normCounterparty(savingsAccount);
   const savingsAccountId = findSavingsAccountId(db, userId);
 
+  // `amount` je u běžné nohy z pohledu zdrojového účtu (záporné = vklad na spořicí),
+  // u `external` řádků z pohledu spořicího účtu (kladné = přibylo). Převod na jednotný
+  // pohled dělá `onSavings` níž i klient. is_regular = standardní měsíční vklad 25 000.
   // REPLACE v porovnání protiúčtu: čísla účtů chodí i s mezerami, exact LIKE by je minul.
   const rows = db.prepare(`
     SELECT t.id, t.date, t.description, t.amount, t.counterparty_account, t.note,
@@ -46,6 +52,7 @@ function savingsMovements(db, userId, start, end) {
     .filter(t => normCounterparty(t.counterparty_account) === savingsNumber)
     .map(t => ({ date: t.date, amount: -t.amount, used: false }));   // částka z pohledu spořicího
 
+  // Spotřebuje protějšek pro danou nohu (nejbližší datum vyhrává), nebo vrátí false.
   function takeCounterpartyLeg(t) {
     let best = null;
     for (const p of pool) {
