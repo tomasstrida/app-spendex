@@ -7,6 +7,7 @@ const { reserveBalance, reserveAccount, reservePaidPatterns, mainAccount, variab
 const { SPENDING_AND } = require('../utils/spending-filter');
 const { savingsMovements, findSavingsAccountId } = require('../utils/savings');
 const { chainBalances } = require('../utils/balance-chain');
+const { fundMovements, fundAnchor, fundRemaining } = require('../utils/fund-coverage');
 
 // GET /api/stats/overview?period=2026-04
 router.get('/overview', requireAuth, (req, res) => {
@@ -481,6 +482,122 @@ router.get('/savings-history', requireAuth, (req, res) => {
   res.json({
     from, to, billing_day: billingDay, periods, values, totals,
     anchor: anchorRow ? { date: anchorRow.date, balance: anchorRow.balance_after } : null,
+  });
+});
+
+// ── GET /api/stats/fund-history?account_id=&from=YYYY-MM&to=YYYY-MM ────────
+// Kontrola fondu: krytí (zůstatek proti tomu, co z fondu ještě letos odejde)
+// + historie zůstatku po obdobích. `values` mají ZÁMĚRNĚ stejný tvar jako
+// savings-history, aby šla použít táž komponenta grafu.
+router.get('/fund-history', requireAuth, (req, res) => {
+  const accountId = parseInt(req.query.account_id, 10);
+  const account = Number.isInteger(accountId)
+    ? db.prepare('SELECT id, name, account_number FROM accounts WHERE id = ? AND user_id = ? AND is_fund = 1')
+        .get(accountId, req.dataUserId)
+    : null;
+  if (!account) return res.status(400).json({ error: 'Účet není fondový.' });
+
+  const billingDay = getUserBillingDay(db, req.dataUserId);
+  // Jako u spoření se zobrazuje i BĚŽÍCÍ období — u fondu je rozjetý měsíc
+  // podstatná informace, ne zavádějící propad.
+  const fallback = defaultHistoryRange(currentPeriodKey(billingDay), MIN_DEFAULT_PERIODS);
+  const to = req.query.to || currentPeriodKey(billingDay);
+  const from = req.query.from || fallback.from;
+
+  if (!PERIOD_KEY_RE.test(from) || !PERIOD_KEY_RE.test(to)) {
+    return res.status(400).json({ error: 'Parametry from/to musí mít formát YYYY-MM.' });
+  }
+  const count = periodIndex(to) - periodIndex(from) + 1;
+  if (count < 1) return res.status(400).json({ error: 'Parametr from musí být menší nebo roven to.' });
+  if (count > MAX_PERIODS) return res.status(400).json({ error: `Rozsah je omezený na ${MAX_PERIODS} období.` });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const periods = [];
+  for (let i = 0; i < count; i++) {
+    const key = shiftPeriodKey(from, i);
+    const dates = getPeriodDates(billingDay, key);
+    periods.push({ key, ...dates, partial: dates.end >= today });
+  }
+
+  const txIdStmt = db.prepare(`
+    SELECT id FROM transactions
+    WHERE user_id = ? AND account_id = ? AND date >= ? AND date <= ?
+    ORDER BY date, id
+  `);
+  const snapStmt = db.prepare(`
+    SELECT balance_after FROM transactions
+    WHERE user_id = ? AND account_id = ? AND balance_after IS NOT NULL
+      AND date >= ? AND date <= ?
+    ORDER BY date DESC, COALESCE(tx_time, '') DESC, id DESC
+    LIMIT 1
+  `);
+
+  const values = periods.map(p => {
+    const snap = snapStmt.get(req.dataUserId, account.id, p.start, p.end);
+    return {
+      period: p.key,
+      net: fundMovements(db, req.dataUserId, account.id, p.start, p.end),
+      // Proklik jede přes tx_ids stejně jako u spoření — filtr podle účtu a data
+      // by v Transakcích nešel vyjádřit tak, aby seznam seděl na součet.
+      tx_ids: txIdStmt.all(req.dataUserId, account.id, p.start, p.end).map(r => r.id),
+      balance_derived: null,
+      balance_actual: snap ? snap.balance_after : null,
+    };
+  });
+
+  const anchor = fundAnchor(db, req.dataUserId, account.id);
+  if (anchor) {
+    const fromIdx = periodIndex(from);
+    const toIdx = periodIndex(to);
+    const anchorIdx = periodIndex(periodKeyForDate(billingDay, anchor.date));
+
+    const netCache = new Map();
+    values.forEach((v, i) => netCache.set(fromIdx + i, v.net));
+    const netAt = absIdx => {
+      if (!netCache.has(absIdx)) {
+        const d = getPeriodDates(billingDay, shiftPeriodKey(from, absIdx - fromIdx));
+        netCache.set(absIdx, fundMovements(db, req.dataUserId, account.id, d.start, d.end));
+      }
+      return netCache.get(absIdx);
+    };
+
+    // Zůstatek ke KONCI kotvícího období: ke kotvě se přičtou pohyby, které v témže
+    // období nastaly po ní (porovnání na úrovni dne, stejně jako u spoření).
+    const anchorDates = getPeriodDates(billingDay, periodKeyForDate(billingDay, anchor.date));
+    const after = db.prepare(`
+      SELECT COALESCE(SUM(amount), 0) AS s
+      FROM transactions
+      WHERE user_id = ? AND account_id = ? AND date > ? AND date <= ?
+    `).get(req.dataUserId, account.id, anchor.date, anchorDates.end).s;
+
+    const balances = chainBalances({
+      anchorIndex: anchorIdx,
+      anchorBalance: anchor.balance + after,
+      fromIndex: fromIdx,
+      toIndex: toIdx,
+      netAt,
+    });
+    values.forEach((v, i) => {
+      const b = balances.get(fromIdx + i);
+      if (b != null) v.balance_derived = b;
+    });
+  }
+
+  const { remaining, items } = fundRemaining(db, req.dataUserId, account.id, today);
+
+  res.json({
+    from, to, billing_day: billingDay,
+    account,
+    coverage: {
+      balance: anchor ? anchor.balance : null,
+      balance_date: anchor ? anchor.date : null,
+      remaining,
+      diff: anchor ? anchor.balance - remaining : null,
+      items,
+    },
+    periods, values,
+    totals: { net: values.reduce((s, v) => s + v.net, 0) },
+    anchor: anchor ? { date: anchor.date, balance: anchor.balance } : null,
   });
 });
 

@@ -694,3 +694,82 @@ test('budget-history: mimořádný příjem (type=4) se nevrací', async () => {
   assert.ok(!r.series.some(s => s.category_id === 30), 'extra_income nesmí mít sérii ve Vývoji výdajů');
   server.close();
 });
+
+test('fund-history: 400 pro nefondový účet', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO accounts (id,user_id,name,account_number,role,is_fund) VALUES (61,1,'Společný','1679014023/3030','spending',0)").run();
+  const res = await fetch(`${base}/api/stats/fund-history?account_id=61`);
+  const body = await res.json();
+  server.close();
+  assert.equal(res.status, 400);
+  assert.equal(body.error, 'Účet není fondový.');
+});
+
+test('fund-history: 400 pro cizí účet', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO users (id,email) VALUES (2,'b@x')").run();
+  db.prepare("INSERT INTO accounts (id,user_id,name,account_number,role,is_fund) VALUES (62,2,'Cizí fond','9999999999/3030','spending',1)").run();
+  const res = await fetch(`${base}/api/stats/fund-history?account_id=62`);
+  server.close();
+  assert.equal(res.status, 400);
+});
+
+test('fund-history: 400 pro chybný formát období', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO accounts (id,user_id,name,account_number,role,is_fund) VALUES (60,1,'Nepravidelné','1679014074/3030','spending',1)").run();
+  const res = await fetch(`${base}/api/stats/fund-history?account_id=60&from=2026-1&to=2026-08`);
+  server.close();
+  assert.equal(res.status, 400);
+});
+
+test('fund-history: krytí = zůstatek minus zbývající plán', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO accounts (id,user_id,name,account_number,role,is_fund) VALUES (60,1,'Nepravidelné','1679014074/3030','spending',1)").run();
+  db.prepare("INSERT INTO categories (id,user_id,name,type,fund_account_id) VALUES (70,1,'Y_Beach',2,60)").run();
+  db.prepare("INSERT INTO budget_items (id,user_id,category_id,name,amount,window_start,window_end) VALUES (1,1,70,'Beach zima',10200,9,12)").run();
+  db.prepare("INSERT INTO transactions (user_id,account_id,amount,date,description,balance_after) VALUES (1,60,-14361.11,'2026-08-18','Servis',7158.45)").run();
+  const res = await fetch(`${base}/api/stats/fund-history?account_id=60&from=2026-06&to=2026-08`);
+  const body = await res.json();
+  server.close();
+  assert.equal(res.status, 200);
+  assert.equal(body.account.id, 60);
+  assert.equal(body.coverage.balance, 7158.45);
+  assert.equal(body.coverage.balance_date, '2026-08-18');
+  assert.equal(body.coverage.remaining, 10200);
+  assert.equal(Math.round(body.coverage.diff), -3042);
+  assert.equal(body.coverage.items.length, 1);
+});
+
+test('fund-history: fond bez snapshotu vrátí balance null, ne chybu', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO accounts (id,user_id,name,account_number,role,is_fund) VALUES (60,1,'Nepravidelné','1679014074/3030','spending',1)").run();
+  db.prepare("INSERT INTO transactions (user_id,account_id,amount,date,description) VALUES (1,60,-500,'2026-08-05','Bez snapshotu')").run();
+  const res = await fetch(`${base}/api/stats/fund-history?account_id=60&from=2026-07&to=2026-08`);
+  const body = await res.json();
+  server.close();
+  assert.equal(res.status, 200);
+  assert.equal(body.coverage.balance, null);
+  assert.equal(body.coverage.diff, null);
+  assert.equal(body.values.every(v => v.balance_derived === null), true);
+});
+
+test('fund-history: values mají stejný tvar jako savings-history', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO accounts (id,user_id,name,account_number,role,is_fund) VALUES (60,1,'Nepravidelné','1679014074/3030','spending',1)").run();
+  db.prepare("INSERT INTO transactions (user_id,account_id,amount,date,description,balance_after) VALUES (1,60,3000,'2026-08-10','Dotace',9000)").run();
+  const res = await fetch(`${base}/api/stats/fund-history?account_id=60&from=2026-07&to=2026-08`);
+  const body = await res.json();
+  server.close();
+  const v = body.values[body.values.length - 1];
+  for (const key of ['period', 'net', 'tx_ids', 'balance_derived', 'balance_actual']) {
+    assert.ok(key in v, `values musí obsahovat ${key}`);
+  }
+  assert.equal(v.net, 3000);
+  assert.equal(v.balance_actual, 9000);
+});
