@@ -184,11 +184,17 @@ v `App.jsx`, položka v `Sidebar.jsx` hned pod „Vývoj výdajů", text
 Struktura kopíruje `BudgetHistoryPage.jsx`: vlastní SVG (žádná grafová knihovna),
 ovládání rozsahu období, přepínač graf/tabulka.
 
-**Graf**
+**Graf — dva panely pod sebou se společnou osou X**
 
-- Sloupce = čisté saldo období (kladné nahoru zeleně, záporné dolů červeně), levá osa.
-- Dvě linky zůstatku na pravé ose: dopočtená (plná) a skutečná ze snapshotů
+Saldo se pohybuje v desítkách tisíc, zůstatek ve stovkách tisíc. Dvě škály v jednom
+grafu zakazuje konvence zapsaná v `SpendLineChart.jsx` („jedna osa Y, nikdy dvě škály"),
+a zdeformovaly by čtení obojího. Proto dva panely nad sebou, období lícují pod sebou:
+
+- **Horní panel:** křivky zůstatku — dopočtená (plná) a skutečná ze snapshotů
   (přerušovaná, kreslí se jen mezi body, které existují).
+- **Dolní panel:** sloupce čistého salda období (kladné nahoru zeleně, záporné dolů
+  červeně), s vlastní osou Y a nulovou linkou.
+- Hover nad obdobím zvýrazní totéž období v obou panelech.
 - Legenda přepíná viditelnost sérií.
 - Rozjeté období (`partial`) je vizuálně odlišené (světlejší sloupec + poznámka
   v popisku), aby se nečetlo jako propad ve spoření.
