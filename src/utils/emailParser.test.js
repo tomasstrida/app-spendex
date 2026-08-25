@@ -353,3 +353,32 @@ Vaše Air Bank`);
   assert.equal(tx.description, 'Odměny za placení - úhrada od Air Bank');
   assert.equal(tx.counterparty_account, null);
 });
+
+test('balance_after: vytáhne dostupný zůstatek z hlavičky', () => {
+  const tx = parseEmailNotification(`Dobrý den,
+
+zůstatek na účtu Spořicí účet 1 číslo 1679014082/3030 se zvýšil o částku 100,00 CZK. Dostupný zůstatek k 02.08.2026 v 14:12 je 111 878,44 CZK.
+
+Pro úplnost uvádíme detaily této úhrady:
+
+Příchozí úhrada z účtu Libor Bísek číslo 1812270019/3030
+Částka: 100,00 CZK
+Datum zaúčtování: 02.08.2026
+Kód transakce: 165368991022
+`);
+  assert.equal(tx.balance_after, 111878.44);
+  assert.equal(tx.source_account, '1679014082/3030');
+});
+
+test('balance_after: chybějící věta o zůstatku dá null, parser nespadne', () => {
+  const tx = parseEmailNotification(`Dobrý den,
+
+zůstatek na účtu Společný číslo 1679014023/3030 se snížil o částku 10,00 CZK.
+
+Pro úplnost uvádíme detaily této úhrady:
+
+Odchozí úhrada na účet Tomáš Střída číslo 1679014082/3030
+Kód transakce: 123456789
+`);
+  assert.equal(tx.balance_after, null);
+});

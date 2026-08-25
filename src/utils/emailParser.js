@@ -159,6 +159,13 @@ function parseEmailNotification(text) {
   const timeM = body.match(/\bv\s+(\d{2}:\d{2})\b/);
   const tx_time = timeM ? timeM[1] : null;
 
+  // Dostupný zůstatek účtu, ze kterého notifikace přišla: "Dostupný zůstatek
+  // k 02.08.2026 v 14:12 je 111 878,44 CZK." Patří k účtu v `source_account` —
+  // u převodu mezi vlastními účty nese každá noha jiný zůstatek.
+  // Chybějící věta není chyba: starší formáty a některé typy notifikací ji nemají.
+  const balM = body.match(/Dostupn[ýy]\s+z[ůu]statek[^\n]*?\bje\s+([\d\s.,]+?)\s*(?:CZK|EUR|USD)/i);
+  const balance_after = balM ? parseAmount(balM[1]) : null;
+
   return {
     date,
     amount,
@@ -176,6 +183,7 @@ function parseEmailNotification(text) {
     card_last4,
     source_account,
     variable_symbol,
+    balance_after,
   };
 }
 
