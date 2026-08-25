@@ -101,12 +101,12 @@ export default function SavingsPage() {
 
             <div style={{ borderTop: '1px solid var(--border)', marginTop: 12, paddingTop: 12 }}>
               <div className="report-bilance-row">
-                <span>Na spořicí (přebytek)</span>
+                <span>Na spořicí</span>
                 <span>{surplus >= 0 ? '+' : '−'} {formatCurrency(Math.abs(surplus))}</span>
               </div>
             </div>
             <div className="text-muted" style={{ fontSize: 12, marginTop: 8 }}>
-              „Na spořicí (přebytek)" = přebytek ze Schůzky (příjmy minus výdaje).
+              „Na spořicí" = provozní přebytek (příjmy minus výdaje) plus mimořádné příjmy (jednorázovky mimo pravidelný rozpočet).
             </div>
           </section>
 
