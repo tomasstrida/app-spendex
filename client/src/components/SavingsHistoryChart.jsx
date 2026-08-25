@@ -1,0 +1,166 @@
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { formatCurrency } from '../i18n';
+import { niceScale, formatTick, shortPeriodLabel } from '../utils/chartScale';
+
+// Dva panely nad sebou se SPOLEČNOU osou X:
+//  • horní — zůstatek (dopočtený plnou čarou, skutečný ze snapshotů čárkovaně),
+//  • dolní — čisté saldo období jako sloupce kolem nuly.
+// Dvě škály v jednom grafu aplikace zakazuje (viz SpendLineChart.jsx) a saldo
+// v desítkách tisíc vedle zůstatku ve stovkách tisíc by se stejně nedalo číst.
+
+const PAD = { top: 16, right: 24, bottom: 34, left: 72 };
+const BALANCE_H = 200;
+const NET_H = 140;
+const GAP = 24;
+
+const COLOR_DERIVED = '#6366f1';
+const COLOR_ACTUAL = '#0ea5e9';
+const COLOR_POSITIVE = '#16a34a';
+const COLOR_NEGATIVE = '#dc2626';
+
+export default function SavingsHistoryChart({ periods, values, onPeriodClick, showDerived = true, showActual = true }) {
+  const wrapRef = useRef(null);
+  const [width, setWidth] = useState(0);
+  const [active, setActive] = useState(null);
+
+  useLayoutEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => setWidth(entries[0].contentRect.width));
+    ro.observe(el);
+    setWidth(el.getBoundingClientRect().width);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => { setActive(null); }, [periods, values]);
+
+  const n = periods.length;
+  const height = BALANCE_H + GAP + NET_H;
+  const plotW = Math.max(10, width - PAD.left - PAD.right);
+  const balanceTop = PAD.top;
+  const balanceH = BALANCE_H - PAD.top;
+  const netTop = BALANCE_H + GAP;
+  const netH = NET_H - PAD.bottom;
+
+  // Osa X sdílená oběma panely — střed sloupce i bod křivky leží na stejném x.
+  const x = i => PAD.left + (n === 1 ? plotW / 2 : (plotW * i) / (n - 1));
+  const bandW = n > 0 ? plotW / Math.max(n, 1) : 0;
+  const barW = Math.max(6, Math.min(38, bandW * 0.55));
+
+  const balanceValues = values.flatMap(v => [
+    showDerived ? v.balance_derived : null,
+    showActual ? v.balance_actual : null,
+  ]).filter(v => v != null);
+  const hasBalance = balanceValues.length > 0;
+  const balScale = niceScale(Math.min(...balanceValues, 0), Math.max(...balanceValues, 0));
+  const netScale = niceScale(
+    Math.min(0, ...values.map(v => v.net)),
+    Math.max(0, ...values.map(v => v.net))
+  );
+
+  const yBal = v => balanceTop + balanceH - ((v - balScale.min) / (balScale.max - balScale.min || 1)) * balanceH;
+  const yNet = v => netTop + netH - ((v - netScale.min) / (netScale.max - netScale.min || 1)) * netH;
+  const zeroY = yNet(0);
+
+  // Křivka se kreslí jen mezi SOUSEDNÍMI body, které oba existují — chybějící
+  // snapshot nesmí nic domýšlet, linka se v tom místě přeruší.
+  function segments(key) {
+    const out = [];
+    let run = [];
+    values.forEach((v, i) => {
+      const val = v[key];
+      if (val == null) { if (run.length > 1) out.push(run); run = []; return; }
+      run.push(`${x(i)},${yBal(val)}`);
+    });
+    if (run.length > 1) out.push(run);
+    return out.map(pts => pts.join(' '));
+  }
+
+  if (!width || !n) return <div className="chart-wrap" ref={wrapRef} style={{ height }} />;
+
+  return (
+    <div className="chart-wrap" ref={wrapRef}>
+      <svg className="chart-svg" width={width} height={height} role="img" aria-label="Vývoj spoření">
+        {/* horní panel — zůstatek */}
+        {hasBalance && balScale.ticks.map(tv => (
+          <g key={`b${tv}`}>
+            <line x1={PAD.left} x2={PAD.left + plotW} y1={yBal(tv)} y2={yBal(tv)} className="chart-grid-line" />
+            <text x={PAD.left - 10} y={yBal(tv)} className="chart-tick chart-tick-y">{formatTick(tv)}</text>
+          </g>
+        ))}
+        {!hasBalance && (
+          <text x={PAD.left} y={balanceTop + balanceH / 2} className="chart-tick">
+            Zůstatek zatím neznáme — doplní se z notifikací ze spořicího účtu.
+          </text>
+        )}
+        {showDerived && segments('balance_derived').map((d, i) => (
+          <polyline key={`d${i}`} points={d} fill="none" stroke={COLOR_DERIVED} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        ))}
+        {showActual && segments('balance_actual').map((d, i) => (
+          <polyline key={`a${i}`} points={d} fill="none" stroke={COLOR_ACTUAL} strokeWidth="2" strokeDasharray="5 4" strokeLinejoin="round" strokeLinecap="round" />
+        ))}
+        {showActual && values.map((v, i) => v.balance_actual == null ? null : (
+          <circle key={`ap${i}`} cx={x(i)} cy={yBal(v.balance_actual)} r="4" fill={COLOR_ACTUAL} stroke="var(--bg-card, #fff)" strokeWidth="2" />
+        ))}
+
+        {/* dolní panel — saldo */}
+        {netScale.ticks.map(tv => (
+          <g key={`n${tv}`}>
+            <line x1={PAD.left} x2={PAD.left + plotW} y1={yNet(tv)} y2={yNet(tv)} className="chart-grid-line" />
+            <text x={PAD.left - 10} y={yNet(tv)} className="chart-tick chart-tick-y">{formatTick(tv)}</text>
+          </g>
+        ))}
+        <line x1={PAD.left} x2={PAD.left + plotW} y1={zeroY} y2={zeroY} className="chart-axis-line" />
+        {values.map((v, i) => {
+          const top = v.net >= 0 ? yNet(v.net) : zeroY;
+          const h = Math.abs(yNet(v.net) - zeroY);
+          return (
+            <rect
+              key={`bar${i}`}
+              x={x(i) - barW / 2}
+              y={top}
+              width={barW}
+              height={Math.max(1, h)}
+              fill={v.net >= 0 ? COLOR_POSITIVE : COLOR_NEGATIVE}
+              opacity={periods[i]?.partial ? 0.45 : (active == null || active === i ? 1 : 0.55)}
+            />
+          );
+        })}
+
+        {/* společná osa X + interakce */}
+        {periods.map((p, i) => (
+          <text key={`x${i}`} x={x(i)} y={height - 10} className="chart-tick chart-tick-x">
+            {shortPeriodLabel(p.key)}
+          </text>
+        ))}
+        {periods.map((p, i) => (
+          <rect
+            key={`hit${i}`}
+            x={x(i) - bandW / 2}
+            y={0}
+            width={bandW}
+            height={height}
+            fill="transparent"
+            style={{ cursor: onPeriodClick ? 'pointer' : 'default' }}
+            onMouseEnter={() => setActive(i)}
+            onMouseLeave={() => setActive(null)}
+            onClick={() => onPeriodClick && onPeriodClick(i)}
+          >
+            <title>
+              {`${shortPeriodLabel(p.key)}${p.partial ? ' (probíhá)' : ''}\n`}
+              {`Saldo: ${formatCurrency(values[i].net)}\n`}
+              {`Vklady: ${formatCurrency(values[i].deposits)} · Výběry: ${formatCurrency(values[i].withdrawals)}`}
+            </title>
+          </rect>
+        ))}
+        {active != null && (
+          <line
+            x1={x(active)} x2={x(active)}
+            y1={balanceTop} y2={netTop + netH}
+            className="chart-grid-line"
+          />
+        )}
+      </svg>
+    </div>
+  );
+}
