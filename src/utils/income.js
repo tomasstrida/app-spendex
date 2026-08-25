@@ -55,18 +55,17 @@ function incomeSourcesForPeriod(db, userId, period, billingDay) {
   const extraIncomeCat = db.prepare(
     "SELECT id FROM categories WHERE user_id = ? AND system_role = 'extra_income'"
   ).get(userId);
-  const txs = extraIncomeCat
-    ? db.prepare(`
-        SELECT id, amount, date, description, counterparty_account, account_id
-        FROM transactions
-        WHERE user_id = ? AND amount > 0 AND date >= ? AND date <= ?
-          AND (category_id IS NULL OR category_id != ?)
-      `).all(userId, start, end, extraIncomeCat.id)
-    : db.prepare(`
-        SELECT id, amount, date, description, counterparty_account, account_id
-        FROM transactions
-        WHERE user_id = ? AND amount > 0 AND date >= ? AND date <= ?
-      `).all(userId, start, end);
+  let txSql = `
+    SELECT id, amount, date, description, counterparty_account, account_id
+    FROM transactions
+    WHERE user_id = ? AND amount > 0 AND date >= ? AND date <= ?
+  `;
+  const txParams = [userId, start, end];
+  if (extraIncomeCat) {
+    txSql += ' AND (category_id IS NULL OR category_id != ?)';
+    txParams.push(extraIncomeCat.id);
+  }
+  const txs = db.prepare(txSql).all(...txParams);
 
   const incomeTxs = txs.filter(t => {
     const cp = normCounterparty(t.counterparty_account);
