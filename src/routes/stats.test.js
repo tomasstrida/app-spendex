@@ -606,3 +606,63 @@ test('savings-history: neexterní noha po kotvě (transfer z běžného účtu) 
   assert.equal(r.values[0].balance_derived, 103000);
   server.close();
 });
+
+test('extra_income: inflow sečte příchozí platby v kategorii za období', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type,system_role) VALUES (30,1,'Mimořádné příjmy',4,'extra_income')").run();
+  db.prepare(`INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES
+    (1,30,8000,'2026-07-05','Přeplatek PRE'),
+    (1,30,3000,'2026-07-20','Dar')`).run();
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-07`)).json();
+  assert.equal(stats.extra_income.category_id, 30);
+  assert.equal(stats.extra_income.name, 'Mimořádné příjmy');
+  assert.equal(stats.extra_income.inflow, 11000);
+  assert.equal(stats.extra_income.tx_count, 2);
+  server.close();
+});
+
+test('extra_income: vratka v téže kategorii sníží saldo', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type,system_role) VALUES (30,1,'Mimořádné příjmy',4,'extra_income')").run();
+  db.prepare(`INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES
+    (1,30,8000,'2026-07-05','Přeplatek PRE'),
+    (1,30,-2000,'2026-07-25','Část vrácena')`).run();
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-07`)).json();
+  assert.equal(stats.extra_income.inflow, 6000);
+  server.close();
+});
+
+test('extra_income: platba mimo období se nezapočítá', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type,system_role) VALUES (30,1,'Mimořádné příjmy',4,'extra_income')").run();
+  db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES (1,30,8000,'2026-06-30','Přeplatek PRE')").run();
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-07`)).json();
+  assert.equal(stats.extra_income.inflow, 0);
+  assert.equal(stats.extra_income.tx_count, 0);
+  server.close();
+});
+
+test('extra_income: bez kategorie vrací prázdný agregát, ne chybu', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-07`)).json();
+  assert.equal(stats.extra_income.category_id, null);
+  assert.equal(stats.extra_income.inflow, 0);
+  server.close();
+});
+
+test('extra_income: sekce Účetní kategorii NEobsahuje (saldo nikdy nevyjde nula)', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type,system_role) VALUES (30,1,'Mimořádné příjmy',4,'extra_income')").run();
+  db.prepare("INSERT INTO categories (id,user_id,name,type) VALUES (31,1,'Převody interní',4)").run();
+  db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES (1,30,8000,'2026-07-05','Přeplatek PRE')").run();
+  const stats = await (await fetch(`${base}/api/stats/overview?period=2026-07`)).json();
+  const ids = (stats.accounting || []).map(r => r.id);
+  assert.ok(!ids.includes(30), 'extra_income nesmí být v sekci Účetní');
+  assert.ok(ids.includes(31), 'uživatelská kategorie převodů v Účetní zůstává');
+  server.close();
+});

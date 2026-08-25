@@ -52,6 +52,9 @@ router.get('/overview', requireAuth, (req, res) => {
   // aby interní převody vyšly na nulu. Kladné=příliv, záporné=odliv, ~0=vyrovnané.
   // `prepaid_purchase` je z Účetní sekce vyloučená: není to převod mezi vlastními
   // účty, ale skutečný výdaj, takže saldo nemá smysl kontrolovat na nulu.
+  // `extra_income` je vyloučená ze stejného důvodu: mimořádný příjem není převod
+  // mezi vlastními účty, jeho saldo je trvale kladné a kontrola na nulu by ho
+  // každý měsíc hlásila jako převod s chybějící nohou.
   const accounting = db.prepare(`
     SELECT c.id, c.name, c.color, c.icon,
       COALESCE(SUM(t.amount), 0) AS saldo,
@@ -61,7 +64,7 @@ router.get('/overview', requireAuth, (req, res) => {
       AND t.user_id = ?
       AND t.date >= ? AND t.date <= ?
     WHERE c.user_id = ? AND c.type = 4
-      AND COALESCE(c.system_role, '') != 'prepaid_purchase'
+      AND COALESCE(c.system_role, '') NOT IN ('prepaid_purchase', 'extra_income')
     GROUP BY c.id
     ORDER BY c.name ASC
   `).all(req.dataUserId, start, end, req.dataUserId);
@@ -200,6 +203,32 @@ router.get('/overview', requireAuth, (req, res) => {
     };
   }
 
+  // ── Mimořádné příjmy (kategorie se system_role='extra_income') ──
+  // Jednorázový příjem bez vazby na pravidelný zdroj: přeplatek energií, dar,
+  // výhra, prodej věci. Na Schůzce stojí POD provozní bilancí, aby srovnatelnost
+  // měsíců zůstala zachovaná, a připočítá se až do výsledného „Na spořicí".
+  //
+  // Saldo (SUM(amount)), ne jen kladné částky: vratka části přeplatku zařazená do
+  // téže kategorie číslo správně sníží. Bez SPENDING_FILTER (ten vyžaduje kategorii
+  // typu 1–3 a zahodil by všechno) a bez omezení na účet — mimořádný příjem může
+  // přistát kdekoli. Vyloučení z výpočtu příjmů řeší utils/income.js.
+  const extraIncomeCat = db.prepare(
+    "SELECT id, name FROM categories WHERE user_id = ? AND system_role = 'extra_income'"
+  ).get(req.dataUserId);
+  let extraIncome = { category_id: null, name: null, inflow: 0, tx_count: 0 };
+  if (extraIncomeCat) {
+    const e = db.prepare(`
+      SELECT COALESCE(SUM(t.amount), 0) AS inflow, COUNT(t.id) AS tx_count
+      FROM transactions t
+      WHERE t.user_id = ? AND t.category_id = ?
+        AND t.date >= ? AND t.date <= ?
+    `).get(req.dataUserId, extraIncomeCat.id, start, end);
+    extraIncome = {
+      category_id: extraIncomeCat.id, name: extraIncomeCat.name,
+      inflow: e.inflow, tx_count: e.tx_count,
+    };
+  }
+
   res.json({
     period: periodKey,
     period_start: start,
@@ -216,6 +245,7 @@ router.get('/overview', requireAuth, (req, res) => {
     fund_topup: fundTopup,
     annual_off_fund: annualOffFund,
     prepaid_purchase: prepaidPurchase,
+    extra_income: extraIncome,
   });
 });
 
