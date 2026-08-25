@@ -42,11 +42,19 @@ export default function SavingsHistoryPage() {
 
   // Proklik jde přes tx_ids, ne přes období — součty jsou JS-počítané přes dedup
   // noh převodů, takže filtr podle data a účtu by vrátil i zahozené protějšky.
+  // `period` musí jet v URL taky — bez něj TransactionsPage AND-uje aktuálně
+  // zvolené období z PeriodContext a proklik na jiné období vrátí prázdno
+  // (tx_ids se jen zužuje na rozsah, nenahrazuje ho).
   function openTransactions(index) {
     const ids = values[index]?.tx_ids || [];
     if (!ids.length) return;
-    navigate(`/transactions?tx_ids=${ids.join(',')}`);
+    const period = periods[index]?.key;
+    navigate(`/transactions?tx_ids=${ids.join(',')}${period ? `&period=${period}` : ''}`);
   }
+
+  // Chart nesmí znát tx_ids — jen boolean per období, ať ví, kdy nemá kreslit
+  // cursor:pointer (klik na prázdné období je no-op, viz openTransactions výše).
+  const clickablePeriods = useMemo(() => values.map(v => (v.tx_ids || []).length > 0), [values]);
 
   return (
     <Layout>
@@ -109,6 +117,7 @@ export default function SavingsHistoryPage() {
               periods={periods}
               values={values}
               onPeriodClick={openTransactions}
+              clickablePeriods={clickablePeriods}
               showDerived={showDerived}
               showActual={showActual}
             />

@@ -19,7 +19,7 @@ const COLOR_ACTUAL = '#0ea5e9';
 const COLOR_POSITIVE = '#16a34a';
 const COLOR_NEGATIVE = '#dc2626';
 
-export default function SavingsHistoryChart({ periods, values, onPeriodClick, showDerived = true, showActual = true }) {
+export default function SavingsHistoryChart({ periods, values, onPeriodClick, clickablePeriods, showDerived = true, showActual = true }) {
   const wrapRef = useRef(null);
   const [width, setWidth] = useState(0);
   const [active, setActive] = useState(null);
@@ -60,6 +60,10 @@ export default function SavingsHistoryChart({ periods, values, onPeriodClick, sh
     showActual ? v.balance_actual : null,
   ]).filter(v => v != null);
   const hasBalance = balanceValues.length > 0;
+  // Nezávisle na přepínačích showDerived/showActual — jinak by vypnutí obou
+  // sérií lhalo o datech ("zůstatek zatím neznáme"), i když existují, jen jsou
+  // schované.
+  const hasAnyBalanceData = values.some(v => v.balance_derived != null || v.balance_actual != null);
   const balScale = niceScale(Math.min(...balanceValues, 0), Math.max(...balanceValues, 0));
   const netScale = niceScale(
     Math.min(0, ...values.map(v => v.net)),
@@ -93,10 +97,16 @@ export default function SavingsHistoryChart({ periods, values, onPeriodClick, sh
     if (e.key === 'ArrowRight') { setActive(i => Math.min(n - 1, (i ?? -1) + 1)); e.preventDefault(); }
     else if (e.key === 'ArrowLeft') { setActive(i => Math.max(0, (i ?? n) - 1)); e.preventDefault(); }
     else if (e.key === 'Escape') setActive(null);
-    else if ((e.key === 'Enter' || e.key === ' ') && active != null && onPeriodClick) {
+    else if ((e.key === 'Enter' || e.key === ' ') && active != null && onPeriodClick && isClickable(active)) {
       onPeriodClick(active);
       e.preventDefault();
     }
+  }
+
+  // Klikatelnost je věc rodiče (zná tx_ids), tady jen čteme boolean per index.
+  // Bez `clickablePeriods` se chová jako dřív — klikatelné je vše, co má handler.
+  function isClickable(i) {
+    return !clickablePeriods || clickablePeriods[i];
   }
 
   if (!width || !n) return <div className="chart-wrap" ref={wrapRef} style={{ height }} />;
@@ -121,7 +131,7 @@ export default function SavingsHistoryChart({ periods, values, onPeriodClick, sh
             <text x={PAD.left - 10} y={yBal(tv)} className="chart-tick chart-tick-y">{formatTick(tv)}</text>
           </g>
         ))}
-        {!hasBalance && (
+        {!hasAnyBalanceData && (
           <text x={PAD.left} y={balanceTop + balanceH / 2} className="chart-tick">
             Zůstatek zatím neznáme — doplní se z notifikací ze spořicího účtu.
           </text>
@@ -182,10 +192,10 @@ export default function SavingsHistoryChart({ periods, values, onPeriodClick, sh
             width={bandW}
             height={height}
             fill="transparent"
-            style={{ cursor: onPeriodClick ? 'pointer' : 'default' }}
+            style={{ cursor: onPeriodClick && isClickable(i) ? 'pointer' : 'default' }}
             onMouseEnter={() => setActive(i)}
             onMouseLeave={() => setActive(null)}
-            onClick={() => onPeriodClick && onPeriodClick(i)}
+            onClick={() => onPeriodClick && isClickable(i) && onPeriodClick(i)}
           >
             <title>
               {/* formatCurrency bere záměrně absolutní hodnotu (viz i18n.js) —
