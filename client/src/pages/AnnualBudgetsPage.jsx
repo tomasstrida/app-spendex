@@ -88,6 +88,8 @@ export default function AnnualBudgetsPage() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState({});       // category_id → bool (rozbalený graf)
   const [subExpanded, setSubExpanded] = useState({}); // category_id → bool (rozbalený rozpad subkategorií)
+  const [fundAccounts, setFundAccounts] = useState([]);
+  const [catFund, setCatFund] = useState({});   // category_id → fund_account_id | null
 
   const year = period ? Number(period.split('-')[0]) : new Date().getFullYear();
   const currentYear = currentPeriod ? Number(currentPeriod.split('-')[0]) : year;
@@ -98,7 +100,9 @@ export default function AnnualBudgetsPage() {
     Promise.all([
       fetch(`/api/budget-items?year=${year}`).then(r => r.json()),
       fetch(`/api/stats/overview?period=${period}`).then(r => r.json()),
-    ]).then(([items, st]) => {
+      fetch('/api/accounts').then(r => r.json()),
+      fetch('/api/categories').then(r => r.json()),
+    ]).then(([items, st, accounts, allCats]) => {
       setBudgetItems(items.items || []);
       setYearSpent(items.category_year_spent || {});
       setMonthSpent(items.category_month_spent || {});
@@ -106,8 +110,31 @@ export default function AnnualBudgetsPage() {
       setAppleYearSpent(items.category_apple_account_year_spent || {});
       setAppleUnmatchedYearSpent(items.category_apple_unmatched_year_spent || {});
       setByCategory(st?.by_category || []);
+      setFundAccounts((accounts || []).filter(a => a.is_fund));
+      const map = {};
+      (allCats || []).forEach(c => { map[c.id] = c.fund_account_id ?? null; });
+      setCatFund(map);
     }).finally(() => setLoading(false));
   }, [period, year]);
+
+  // Uložení vazby na fond. Po úspěchu se načte znovu celý stav ze serveru —
+  // krytí i seznam kategorií jsou server-počítané a lokální dopočet by se rozešel.
+  async function saveFund(categoryId, value) {
+    const res = await fetch(`/api/categories/${categoryId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ fund_account_id: value === '' ? null : Number(value) }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      alert(body.error || 'Uložení se nepovedlo.');
+      return;
+    }
+    const fresh = await fetch('/api/categories').then(r => r.json());
+    const map = {};
+    (fresh || []).forEach(c => { map[c.id] = c.fund_account_id ?? null; });
+    setCatFund(map);
+  }
 
   // Roční rozpočet po kategoriích = součet podpoložek dané kategorie
   const budgetByCat = {};
@@ -187,6 +214,20 @@ export default function AnnualBudgetsPage() {
                           <span className="text-muted report-budget-limit">{budget > 0 ? `/ ${formatCurrency(budget)}` : ''}</span>
                           <span className="report-budget-status" />
                         </Link>
+                        {fundAccounts.length > 0 && (
+                          <label className="text-muted" style={{ fontSize: 13, display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+                            Financuje se z fondu:
+                            <select
+                              value={catFund[c.id] ?? ''}
+                              onChange={e => saveFund(c.id, e.target.value)}
+                            >
+                              <option value="">— nefinancuje se z fondu —</option>
+                              {fundAccounts.map(a => (
+                                <option key={a.id} value={a.id}>{a.name}</option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
                         {isSubOpen && (
                           <div className="report-subcat-list">
                             {subcats.map(s => (
