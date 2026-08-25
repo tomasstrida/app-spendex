@@ -63,9 +63,10 @@ export default function SavingsHistoryChart({ periods, values, onPeriodClick, cl
   // Body leží ve STŘEDU svého pásma, ne na krajích plochy: jinak by první a
   // poslední sloupec půlkou přetékal přes osu Y, resp. přes pravý okraj.
   const bandW = n > 0 ? plotW / n : 0;
-  // Když strop pásma plochu zúžil, vycentrujeme ji — plocha přilepená doleva
-  // s prázdnem vpravo vypadá jako nedokreslený graf, ne jako záměr.
-  const plotLeft = PAD.left + (availW - plotW) / 2;
+  // Plocha začíná vlevo, i když ji strop pásma zúžil — oba panely tak lícují
+  // se zbytkem stránky (statistiky nad grafem, legenda pod ním) a osa Y sedí
+  // na stejném místě jako u ostatních grafů v aplikaci.
+  const plotLeft = PAD.left;
   const x = i => plotLeft + bandW * (i + 0.5);
   const barW = Math.max(10, Math.min(56, bandW * 0.5));
 
