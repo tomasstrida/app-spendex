@@ -1622,3 +1622,30 @@ a.report-subcat-row:hover { background: var(--bg2); }
   .tx-flow-select { max-width: none; flex: 1; min-width: 0; }
   .tx-direction-toggle { margin-left: 0; width: 100%; }
 }
+
+/* Karta krytí fondu — velké číslo „vyjde to?" nad grafem vývoje */
+.fund-coverage {
+  background: var(--bg3);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+.fund-coverage-value {
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+.fund-coverage-note {
+  font-size: 13px;
+  margin-top: 6px;
+}
+.fund-coverage-rows {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+.fund-coverage-row { display: flex; justify-content: space-between; }

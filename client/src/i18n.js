@@ -12,6 +12,7 @@ const cs = {
     annualBudgets: 'Roční budgety',
     budgetHistory: 'Vývoj výdajů',
     savingsHistory: 'Vývoj spoření',
+    fundHistory: 'Kontrola fondů',
     accounts: 'Účty',
     import: 'Import',
     duplicates: 'Duplicity',
