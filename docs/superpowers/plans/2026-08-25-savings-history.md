@@ -125,25 +125,18 @@ Přidej na konec `src/services/emailIngest.test.js`:
 
 ```js
 test('balance_after se uloží do transakce při automatickém importu', () => {
-  const { db } = setup();
-  const text = `Dobrý den,
-
-zůstatek na účtu Spořicí účet 1 číslo 1679014082/3030 se zvýšil o částku 100,00 CZK. Dostupný zůstatek k 02.08.2026 v 14:12 je 111 878,44 CZK.
-
-Pro úplnost uvádíme detaily této úhrady:
-
-Příchozí úhrada z účtu Libor Bísek číslo 1812270019/3030
-Datum zaúčtování: 02.08.2026
-Kód transakce: 900000001
-`;
-  ingestEmail(db, text, 'notifikace@airbank.cz');
-  const row = db.prepare("SELECT balance_after FROM transactions WHERE external_id LIKE '900000001%'").get()
-    || db.prepare("SELECT balance_after FROM transactions ORDER BY id DESC LIMIT 1").get();
-  assert.equal(row.balance_after, 111878.44);
+  const { db, tmp } = freshDb();
+  seed(db);
+  const { ingestEmail } = require('./emailIngest');
+  const r = ingestEmail(db, { userEmail: 'tom@example.com', fromHeader: 'info@airbank.cz', text: INTERNAL });
+  const tx = db.prepare("SELECT balance_after FROM transactions WHERE user_id = 1").get();
+  cleanup(db, tmp);
+  assert.equal(r.status, 'imported');
+  assert.equal(tx.balance_after, 4934.46);
 });
 ```
 
-Pozn.: `setup()` a `ingestEmail` už v souboru existují — použij je ve stejném tvaru jako okolní testy. Když test skončí v review frontě místo v `transactions` (kategorie není jistá), doplň v `setup()` kategorii převodů s `type = 4` stejně, jako to dělají stávající testy pro interní převody.
+Pozn.: `freshDb()`, `seed()`, `cleanup()` a konstanta `INTERNAL` v souboru už existují — použij je přesně tak jako okolní testy (`ingestEmail(db, { userEmail, fromHeader, text })`, tři argumenty NEexistují). `INTERNAL` je interní převod, který má v hlavičce „Dostupný zůstatek k 07.06.2026 v 17:47 je 4 934,46 CZK." a končí rovnou v `transactions`, takže testuje právě zápis nového sloupce.
 
 - [ ] **Step 2: Run test to verify it fails**
 
