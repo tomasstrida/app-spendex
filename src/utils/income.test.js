@@ -264,3 +264,50 @@ test('incomeSourcesForPeriod: nenapárovaný zdroj má prázdné tx_ids', () => 
   cleanup(db, tmp);
   assert.deepEqual(rows.find(r => r.person === 'Nikdo').tx_ids, []);
 });
+
+test('extra_income: platba v kategorii mimořádných příjmů se do příjmů nezapočítá', () => {
+  const { db, tmp } = freshDb();
+  seedUser(db);
+  db.prepare("INSERT INTO categories (id, user_id, name, type, system_role) VALUES (30,1,'Mimořádné příjmy',4,'extra_income')").run();
+  db.prepare("INSERT INTO accounts (id, user_id, name, account_number, role) VALUES (10, 1, 'Hlavní', '1679014138', 'ignored')").run();
+  db.prepare("INSERT INTO transactions (user_id, account_id, category_id, amount, date, description, counterparty_account) VALUES (1, 10, 30, 8000, '2026-04-10', 'Přeplatek PRE', '9876543210')").run();
+
+  const { incomeSourcesForPeriod } = require('./income');
+  const rows = incomeSourcesForPeriod(db, 1, '2026-04', 1);
+
+  assert.equal(rows.length, 0, 'mimořádný příjem nesmí vzniknout ani jako auto-only skupina');
+  cleanup(db, tmp);
+});
+
+test('extra_income: alias na tutéž protistranu platbu v kategorii nesebere (obrana proti dvojímu započtení)', () => {
+  const { db, tmp } = freshDb();
+  seedUser(db);
+  db.prepare("INSERT INTO categories (id, user_id, name, type, system_role) VALUES (30,1,'Mimořádné příjmy',4,'extra_income')").run();
+  db.prepare("INSERT INTO accounts (id, user_id, name, account_number, role) VALUES (10, 1, 'Hlavní', '1679014138', 'ignored')").run();
+  db.prepare("INSERT INTO income_sources (user_id, person, planned_amount, match_counterparty_account) VALUES (1,'PRE',0,'9876543210')").run();
+  db.prepare("INSERT INTO transactions (user_id, account_id, category_id, amount, date, description, counterparty_account) VALUES (1, 10, 30, 8000, '2026-04-10', 'Přeplatek PRE', '9876543210')").run();
+
+  const { incomeSourcesForPeriod } = require('./income');
+  const rows = incomeSourcesForPeriod(db, 1, '2026-04', 1);
+  const pre = rows.find(r => r.person === 'PRE');
+
+  assert.ok(pre, 'definovaný zdroj se v seznamu ukáže vždy');
+  assert.equal(pre.actual, 0, 'ale platba zařazená do extra_income mu nesmí přibýt');
+  assert.equal(pre.tx_count, 0);
+  cleanup(db, tmp);
+});
+
+test('extra_income: běžný příjem v jiné kategorii se počítá dál', () => {
+  const { db, tmp } = freshDb();
+  seedUser(db);
+  db.prepare("INSERT INTO categories (id, user_id, name, type, system_role) VALUES (30,1,'Mimořádné příjmy',4,'extra_income')").run();
+  db.prepare("INSERT INTO accounts (id, user_id, name, account_number, role) VALUES (10, 1, 'Hlavní', '1679014138', 'ignored')").run();
+  db.prepare("INSERT INTO transactions (user_id, account_id, amount, date, description, counterparty_account) VALUES (1, 10, 21000, '2026-04-10', 'Nájem byt', '9876543210')").run();
+
+  const { incomeSourcesForPeriod } = require('./income');
+  const rows = incomeSourcesForPeriod(db, 1, '2026-04', 1);
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].actual, 21000);
+  cleanup(db, tmp);
+});

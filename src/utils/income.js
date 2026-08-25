@@ -45,11 +45,28 @@ function incomeSourcesForPeriod(db, userId, period, billingDay) {
     else if (internalRoles.has(a.role)) internalNumbers.add(num);
   }
 
-  const txs = db.prepare(`
-    SELECT id, amount, date, description, counterparty_account, account_id
-    FROM transactions
-    WHERE user_id = ? AND amount > 0 AND date >= ? AND date <= ?
-  `).all(userId, start, end);
+  // Mimořádné příjmy (systémová kategorie extra_income) se do výpočtu příjmů
+  // NESMÍ dostat: na Schůzce mají vlastní řádek pod provozní bilancí, takže by
+  // se počítaly dvakrát. Týká se to obou cest — auto-only skupiny (varování
+  // „nezařazená příchozí platba") i napárování na income_sources alias.
+  //
+  // Když kategorie neexistuje (bootstrap ještě neproběhl), podmínka se vynechá
+  // a chování zůstane původní.
+  const extraIncomeCat = db.prepare(
+    "SELECT id FROM categories WHERE user_id = ? AND system_role = 'extra_income'"
+  ).get(userId);
+  const txs = extraIncomeCat
+    ? db.prepare(`
+        SELECT id, amount, date, description, counterparty_account, account_id
+        FROM transactions
+        WHERE user_id = ? AND amount > 0 AND date >= ? AND date <= ?
+          AND (category_id IS NULL OR category_id != ?)
+      `).all(userId, start, end, extraIncomeCat.id)
+    : db.prepare(`
+        SELECT id, amount, date, description, counterparty_account, account_id
+        FROM transactions
+        WHERE user_id = ? AND amount > 0 AND date >= ? AND date <= ?
+      `).all(userId, start, end);
 
   const incomeTxs = txs.filter(t => {
     const cp = normCounterparty(t.counterparty_account);
