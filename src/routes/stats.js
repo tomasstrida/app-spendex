@@ -7,7 +7,7 @@ const { reserveBalance, reserveAccount, reservePaidPatterns, mainAccount, variab
 const { SPENDING_AND } = require('../utils/spending-filter');
 const { savingsMovements, findSavingsAccountId } = require('../utils/savings');
 const { chainBalances } = require('../utils/balance-chain');
-const { fundMovements, fundAnchor, fundRemaining } = require('../utils/fund-coverage');
+const { fundMovements, fundAnchor, fundRemaining, fundSubsidies } = require('../utils/fund-coverage');
 
 // GET /api/stats/overview?period=2026-04
 router.get('/overview', requireAuth, (req, res) => {
@@ -587,6 +587,9 @@ router.get('/fund-history', requireAuth, (req, res) => {
   }
 
   const { plan, spent, remaining, categories } = fundRemaining(db, req.dataUserId, account.id, today);
+  // Fond není statická hromádka — do konce roku na něj ještě přijdou dotace.
+  // Bez nich by karta hlásila schodek, který ve skutečnosti není.
+  const subsidies = fundSubsidies(db, req.dataUserId, account.id, today);
 
   // Krytí musí mířit na DNEŠEK, ne na den kotvy — `remaining` je taky forward-looking.
   // Kotva bývá týdny stará (fond dostává snapshot jen u plateb, co prošly frontou
@@ -610,7 +613,9 @@ router.get('/fund-history', requireAuth, (req, res) => {
       plan,                           // roční plán fondu = součet podpoložek jeho kategorií
       spent,                          // letos vyčerpáno (skutečnost, NEOŘEZANÁ na plán)
       remaining,                      // kolik z plánu ještě zbývá (per kategorie, floor 0)
-      diff: anchor ? balanceToday - remaining : null,
+      subsidies: subsidies.total,     // očekávané dotace na fond do konce roku
+      subsidy_items: subsidies.items,
+      diff: anchor ? balanceToday + subsidies.total - remaining : null,
       categories,
     },
     periods, values,

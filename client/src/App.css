@@ -1700,11 +1700,14 @@ a.report-subcat-row:hover { background: var(--bg2); }
   font-size: 15px;
 }
 .fund-coverage-bar {
+  position: relative;   /* kotva pro značku dneška */
   height: 8px;
   border-radius: 4px;
   background: var(--bg);
-  overflow: hidden;
-  margin: 8px 0 4px;
+  /* ŽÁDNÝ overflow: hidden — značka dneška je vyšší než bar a přesahuje ho
+     nahoru i dolů; ořezání by z ní nechalo jen proužek. Zaoblení proto drží
+     výplň sama přes vlastní border-radius. */
+  margin: 12px 0 4px;
 }
 .fund-coverage-bar-fill {
   height: 100%;

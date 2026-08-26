@@ -1,4 +1,5 @@
 'use strict';
+const { normCounterparty } = require('./income');
 
 /**
  * Čisté pohyby na fondovém účtu za období.
@@ -103,4 +104,92 @@ function fundRemaining(db, userId, accountId, today) {
   };
 }
 
-module.exports = { fundMovements, fundAnchor, fundRemaining };
+
+/**
+ * Očekávané dotace na fond od PŘÍŠTÍHO měsíce do konce roku.
+ *
+ * Fond není statická hromádka — každý měsíc na něj chodí dotace z běžného účtu.
+ * Bez nich karta straší schodkem, který ve skutečnosti není: Nepravidelné vychází
+ * v srpnu na −73 tis., ale do prosince na něj ještě přijde 80 800 Kč.
+ *
+ * Cíl dotace se ODVOZUJE Z HISTORIE (rozhodnutí uživatele): u fixní platby se najdou
+ * její odchozí platby a když většina mířila na tenhle fond, je to dotace na něj.
+ * Číslo protiúčtu má přednost před textem — stejné pořadí jako matcher Schůzky.
+ * Ověřeno na produkčních datech: každá z devíti dotací míří jednoznačně na jeden účet
+ * a „Dotace na VELKÉ RADOSTI" se sama vyřadí, protože její cíl fondový účet není.
+ *
+ * PŘIZNANÉ NEPŘESNOSTI:
+ *  - Aktuální měsíc se nepočítá. Jeho dotace už na účtu typicky jsou (vidí je zůstatek);
+ *    kdyby některá ještě nepřišla, číslo ji nezachytí — chyba míří k horšímu, ne k lepšímu.
+ *  - Dotace bez jediné proběhlé platby se nenajde: není z čeho odvodit cíl. To je cena
+ *    za odvozování místo explicitní vazby; zapojí se po prvním měsíci.
+ *  - U `frequency_months > 1` se počítá `floor(zbývající měsíce / frekvence)` — bez
+ *    znalosti fáze cyklu je to odhad. Všechny dnešní dotace jsou měsíční.
+ */
+function fundSubsidies(db, userId, accountId, today) {
+  const account = db.prepare(
+    'SELECT account_number FROM accounts WHERE id = ? AND user_id = ? AND is_fund = 1'
+  ).get(accountId, userId);
+  if (!account) return { total: 0, items: [] };
+  const fundNumber = normCounterparty(account.account_number);
+  if (!fundNumber) return { total: 0, items: [] };
+
+  const year = Number(today.slice(0, 4));
+  const month = Number(today.slice(5, 7));
+
+  const fixed = db.prepare(
+    'SELECT id, name, amount, match_pattern, match_counterparty_account, frequency_months, valid_from, valid_to FROM fixed_expenses WHERE user_id = ? ORDER BY sort_order ASC, id ASC'
+  ).all(userId);
+
+  // Odchozí platby se načtou jednou a matchování běží v JS: číslo účtu se musí
+  // porovnávat přes normCounterparty (exact, číslice před `/`), což SQL neumí čistě.
+  const outgoing = db.prepare(
+    'SELECT amount, description, note, place, counterparty_account FROM transactions WHERE user_id = ? AND amount < 0'
+  ).all(userId);
+
+  const items = [];
+  for (const f of fixed) {
+    const byAccount = normCounterparty(f.match_counterparty_account);
+    const matches = outgoing.filter(t => {
+      if (byAccount) return normCounterparty(t.counterparty_account) === byAccount;
+      if (!f.match_pattern) return false;
+      const p = f.match_pattern;
+      return [t.description, t.note, t.place].some(v => v && v.indexOf(p) >= 0);
+    });
+    if (!matches.length) continue;   // bez historie cíl neodvodíme
+
+    // Kam mířila většina — jedna zatoulaná platba nesmí přepsat celý řádek.
+    const tally = new Map();
+    for (const t of matches) {
+      const cp = normCounterparty(t.counterparty_account);
+      if (cp) tally.set(cp, (tally.get(cp) || 0) + 1);
+    }
+    let best = null, bestN = 0;
+    for (const [cp, n] of tally) if (n > bestN) { best = cp; bestN = n; }
+    if (best !== fundNumber) continue;
+
+    // Zbývající měsíce roku od PŘÍŠTÍHO, s respektem k oknu platnosti.
+    let months = 0;
+    for (let m = month + 1; m <= 12; m++) {
+      const key = `${year}-${String(m).padStart(2, '0')}`;
+      if (f.valid_from && f.valid_from > key) continue;
+      if (f.valid_to && f.valid_to < key) continue;
+      months++;
+    }
+    const freq = f.frequency_months > 1 ? f.frequency_months : 1;
+    const occurrences = Math.floor(months / freq);
+    if (occurrences <= 0) continue;
+
+    items.push({
+      fixed_expense_id: f.id,
+      name: f.name,
+      amount: f.amount,
+      months: occurrences,
+      total: f.amount * occurrences,
+    });
+  }
+
+  return { total: items.reduce((s, i) => s + i.total, 0), items };
+}
+
+module.exports = { fundMovements, fundAnchor, fundRemaining, fundSubsidies };

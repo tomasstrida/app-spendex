@@ -826,3 +826,28 @@ test('fund-history: values mají stejný tvar jako savings-history', async () =>
   assert.equal(v.net, 3000);
   assert.equal(v.balance_actual, 9000);
 });
+
+test('fund-history: očekávané dotace se přičtou do krytí', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO accounts (id,user_id,name,account_number,role,is_fund) VALUES (60,1,'Nepravidelné','1679014074/3030','spending',1)").run();
+  db.prepare("INSERT INTO categories (id,user_id,name,type,fund_account_id) VALUES (70,1,'Y_Beach',2,60)").run();
+  db.prepare("INSERT INTO budget_items (id,user_id,category_id,name,amount,window_start,window_end) VALUES (1,1,70,'Beach zima',10200,9,12)").run();
+  db.prepare("INSERT INTO transactions (user_id,account_id,amount,date,description,balance_after) VALUES (1,60,-500,'2026-08-18','Nákup',5000)").run();
+  // Dotace bez čísla účtu — cíl se odvodí z proběhlé platby na fond.
+  db.prepare("INSERT INTO fixed_expenses (id,user_id,name,amount,match_pattern,frequency_months) VALUES (1,1,'Dotace na Beach',3000,'Dotace na Beach',1)").run();
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account) VALUES (1,-3000,'2026-08-22','Dotace na Beach','1679014074/3030')").run();
+
+  const res = await fetch(`${base}/api/stats/fund-history?account_id=60&from=2026-06&to=2026-08`);
+  const body = await res.json();
+  server.close();
+  assert.equal(res.status, 200);
+  assert.ok(body.coverage.subsidies > 0, 'dotace se musí najít podle historie');
+  assert.equal(body.coverage.subsidy_items[0].name, 'Dotace na Beach');
+  // diff = zůstatek + dotace − potřeba
+  assert.equal(
+    Math.round(body.coverage.diff),
+    Math.round(body.coverage.balance + body.coverage.subsidies - body.coverage.remaining),
+    'krytí musí zahrnovat dotace'
+  );
+});

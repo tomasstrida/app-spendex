@@ -45,6 +45,17 @@ export default function FundHistoryPage() {
   const periods = useMemo(() => data?.periods || [], [data]);
   const values = useMemo(() => data?.values || [], [data]);
   const coverage = data?.coverage || null;
+
+  // Pozice dneška v kalendářním roce — značka na baru čerpání. Roční plán i čerpání
+  // jsou vztažené ke kalendářnímu roku, ne k účetnímu období.
+  const yearPct = (() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 1);
+    const end = new Date(now.getFullYear(), 11, 31);
+    const total = Math.round((end - start) / 86400000) + 1;
+    const passed = Math.round((now - start) / 86400000);
+    return Math.max(0, Math.min(100, (passed / total) * 100));
+  })();
   const clickablePeriods = useMemo(() => values.map(v => (v.tx_ids || []).length > 0), [values]);
 
   function openTransactions(index) {
@@ -107,6 +118,12 @@ export default function FundHistoryPage() {
                   className={`fund-coverage-bar-fill${coverage.spent > coverage.plan ? ' is-over' : ''}`}
                   style={{ width: `${coverage.plan > 0 ? Math.min(100, (coverage.spent / coverage.plan) * 100) : 0}%` }}
                 />
+                {/* Svislá čárka = kde jsme v roce. Rtuť vlevo od ní znamená, že
+                    čerpání zaostává za časem, vpravo že předbíhá. Stejná mechanika
+                    i CSS třída jako u ročního teploměru na Ročních budgetech. */}
+                {yearPct > 0 && yearPct < 100 && (
+                  <div className="budget-bar-day-marker" style={{ left: `${yearPct}%` }} />
+                )}
               </div>
 
               <div className="fund-coverage-rows">
@@ -118,9 +135,17 @@ export default function FundHistoryPage() {
                       : `${signPrefix(coverage.balance)}${formatCurrency(coverage.balance)}`}
                   </span>
                 </div>
+                {coverage.subsidies > 0 && (
+                  <div className="fund-coverage-row">
+                    <span title={(coverage.subsidy_items || []).map(i => `${i.name}: ${i.months}× ${Math.round(i.amount)}`).join('\n')}>
+                      Dotace do konce roku
+                    </span>
+                    <span className="text-success">+ {formatCurrency(coverage.subsidies)}</span>
+                  </div>
+                )}
                 <div className="fund-coverage-row">
                   <span>Potřeba na zbytek roku</span>
-                  <span>{formatCurrency(coverage.remaining)}</span>
+                  <span>− {formatCurrency(coverage.remaining)}</span>
                 </div>
                 {coverage.balance != null && (
                   <div className={`fund-coverage-row fund-coverage-result ${coverage.diff >= 0 ? 'text-success' : 'text-danger'}`}>

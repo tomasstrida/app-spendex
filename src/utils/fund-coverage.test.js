@@ -145,3 +145,73 @@ test('fundRemaining: kategorie nesou rozpad pro zobrazení, seřazený podle zby
   assert.equal(r.categories[1].category_name, 'Y_Malá');
   cleanup(db, tmp);
 });
+
+test('fundSubsidies: dotace se přiřadí k fondu podle toho, kam reálně chodila', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO fixed_expenses (id,user_id,name,amount,match_pattern,frequency_months,valid_from) VALUES (1,1,'Dotace na SPORT',5600,'Dotace na SPORT',1,'2026-08')").run();
+  // Odchozí platba z běžného účtu na fond — protiúčet je číslo fondu.
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account) VALUES (1,-5600,'2026-08-22','Dotace na SPORT','1679014074/3030')").run();
+
+  const { fundSubsidies } = require('./fund-coverage');
+  // Od září do prosince = 4 měsíce.
+  const r = fundSubsidies(db, 1, 60, '2026-08-26');
+  assert.equal(r.total, 22400, '4 měsíce × 5 600');
+  assert.equal(r.items.length, 1);
+  assert.equal(r.items[0].name, 'Dotace na SPORT');
+  assert.equal(r.items[0].months, 4);
+  cleanup(db, tmp);
+});
+
+test('fundSubsidies: dotace mířící jinam než na tenhle fond se nezapočítá', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO fixed_expenses (id,user_id,name,amount,match_pattern,frequency_months,valid_from) VALUES (1,1,'Dotace na VELKÉ RADOSTI',5500,'VELKÉ RADOSTI',1,'2026-08')").run();
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account) VALUES (1,-5500,'2026-08-22','Dotace na VELKÉ RADOSTI','1679014146/3030')").run();
+
+  const { fundSubsidies } = require('./fund-coverage');
+  const r = fundSubsidies(db, 1, 60, '2026-08-26');
+  assert.equal(r.total, 0, 'cíl není tenhle fondový účet');
+  cleanup(db, tmp);
+});
+
+test('fundSubsidies: ukončená dotace do konce roku nepřispívá', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO fixed_expenses (id,user_id,name,amount,match_pattern,frequency_months,valid_to) VALUES (1,1,'Stará dotace',10000,'Stará dotace',1,'2026-06')").run();
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account) VALUES (1,-10000,'2026-05-20','Stará dotace','1679014074/3030')").run();
+
+  const { fundSubsidies } = require('./fund-coverage');
+  const r = fundSubsidies(db, 1, 60, '2026-08-26');
+  assert.equal(r.total, 0, 'valid_to 2026-06 → v září až prosinci už neplatí');
+  cleanup(db, tmp);
+});
+
+test('fundSubsidies: dotace platná jen část zbytku roku se počítá poměrně', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO fixed_expenses (id,user_id,name,amount,match_pattern,frequency_months,valid_to) VALUES (1,1,'Do rijna',1000,'Do rijna',1,'2026-10')").run();
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account) VALUES (1,-1000,'2026-08-22','Do rijna','1679014074/3030')").run();
+
+  const { fundSubsidies } = require('./fund-coverage');
+  const r = fundSubsidies(db, 1, 60, '2026-08-26');
+  assert.equal(r.total, 2000, 'jen září a říjen');
+  assert.equal(r.items[0].months, 2);
+  cleanup(db, tmp);
+});
+
+test('fundSubsidies: dotace bez jediné proběhlé platby se nenajde', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO fixed_expenses (id,user_id,name,amount,match_pattern,frequency_months,valid_from) VALUES (1,1,'Zbrusu nova',9000,'Zbrusu nova',1,'2026-08')").run();
+  const { fundSubsidies } = require('./fund-coverage');
+  const r = fundSubsidies(db, 1, 60, '2026-08-26');
+  assert.equal(r.total, 0, 'bez historie nelze cíl odvodit — přiznaná cena odvozování');
+  cleanup(db, tmp);
+});
+
+test('fundSubsidies: v prosinci už do konce roku nic nepřijde', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO fixed_expenses (id,user_id,name,amount,match_pattern,frequency_months) VALUES (1,1,'Dotace',5000,'Dotace',1)").run();
+  db.prepare("INSERT INTO transactions (user_id,amount,date,description,counterparty_account) VALUES (1,-5000,'2026-08-22','Dotace','1679014074/3030')").run();
+
+  const { fundSubsidies } = require('./fund-coverage');
+  const r = fundSubsidies(db, 1, 60, '2026-12-10');
+  assert.equal(r.total, 0, 'prosinec je poslední měsíc, další už není');
+  cleanup(db, tmp);
+});
