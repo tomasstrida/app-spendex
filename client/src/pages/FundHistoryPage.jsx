@@ -54,8 +54,11 @@ export default function FundHistoryPage() {
     navigate(`/transactions?tx_ids=${ids.join(',')}${period ? `&period=${period}` : ''}`);
   }
 
-  function openItem(item) {
-    navigate(`/transactions?category_ids=${item.category_id}&from=${item.window_from}&to=${item.window_to}`);
+  // Proklik na celý letošní rok — čerpání se nově počítá za rok, ne v okně podpoložky,
+  // takže seznam musí odpovídat tomu, co je v řádku.
+  function openCategory(cat) {
+    const year = new Date().getFullYear();
+    navigate(`/transactions?category_ids=${cat.category_id}&from=${year}-01-01&to=${year}-12-31`);
   }
 
   return (
@@ -88,42 +91,51 @@ export default function FundHistoryPage() {
         </div>
       ) : (
         <>
-          {coverage && coverage.balance == null ? (
+          {coverage && (
             <div className="fund-coverage">
-              <div className="text-muted">
-                Zůstatek zatím neznáme — na tomto účtu nedorazila žádná platba se zůstatkem
-                z bankovní notifikace. Krytí se ukáže, jakmile první přijde.
+              {/* Tři čísla, tři otázky: kolik už z ročního plánu padlo, kolik na účtu
+                  podle transakcí je, a kolik by tam mělo být na zbytek roku. */}
+              <div className="fund-coverage-head">
+                <span>Vyčerpáno z ročního plánu</span>
+                <span>
+                  <strong>{formatCurrency(coverage.spent)}</strong>
+                  <span className="text-muted"> / {formatCurrency(coverage.plan)}</span>
+                </span>
               </div>
+              <div className="fund-coverage-bar">
+                <div
+                  className={`fund-coverage-bar-fill${coverage.spent > coverage.plan ? ' is-over' : ''}`}
+                  style={{ width: `${coverage.plan > 0 ? Math.min(100, (coverage.spent / coverage.plan) * 100) : 0}%` }}
+                />
+              </div>
+
               <div className="fund-coverage-rows">
                 <div className="fund-coverage-row">
-                  <span>Zbývá vyčerpat do konce roku</span>
+                  <span>Na účtu (podle transakcí)</span>
+                  <span>
+                    {coverage.balance == null
+                      ? '—'
+                      : `${signPrefix(coverage.balance)}${formatCurrency(coverage.balance)}`}
+                  </span>
+                </div>
+                <div className="fund-coverage-row">
+                  <span>Potřeba na zbytek roku</span>
                   <span>{formatCurrency(coverage.remaining)}</span>
                 </div>
+                {coverage.balance != null && (
+                  <div className={`fund-coverage-row fund-coverage-result ${coverage.diff >= 0 ? 'text-success' : 'text-danger'}`}>
+                    <span>{coverage.diff >= 0 ? 'Zbývá po pokrytí' : 'Chybí'}</span>
+                    <span>{formatCurrency(coverage.diff)}</span>
+                  </div>
+                )}
               </div>
-            </div>
-          ) : coverage && (
-            <div className="fund-coverage">
-              <div className={`fund-coverage-value ${coverage.diff >= 0 ? 'text-success' : 'text-danger'}`}>
-                {coverage.diff >= 0
-                  ? `Zbývá po pokrytí ${signPrefix(coverage.diff)}${formatCurrency(coverage.diff)}`
-                  : `Chybí ${formatCurrency(coverage.diff)}`}
-              </div>
-              <div className="fund-coverage-note text-muted">
-                {coverage.diff >= 0
-                  ? 'Fond pokryje roční výdaje, které z něj do konce roku ještě odejdou.'
-                  : 'Fond nepokryje roční výdaje, které z něj do konce roku ještě odejdou.'}
-              </div>
-              <div className="fund-coverage-rows">
-                <div className="fund-coverage-row">
-                  <span>Zůstatek (odhad k dnešku)</span>
-                  <span>{signPrefix(coverage.balance)}{formatCurrency(coverage.balance)}</span>
+
+              {coverage.balance == null ? (
+                <div className="fund-coverage-note text-muted">
+                  Zůstatek zatím neznáme — na tomto účtu nedorazila žádná platba se zůstatkem
+                  z bankovní notifikace. Doplní se, jakmile první přijde.
                 </div>
-                <div className="fund-coverage-row">
-                  <span>Zbývá vyčerpat do konce roku</span>
-                  <span>− {formatCurrency(coverage.remaining)}</span>
-                </div>
-              </div>
-              {coverage.anchor_date && (
+              ) : coverage.anchor_date && (
                 <div className="fund-coverage-note text-muted" style={{ fontSize: 11 }}>
                   Naposledy potvrzeno bankou k {coverage.anchor_date}: {signPrefix(coverage.anchor_balance)}{formatCurrency(coverage.anchor_balance)}
                 </div>
@@ -131,26 +143,25 @@ export default function FundHistoryPage() {
             </div>
           )}
 
-          {coverage?.items?.length > 0 && (
+          {coverage?.categories?.length > 0 && (
             <section className="report-section">
-              <div className="report-section-header">Z čeho se skládá „zbývá vyčerpat"</div>
+              <div className="report-section-header">Roční plán po kategoriích</div>
               <div className="chart-table-scroll">
               <table className="chart-table">
                 <thead>
                   <tr>
-                    <th>Položka</th><th>Kategorie</th>
+                    <th>Kategorie</th>
                     <th className="num">Plán</th><th className="num">Vyčerpáno</th><th className="num">Zbývá</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {coverage.items.map(i => (
-                    <tr key={i.budget_item_id} style={{ cursor: 'pointer' }} onClick={() => openItem(i)}
-                      title="Klik: transakce kategorie v okně této položky">
-                      <td>{i.name}</td>
-                      <td className="text-muted">{i.category_name}</td>
-                      <td className="num">{formatCurrency(i.amount)}</td>
-                      <td className="num">{formatCurrency(i.spent)}</td>
-                      <td className="num">{formatCurrency(i.remaining)}</td>
+                  {coverage.categories.map(c => (
+                    <tr key={c.category_id} style={{ cursor: 'pointer' }} onClick={() => openCategory(c)}
+                      title="Klik: letošní transakce této kategorie">
+                      <td>{c.category_name}</td>
+                      <td className="num">{formatCurrency(c.plan)}</td>
+                      <td className={`num${c.spent > c.plan ? ' text-danger' : ''}`}>{formatCurrency(c.spent)}</td>
+                      <td className="num">{formatCurrency(c.remaining)}</td>
                     </tr>
                   ))}
                 </tbody>

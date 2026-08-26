@@ -47,40 +47,63 @@ test('fundAnchor: účet bez snapshotu vrátí null', () => {
   cleanup(db, tmp);
 });
 
-test('fundRemaining: položka s uplynulým oknem se ignoruje', () => {
+test('fundRemaining: součet je za KATEGORII, ne za jednotlivé podpoložky', () => {
   const { db, tmp } = freshDb();
-  db.prepare("INSERT INTO categories (id,user_id,name,type,fund_account_id) VALUES (70,1,'Y_Lítačka',2,60)").run();
-  // Tom: okno 4-5, uplynulo, nevyčerpáno. Martin: okno 8-9, aktivní.
-  db.prepare("INSERT INTO budget_items (id,user_id,category_id,name,amount,window_start,window_end) VALUES (1,1,70,'Lítačka Tom',3650,4,5),(2,1,70,'Lítačka Martin',3650,8,9)").run();
+  db.prepare("INSERT INTO categories (id,user_id,name,type,fund_account_id) VALUES (70,1,'Y_Sport',2,60)").run();
+  // Čtyři položky se stejným oknem 1-12 — reálný případ Y_Sport. Per položka by se
+  // tatáž platba odečetla čtyřikrát; za kategorii se odečte jednou.
+  db.prepare(`INSERT INTO budget_items (id,user_id,category_id,name,amount,window_start,window_end) VALUES
+    (1,1,70,'Tom cvíčo',31500,1,12),(2,1,70,'Golf členství',6000,1,12),
+    (3,1,70,'Golf hry',6000,1,12),(4,1,70,'Martin tréninky',6500,1,12)`).run();
+  db.prepare("INSERT INTO transactions (user_id,account_id,category_id,amount,date,description) VALUES (1,60,70,-22000,'2026-03-10','Cvíčo')").run();
+
   const { fundRemaining } = require('./fund-coverage');
   const r = fundRemaining(db, 1, 60, '2026-08-26');
-  assert.equal(r.remaining, 3650, 'jen Martinova lítačka');
-  assert.equal(r.items.length, 1);
-  assert.equal(r.items[0].name, 'Lítačka Martin');
+  assert.equal(r.plan, 50000, 'plán = součet všech čtyř položek');
+  assert.equal(r.spent, 22000, 'čerpání se počítá jednou, ne čtyřikrát');
+  assert.equal(r.remaining, 28000);
   cleanup(db, tmp);
 });
 
-test('fundRemaining: čerpání se počítá v okně položky, ne za rok', () => {
+test('fundRemaining: čerpání za CELÝ rok, ne v okně položky', () => {
   const { db, tmp } = freshDb();
   db.prepare("INSERT INTO categories (id,user_id,name,type,fund_account_id) VALUES (70,1,'Y_Lítačka',2,60)").run();
-  db.prepare("INSERT INTO budget_items (id,user_id,category_id,name,amount,window_start,window_end) VALUES (1,1,70,'Lítačka Tom',3650,4,5),(2,1,70,'Lítačka Martin',3650,8,9)").run();
-  // Tomova lítačka zaplacená v dubnu — spadá do okna 4-5, NE do okna 8-9
+  db.prepare("INSERT INTO budget_items (id,user_id,category_id,name,amount,window_start,window_end) VALUES (1,1,70,'Tom',3650,4,5),(2,1,70,'Martin',3650,8,9)").run();
+  // Tomova lítačka zaplacená v dubnu — do ročního čerpání kategorie vstupuje.
   db.prepare("INSERT INTO transactions (user_id,account_id,category_id,amount,date,description) VALUES (1,60,70,-3650,'2026-04-15','Lítačka Tom')").run();
+
   const { fundRemaining } = require('./fund-coverage');
   const r = fundRemaining(db, 1, 60, '2026-08-26');
-  assert.equal(r.remaining, 3650, 'dubnová platba nesmí snížit Martinovu položku');
+  assert.equal(r.plan, 7300);
+  assert.equal(r.spent, 3650);
+  assert.equal(r.remaining, 3650, 'zbývá Martinova lítačka');
   cleanup(db, tmp);
 });
 
-test('fundRemaining: přečerpaná položka nedává záporný zbytek', () => {
+test('fundRemaining: platba mimo rok se nezapočítá', () => {
   const { db, tmp } = freshDb();
-  db.prepare("INSERT INTO categories (id,user_id,name,type,fund_account_id) VALUES (70,1,'Y_Beach',2,60)").run();
-  db.prepare("INSERT INTO budget_items (id,user_id,category_id,name,amount,window_start,window_end) VALUES (1,1,70,'Beach zima',10200,9,12)").run();
-  db.prepare("INSERT INTO transactions (user_id,account_id,category_id,amount,date,description) VALUES (1,60,70,-15000,'2026-09-20','Přeplaceno')").run();
+  db.prepare("INSERT INTO categories (id,user_id,name,type,fund_account_id) VALUES (70,1,'Y_Pojistky',2,60)").run();
+  db.prepare("INSERT INTO budget_items (id,user_id,category_id,name,amount,window_start,window_end) VALUES (1,1,70,'Pojistky',12000,1,12)").run();
+  db.prepare("INSERT INTO transactions (user_id,account_id,category_id,amount,date,description) VALUES (1,60,70,-5000,'2025-12-20','Loni'),(1,60,70,-3000,'2026-02-10','Letos')").run();
+
   const { fundRemaining } = require('./fund-coverage');
   const r = fundRemaining(db, 1, 60, '2026-08-26');
-  assert.equal(r.remaining, 0);
-  assert.equal(r.items[0].remaining, 0);
+  assert.equal(r.spent, 3000, 'loňská platba do letošního čerpání nepatří');
+  assert.equal(r.remaining, 9000);
+  cleanup(db, tmp);
+});
+
+test('fundRemaining: přečerpaná kategorie nedává záporný zbytek', () => {
+  const { db, tmp } = freshDb();
+  db.prepare("INSERT INTO categories (id,user_id,name,type,fund_account_id) VALUES (70,1,'Y_Auto',2,60)").run();
+  db.prepare("INSERT INTO budget_items (id,user_id,category_id,name,amount,window_start,window_end) VALUES (1,1,70,'Servis',30000,1,12)").run();
+  db.prepare("INSERT INTO transactions (user_id,account_id,category_id,amount,date,description) VALUES (1,60,70,-37428,'2026-08-18','Servis RAV')").run();
+
+  const { fundRemaining } = require('./fund-coverage');
+  const r = fundRemaining(db, 1, 60, '2026-08-26');
+  assert.equal(r.spent, 37428, 'skutečné čerpání se NEOŘEZÁVÁ — patří do „vyčerpáno z plánu"');
+  assert.equal(r.remaining, 0, 'ale zbytek nesmí být záporný');
+  assert.equal(r.categories[0].remaining, 0);
   cleanup(db, tmp);
 });
 
@@ -91,7 +114,8 @@ test('fundRemaining: kategorie bez fund_account_id do krytí nevstoupí', () => 
   const { fundRemaining } = require('./fund-coverage');
   const r = fundRemaining(db, 1, 60, '2026-08-26');
   assert.equal(r.remaining, 0);
-  assert.equal(r.items.length, 0);
+  assert.equal(r.plan, 0);
+  assert.equal(r.categories.length, 0);
   cleanup(db, tmp);
 });
 
@@ -105,30 +129,19 @@ test('fundRemaining: kategorie odkazující na cizí/neexistující účet se ne
   cleanup(db, tmp);
 });
 
-test('fundRemaining: cross-year okno (10-1) je v srpnu stále aktivní', () => {
+test('fundRemaining: kategorie nesou rozpad pro zobrazení, seřazený podle zbytku', () => {
   const { db, tmp } = freshDb();
-  db.prepare("INSERT INTO categories (id,user_id,name,type,fund_account_id) VALUES (70,1,'Y_Zima',2,60)").run();
-  db.prepare("INSERT INTO budget_items (id,user_id,category_id,name,amount,window_start,window_end) VALUES (1,1,70,'Zimní servis',4000,10,1)").run();
+  db.prepare("INSERT INTO categories (id,user_id,name,type,fund_account_id) VALUES (70,1,'Y_Malá',2,60),(71,1,'Y_Velká',2,60)").run();
+  db.prepare("INSERT INTO budget_items (id,user_id,category_id,name,amount,window_start,window_end) VALUES (1,1,70,'Malá',2000,1,12),(2,1,71,'Velká',30000,1,12)").run();
+  db.prepare("INSERT INTO transactions (user_id,account_id,category_id,amount,date,description) VALUES (1,60,71,-1200,'2026-05-05','Záloha')").run();
+
   const { fundRemaining } = require('./fund-coverage');
   const r = fundRemaining(db, 1, 60, '2026-08-26');
-  assert.equal(r.remaining, 4000, 'konec okna je leden PŘÍŠTÍHO roku, ne uplynulý leden');
-  cleanup(db, tmp);
-});
-
-test('fundRemaining: položky nesou rozpad pro zobrazení', () => {
-  const { db, tmp } = freshDb();
-  db.prepare("INSERT INTO categories (id,user_id,name,type,fund_account_id) VALUES (70,1,'Y_Beach',2,60)").run();
-  db.prepare("INSERT INTO budget_items (id,user_id,category_id,name,amount,window_start,window_end) VALUES (1,1,70,'Beach zima',10200,9,12)").run();
-  db.prepare("INSERT INTO transactions (user_id,account_id,category_id,amount,date,description) VALUES (1,60,70,-1200,'2026-09-05','Záloha')").run();
-  const { fundRemaining } = require('./fund-coverage');
-  const it = fundRemaining(db, 1, 60, '2026-08-26').items[0];
-  assert.equal(it.budget_item_id, 1);
-  assert.equal(it.category_id, 70);
-  assert.equal(it.category_name, 'Y_Beach');
-  assert.equal(it.amount, 10200);
-  assert.equal(it.spent, 1200);
-  assert.equal(it.remaining, 9000);
-  assert.equal(it.window_from, '2026-09-01');
-  assert.equal(it.window_to, '2026-12-31');
+  assert.equal(r.categories.length, 2);
+  assert.equal(r.categories[0].category_name, 'Y_Velká', 'největší zbytek první');
+  assert.equal(r.categories[0].plan, 30000);
+  assert.equal(r.categories[0].spent, 1200);
+  assert.equal(r.categories[0].remaining, 28800);
+  assert.equal(r.categories[1].category_name, 'Y_Malá');
   cleanup(db, tmp);
 });

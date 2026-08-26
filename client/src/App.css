@@ -1690,3 +1690,33 @@ a.report-subcat-row:hover { background: var(--bg2); }
   font-size: 12px;
   padding: 4px 8px;
 }
+
+/* Hlavička karty krytí — „vyčerpáno z ročního plánu" s barem pod sebou. */
+.fund-coverage-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 15px;
+}
+.fund-coverage-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--bg);
+  overflow: hidden;
+  margin: 8px 0 4px;
+}
+.fund-coverage-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width .2s ease;
+}
+/* Přečerpaný plán — bar dojede na 100 % a zčervená, aby se nedal přehlédnout. */
+.fund-coverage-bar-fill.is-over { background: var(--danger); }
+.fund-coverage-result {
+  font-weight: 700;
+  padding-top: 8px;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+}

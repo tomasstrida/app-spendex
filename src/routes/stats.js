@@ -586,7 +586,7 @@ router.get('/fund-history', requireAuth, (req, res) => {
     });
   }
 
-  const { remaining, items } = fundRemaining(db, req.dataUserId, account.id, today);
+  const { plan, spent, remaining, categories } = fundRemaining(db, req.dataUserId, account.id, today);
 
   // Krytí musí mířit na DNEŠEK, ne na den kotvy — `remaining` je taky forward-looking.
   // Kotva bývá týdny stará (fond dostává snapshot jen u plateb, co prošly frontou
@@ -607,9 +607,11 @@ router.get('/fund-history', requireAuth, (req, res) => {
       balance_date: today,            // ke kterému dni odhad platí
       anchor_balance: anchor ? anchor.balance : null,   // naposledy potvrzeno bankou
       anchor_date: anchor ? anchor.date : null,
-      remaining,
+      plan,                           // roční plán fondu = součet podpoložek jeho kategorií
+      spent,                          // letos vyčerpáno (skutečnost, NEOŘEZANÁ na plán)
+      remaining,                      // kolik z plánu ještě zbývá (per kategorie, floor 0)
       diff: anchor ? balanceToday - remaining : null,
-      items,
+      categories,
     },
     periods, values,
     totals: { net: values.reduce((s, v) => s + v.net, 0) },

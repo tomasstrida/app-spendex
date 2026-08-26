@@ -36,39 +36,28 @@ function fundAnchor(db, userId, accountId) {
 }
 
 /**
- * Datové okno podpoložky pro daný rok. Cross-year okno (window_start > window_end,
- * např. 10–1) končí v NÁSLEDUJÍCÍM roce — stejný výpočet jako routes/budget-items.js,
- * aby čísla seděla se stránkou Roční budgety.
- */
-function itemWindow(item, year) {
-  const toYear = item.window_start > item.window_end ? year + 1 : year;
-  const lastDay = new Date(toYear, item.window_end, 0).getDate();
-  return {
-    from: `${year}-${String(item.window_start).padStart(2, '0')}-01`,
-    to: `${toYear}-${String(item.window_end).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
-  };
-}
-
-/**
- * Kolik z fondu ještě letos odejde: součet nevyčerpaného plánu AKTIVNÍCH podpoložek
- * kategorií navázaných na tento fond.
+ * Roční plán fondu, letošní čerpání a kolik z plánu ještě zbývá.
  *
- * Aktivní = konec datového okna ještě nenastal. Uplynulá nevyčerpaná položka se
- * ignoruje (rozhodnutí uživatele): buď se výdaj nekonal, nebo šel jinudy, a počítat
- * ho by krytí zbytečně strašilo.
+ * Počítá se PER KATEGORII, ne per podpoložku: plán kategorie je součet jejích
+ * podpoložek, čerpání je celoroční součet jejích plateb. Důvod je věcný — kategorie
+ * s víc podpoložkami má typicky překrývající se okna (Y_Sport má čtyři položky, všechny
+ * 1–12) a per-položkový výpočet by tutéž platbu odečetl od každé z nich. Na reálných
+ * datech to dělalo rozdíl 18 500 Kč v jediné kategorii, vždy směrem k optimismu.
  *
- * Čerpání se bere V OKNĚ položky, ne za celý rok — kategorie může mít víc položek
- * s různými okny (Lítačka Tom 4–5 vs. Martin 8–9) a roční součet by je slil dohromady.
+ * `spent` se ZÁMĚRNĚ neořezává na plán: „vyčerpáno z ročního plánu" má ukazovat
+ * skutečnost (Y_Auto Moto: 37 428 z plánu 30 000), zatímco `remaining` je floorované
+ * na nule, protože přečerpaná kategorie už z fondu nic nechce.
  *
- * ZNÁMÉ OMEZENÍ: u kategorie s víc položkami, jejichž okna se PŘEKRÝVAJÍ, se tatáž
- * platba odečte od každé z nich, takže krytí vyjde optimističtěji než realita. Přesně
- * by to řešila jen vazba transakce → podpoložka, kterou datový model nemá; stejnou
- * nepřesnost má i stránka Roční budgety.
+ * ZNÁMÉ OMEZENÍ — propadlá okna: kategorie okno nemá, má ho až podpoložka, takže
+ * nevyčerpaná položka po konci svého okna zůstane v `remaining` až do konce roku.
+ * Číslo je tím konzervativnější (ukáže hůř než realita). Vědomě ponecháno: vyloučit
+ * je nejde bez návratu k per-položkovému počítání, které má horší vadu.
  *
- * DALŠÍ ZNÁMÉ OMEZENÍ: `spentStmt` váže platbu na `category_id`, ne na `account_id` —
+ * ZNÁMÉ OMEZENÍ — účet: čerpání se váže na `category_id`, ne na `account_id`, takže
  * platba kategorie navázané na fond, ale provedená z JINÉHO účtu, sníží `remaining`,
- * aniž ten fond cokoli zaplatil (viz spec §2, Y_Sport). Neopravovat: vázat `spent` na
- * účet by rozešlo číslo se stránkou Roční budgety, která `account_id` taky nefiltruje.
+ * aniž ten fond cokoli zaplatil (viz spec §2, Y_Oblečení: z fondu odešlo 298 Kč
+ * z 15 042). Neopravovat: vázat čerpání na účet by rozešlo číslo se stránkou Roční
+ * budgety, která `account_id` taky nefiltruje.
  *
  * `today` se předává (formát 'YYYY-MM-DD'), ne bere z Date.now() — testovatelnost.
  */
@@ -77,14 +66,14 @@ function fundRemaining(db, userId, accountId, today) {
 
   // JOIN na accounts: osiřelý `fund_account_id` (účet mezitím smazaný — SQLite neumí
   // FK přidat přes ALTER TABLE) se tím chová jako NULL, tedy kategorie mimo fond.
-  const items = db.prepare(`
-    SELECT bi.id, bi.category_id, bi.name, bi.amount, bi.window_start, bi.window_end,
-           c.name AS category_name
-    FROM budget_items bi
-    JOIN categories c ON c.id = bi.category_id AND c.user_id = bi.user_id AND c.type = 2
+  const rows = db.prepare(`
+    SELECT c.id AS category_id, c.name AS category_name,
+           COALESCE(SUM(bi.amount), 0) AS plan
+    FROM categories c
     JOIN accounts a ON a.id = c.fund_account_id AND a.user_id = c.user_id AND a.is_fund = 1
-    WHERE bi.user_id = ? AND c.fund_account_id = ?
-    ORDER BY bi.window_start, bi.id
+    LEFT JOIN budget_items bi ON bi.category_id = c.id AND bi.user_id = c.user_id
+    WHERE c.user_id = ? AND c.fund_account_id = ? AND c.type = 2
+    GROUP BY c.id
   `).all(userId, accountId);
 
   const spentStmt = db.prepare(`
@@ -93,25 +82,25 @@ function fundRemaining(db, userId, accountId, today) {
     WHERE user_id = ? AND category_id = ? AND date >= ? AND date <= ?
   `);
 
-  const out = [];
-  for (const item of items) {
-    const w = itemWindow(item, year);
-    if (w.to < today) continue;   // okno uplynulo → ignoruj
-    const { spent } = spentStmt.get(userId, item.category_id, w.from, w.to);
-    out.push({
-      budget_item_id: item.id,
-      category_id: item.category_id,
-      category_name: item.category_name,
-      name: item.name,
-      amount: item.amount,
+  const categories = rows.map(r => {
+    const { spent } = spentStmt.get(userId, r.category_id, `${year}-01-01`, `${year}-12-31`);
+    return {
+      category_id: r.category_id,
+      category_name: r.category_name,
+      plan: r.plan,
       spent,
-      remaining: Math.max(0, item.amount - spent),
-      window_from: w.from,
-      window_to: w.to,
-    });
-  }
+      remaining: Math.max(0, r.plan - spent),
+    };
+  });
+  // Největší zbytek nahoře — to je to, co uživatele na fondu čeká nejvíc.
+  categories.sort((a, b) => b.remaining - a.remaining || a.category_name.localeCompare(b.category_name, 'cs'));
 
-  return { remaining: out.reduce((s, i) => s + i.remaining, 0), items: out };
+  return {
+    plan: categories.reduce((s, c) => s + c.plan, 0),
+    spent: categories.reduce((s, c) => s + c.spent, 0),
+    remaining: categories.reduce((s, c) => s + c.remaining, 0),
+    categories,
+  };
 }
 
-module.exports = { fundMovements, fundAnchor, fundRemaining, itemWindow };
+module.exports = { fundMovements, fundAnchor, fundRemaining };

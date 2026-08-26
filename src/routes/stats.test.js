@@ -741,9 +741,30 @@ test('fund-history: krytí = zůstatek minus zbývající plán', async () => {
   assert.equal(body.coverage.balance_date, new Date().toISOString().slice(0, 10), 'balance_date je DNEŠEK, ne datum kotvy');
   assert.equal(body.coverage.anchor_balance, 7158.45);
   assert.equal(body.coverage.anchor_date, '2026-08-18');
+  assert.equal(body.coverage.plan, 10200, 'roční plán fondu = součet podpoložek jeho kategorií');
+  assert.equal(body.coverage.spent, 0, 'letos z kategorie nic nevyčerpáno');
   assert.equal(body.coverage.remaining, 10200);
   assert.equal(Math.round(body.coverage.diff), -3042);
-  assert.equal(body.coverage.items.length, 1);
+  assert.equal(body.coverage.categories.length, 1, 'rozpad je po kategoriích, ne po podpoložkách');
+  assert.equal(body.coverage.categories[0].category_name, 'Y_Beach');
+});
+
+test('fund-history: čerpání se sčítá za kategorii, ne za každou podpoložku zvlášť', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO accounts (id,user_id,name,account_number,role,is_fund) VALUES (60,1,'Nepravidelné','1679014074/3030','spending',1)").run();
+  db.prepare("INSERT INTO categories (id,user_id,name,type,fund_account_id) VALUES (70,1,'Y_Sport',2,60)").run();
+  // Reálný případ Y_Sport: čtyři podpoložky se stejným oknem 1-12.
+  db.prepare(`INSERT INTO budget_items (id,user_id,category_id,name,amount,window_start,window_end) VALUES
+    (1,1,70,'Tom cvíčo',31500,1,12),(2,1,70,'Golf členství',6000,1,12),
+    (3,1,70,'Golf hry',6000,1,12),(4,1,70,'Martin tréninky',6500,1,12)`).run();
+  db.prepare("INSERT INTO transactions (user_id,account_id,category_id,amount,date,description) VALUES (1,60,70,-22000,'2026-03-10','Cvíčo')").run();
+  const res = await fetch(`${base}/api/stats/fund-history?account_id=60&from=2026-06&to=2026-08`);
+  const body = await res.json();
+  server.close();
+  assert.equal(body.coverage.plan, 50000);
+  assert.equal(body.coverage.spent, 22000, 'platba se počítá jednou, ne čtyřikrát');
+  assert.equal(body.coverage.remaining, 28000);
 });
 
 test('fund-history: krytí zahrne pohyb PO kotvě, který ještě nemá vlastní snapshot', async () => {
