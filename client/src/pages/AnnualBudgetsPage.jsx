@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, LineChart } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LineChart, ShieldCheck } from 'lucide-react';
 import { usePeriod } from '../contexts/PeriodContext';
 import Layout from '../components/Layout';
 import YearThermometer from '../components/YearThermometer';
@@ -89,7 +89,8 @@ export default function AnnualBudgetsPage() {
   const [expanded, setExpanded] = useState({});       // category_id → bool (rozbalený graf)
   const [subExpanded, setSubExpanded] = useState({}); // category_id → bool (rozbalený rozpad subkategorií)
   const [fundAccounts, setFundAccounts] = useState([]);
-  const [catFund, setCatFund] = useState({});   // category_id → fund_account_id | null
+  const [catFund, setCatFund] = useState({});             // category_id → fund_account_id | null
+  const [editingFund, setEditingFund] = useState(null);  // category_id právě editované vazby, null = žádná
 
   const year = period ? Number(period.split('-')[0]) : new Date().getFullYear();
   const currentYear = currentPeriod ? Number(currentPeriod.split('-')[0]) : year;
@@ -128,12 +129,14 @@ export default function AnnualBudgetsPage() {
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       alert(body.error || 'Uložení se nepovedlo.');
+      // Editace zůstane otevřená — uživatel vidí, u které kategorie se uložení nepovedlo.
       return;
     }
     const fresh = await fetch('/api/categories').then(r => r.json());
     const map = {};
     (fresh || []).forEach(c => { map[c.id] = c.fund_account_id ?? null; });
     setCatFund(map);
+    setEditingFund(null);
   }
 
   // Roční rozpočet po kategoriích = součet podpoložek dané kategorie
@@ -214,20 +217,6 @@ export default function AnnualBudgetsPage() {
                           <span className="text-muted report-budget-limit">{budget > 0 ? `/ ${formatCurrency(budget)}` : ''}</span>
                           <span className="report-budget-status" />
                         </Link>
-                        {fundAccounts.length > 0 && (
-                          <label className="text-muted" style={{ fontSize: 13, display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
-                            Financuje se z fondu:
-                            <select
-                              value={catFund[c.id] ?? ''}
-                              onChange={e => saveFund(c.id, e.target.value)}
-                            >
-                              <option value="">— nefinancuje se z fondu —</option>
-                              {fundAccounts.map(a => (
-                                <option key={a.id} value={a.id}>{a.name}</option>
-                              ))}
-                            </select>
-                          </label>
-                        )}
                         {isSubOpen && (
                           <div className="report-subcat-list">
                             {subcats.map(s => (
@@ -302,12 +291,45 @@ export default function AnnualBudgetsPage() {
                         {budget > 0 && (
                           <YearThermometer spent={spent} amount={budget} year={year} />
                         )}
-                        <button type="button" className="btn btn-ghost"
-                          style={{ fontSize: 12, marginTop: 4, padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                          onClick={() => setExpanded(prev => ({ ...prev, [c.id]: !prev[c.id] }))}>
-                          <LineChart size={14} />
-                          {isOpen ? 'Skrýt čerpání v čase' : 'Čerpání v čase'}
-                        </button>
+                        <div className="report-budget-actions">
+                          <button type="button" className="btn btn-ghost"
+                            style={{ fontSize: 12, padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                            onClick={() => setExpanded(prev => ({ ...prev, [c.id]: !prev[c.id] }))}>
+                            <LineChart size={14} />
+                            {isOpen ? 'Skrýt čerpání v čase' : 'Čerpání v čase'}
+                          </button>
+                          {/* Vazba na fond je trvalá konfigurace, ne číslo, na které se kouká
+                              každý měsíc — proto jen štítek se stavem, který se na select
+                              promění až po kliknutí. Bez toho by deset selectů pod sebou
+                              přebilo samotná data karty. */}
+                          {fundAccounts.length > 0 && (
+                            editingFund === c.id ? (
+                              <select
+                                className="input fund-select"
+                                autoFocus
+                                value={catFund[c.id] ?? ''}
+                                onChange={e => saveFund(c.id, e.target.value)}
+                                onBlur={() => setEditingFund(null)}
+                                onKeyDown={e => { if (e.key === 'Escape') setEditingFund(null); }}
+                              >
+                                <option value="">— bez fondu —</option>
+                                {fundAccounts.map(a => (
+                                  <option key={a.id} value={a.id}>{a.name}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <button
+                                type="button"
+                                className={`fund-tag${catFund[c.id] == null ? ' fund-tag--unset' : ''}`}
+                                onClick={() => setEditingFund(c.id)}
+                                title="Změnit fond, ze kterého se kategorie platí"
+                              >
+                                <ShieldCheck size={12} />
+                                {fundAccounts.find(a => a.id === catFund[c.id])?.name || 'bez fondu'}
+                              </button>
+                            )
+                          )}
+                        </div>
                         {isOpen && (
                           <CumulativeChart monthly={monthly} budget={budget} year={year} color={c.color} />
                         )}

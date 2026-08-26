@@ -1649,3 +1649,44 @@ a.report-subcat-row:hover { background: var(--bg2); }
   font-size: 14px;
 }
 .fund-coverage-row { display: flex; justify-content: space-between; }
+
+/* Vazba roční kategorie na fondový účet — trvalá konfigurace, ne měsíční číslo.
+   Proto tichý outline štítek vedle ovládacích prvků karty, ne plný accent chip
+   jako u „rozpad podle Apple účtu", který je akcí. Select se ukáže až po kliknutí. */
+.report-budget-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.fund-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text2);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+.fund-tag:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+/* Nenastavená vazba je čárkovaná a ztlumená — vypadá jako prázdné místo k vyplnění,
+   ne jako plnohodnotná hodnota. */
+.fund-tag--unset {
+  border-style: dashed;
+  opacity: .65;
+}
+/* `.input` má width:100 %, což by select roztáhlo přes celou kartu. */
+.fund-select {
+  width: auto;
+  max-width: 200px;
+  font-size: 12px;
+  padding: 4px 8px;
+}
