@@ -737,11 +737,43 @@ test('fund-history: krytí = zůstatek minus zbývající plán', async () => {
   server.close();
   assert.equal(res.status, 200);
   assert.equal(body.account.id, 60);
-  assert.equal(body.coverage.balance, 7158.45);
-  assert.equal(body.coverage.balance_date, '2026-08-18');
+  assert.equal(body.coverage.balance, 7158.45, 'žádný pohyb po kotvě → balance = anchor_balance');
+  assert.equal(body.coverage.balance_date, new Date().toISOString().slice(0, 10), 'balance_date je DNEŠEK, ne datum kotvy');
+  assert.equal(body.coverage.anchor_balance, 7158.45);
+  assert.equal(body.coverage.anchor_date, '2026-08-18');
   assert.equal(body.coverage.remaining, 10200);
   assert.equal(Math.round(body.coverage.diff), -3042);
   assert.equal(body.coverage.items.length, 1);
+});
+
+test('fund-history: krytí zahrne pohyb PO kotvě, který ještě nemá vlastní snapshot', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO accounts (id,user_id,name,account_number,role,is_fund) VALUES (60,1,'Nepravidelné','1679014074/3030','spending',1)").run();
+  db.prepare("INSERT INTO categories (id,user_id,name,type,fund_account_id) VALUES (70,1,'Y_Test',2,60)").run();
+  db.prepare("INSERT INTO budget_items (id,user_id,category_id,name,amount,window_start,window_end) VALUES (1,1,70,'Zima',10200,9,12)").run();
+  // kotva 1. 8. = 20 000
+  db.prepare("INSERT INTO transactions (user_id,account_id,amount,date,description,balance_after) VALUES (1,60,20000,'2026-08-01','Kotva',20000)").run();
+  // odchod 20. 8. BEZ vlastního snapshotu — dřívější implementace ho v krytí neviděla
+  db.prepare("INSERT INTO transactions (user_id,account_id,amount,date,description) VALUES (1,60,-15000,'2026-08-20','Odchod bez snapshotu')").run();
+  const res = await fetch(`${base}/api/stats/fund-history?account_id=60&from=2026-06&to=2026-08`);
+  const body = await res.json();
+  server.close();
+  assert.equal(res.status, 200);
+  assert.equal(body.coverage.balance, 5000, 'balance musí zahrnout odchod po kotvě (20000-15000)');
+  assert.equal(Math.round(body.coverage.diff), -5200, 'diff = 5000 - 10200');
+  assert.equal(body.coverage.anchor_balance, 20000, 'anchor_balance = poslední potvrzený snapshot beze změny');
+  assert.equal(body.coverage.anchor_date, '2026-08-01');
+});
+
+test('fund-history: chybí parametr account_id -> 400 s odlišnou hláškou', async () => {
+  const { app } = setup();
+  const { server, base } = await listen(app);
+  const res = await fetch(`${base}/api/stats/fund-history`);
+  const body = await res.json();
+  server.close();
+  assert.equal(res.status, 400);
+  assert.equal(body.error, 'Chybí parametr account_id.');
 });
 
 test('fund-history: fond bez snapshotu vrátí balance null, ne chybu', async () => {

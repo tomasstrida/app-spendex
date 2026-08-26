@@ -69,10 +69,14 @@ nedostupné. Výpočet krytí proto joinuje `accounts` a kategorie s neexistují
 Stejná kotva jako u Vývoje spoření: nejnovější `transactions.balance_after` na daném
 účtu napříč celou historií, plus pohyby, které nastaly po něm.
 
-**Zjednodušení oproti spoření (ověřeno na produkčních datech):** u fondových účtů se
-nohy převodů nepřekrývají — dotaz `account_id = <fond> AND counterparty_account =
-<číslo téhož fondu>` vrací **0 řádků** pro Nepravidelné i Licence. Pohyb na fondu je
-proto prostě:
+**Zjednodušení oproti spoření (ověřeno na produkčních datech):** skutečný invariant je,
+že každý pohyb na fondu má vlastní řádek s `account_id` = fond — dotaz `WHERE account_id
+= ?` proto z principu nemůže vrátit tutéž transakci dvakrát (na rozdíl od dotazu tvaru
+`account_id = X OR counterparty_account = X`, který dedup u spoření řeší). Riziko tu
+NENÍ dvojí započtení, ale opačné: **chybějící noha** — pohyb zachycený jen jako
+protistrana na jiném účtu, který by `fundMovements` neviděl vůbec. Kdyby taková noha
+chyběla, projeví se to rozjetím dopočtené křivky vůči snapshotům v grafu. Pohyb na fondu
+je proto prostě:
 
 ```sql
 SELECT COALESCE(SUM(amount), 0) FROM transactions
@@ -132,6 +136,20 @@ Přesně by to řešila jen vazba transakce → podpoložka, kterou datový mode
 Tahle featura ji nezavádí; stejnou nepřesnost už dnes vykazuje stránka Roční budgety,
 takže obě stránky aspoň lžou stejně.
 
+**Další známá nepřesnost: `spent` neváže platbu na účet.** `spentStmt` ve
+`fundRemaining` filtruje `user_id` + `category_id` + datové okno, ale ne `account_id` —
+zatímco `balance` měří jeden konkrétní fond. Platba kategorie navázané na fond, ale
+provedená z JINÉHO účtu (viz §2 — Y_Sport je remíza mezi Společným a Nepravidelným),
+sníží `remaining`, aniž ten fond cokoli zaplatil; krytí pak vyjde optimističtěji, než je
+skutečnost. Vědomě neřešeno: vázat `spent` na účet by rozešlo číslo se stránkou Roční
+budgety, která `account_id` taky nefiltruje.
+
+**Cross-year položka na přelomu roku.** Rok pro `itemWindow` se bere z `today`, takže
+1. ledna se okno 10–1 překlopí na příští cyklus (`2027-10-01…2028-01-31`) a lednová
+platba, která teprve přijde za starý cyklus, na chvíli zmizí z `remaining`. Nastává jen
+jednou ročně a jen u cross-year položek; stránka Roční budgety počítá rok stejně, takže
+parita mezi oběma stránkami je zachovaná.
+
 ## 5. API
 
 ### 5.1 `GET /api/stats/fund-history`
@@ -149,8 +167,11 @@ Odpověď:
 {
   account: { id, name, account_number },
   coverage: {
-    balance: number|null,        // null = účet nemá ani jeden snapshot
-    balance_date: string|null,   // datum kotvy, ať je vidět, jak je číslo staré
+    balance: number|null,        // odhad K DNEŠKU = kotva + všechny pohyby po ní (bez horní meze);
+                                  // null = účet nemá ani jeden snapshot
+    balance_date: string|null,   // dnešní datum — ke kterému dni `balance` platí
+    anchor_balance: number|null, // zůstatek POTVRZENÝ bankou (balance_after posledního snapshotu)
+    anchor_date: string|null,    // datum toho snapshotu, ať je vidět, jak je potvrzené číslo staré
     remaining: number,           // zbývá vyčerpat
     diff: number|null,           // balance − remaining; null když balance je null
     items: [{ budget_item_id, category_id, category_name, name,

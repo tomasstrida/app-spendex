@@ -84,7 +84,7 @@ export default function FundHistoryPage() {
         <div className="text-danger">{error}</div>
       ) : !funds.length ? (
         <div className="text-muted">
-          Žádný fondový účet. Fond se označí zaškrtnutím „fondový účet" u účtu v Nastavení.
+          Žádný fondový účet. Fond se označí zaškrtnutím „fondový účet" u účtu na stránce Účty.
         </div>
       ) : (
         <>
@@ -104,8 +104,9 @@ export default function FundHistoryPage() {
           ) : coverage && (
             <div className="fund-coverage">
               <div className={`fund-coverage-value ${coverage.diff >= 0 ? 'text-success' : 'text-danger'}`}>
-                {coverage.diff >= 0 ? 'Zbývá po pokrytí ' : 'Chybí '}
-                {signPrefix(coverage.diff)} {formatCurrency(Math.abs(coverage.diff))}
+                {coverage.diff >= 0
+                  ? `Zbývá po pokrytí ${signPrefix(coverage.diff)}${formatCurrency(coverage.diff)}`
+                  : `Chybí ${formatCurrency(coverage.diff)}`}
               </div>
               <div className="fund-coverage-note text-muted">
                 {coverage.diff >= 0
@@ -114,7 +115,7 @@ export default function FundHistoryPage() {
               </div>
               <div className="fund-coverage-rows">
                 <div className="fund-coverage-row">
-                  <span>Zůstatek k {coverage.balance_date}</span>
+                  <span>Zůstatek (odhad k dnešku)</span>
                   <span>{signPrefix(coverage.balance)}{formatCurrency(coverage.balance)}</span>
                 </div>
                 <div className="fund-coverage-row">
@@ -122,6 +123,11 @@ export default function FundHistoryPage() {
                   <span>− {formatCurrency(coverage.remaining)}</span>
                 </div>
               </div>
+              {coverage.anchor_date && (
+                <div className="fund-coverage-note text-muted" style={{ fontSize: 11 }}>
+                  Naposledy potvrzeno bankou k {coverage.anchor_date}: {signPrefix(coverage.anchor_balance)}{formatCurrency(coverage.anchor_balance)}
+                </div>
+              )}
             </div>
           )}
 
@@ -176,6 +182,8 @@ export default function FundHistoryPage() {
               values={values}
               onPeriodClick={openTransactions}
               clickablePeriods={clickablePeriods}
+              emptyText="Zůstatek zatím neznáme — doplní se z bankovních notifikací tohoto účtu."
+              ariaLabel={`Vývoj zůstatku fondu, ${periods.length} období. Šipkami vlevo a vpravo projdete jednotlivá období.`}
             />
           )}
         </>

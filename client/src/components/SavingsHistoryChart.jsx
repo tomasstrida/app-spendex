@@ -24,7 +24,14 @@ const COLOR_ACTUAL = '#0ea5e9';
 const COLOR_POSITIVE = '#16a34a';
 const COLOR_NEGATIVE = '#dc2626';
 
-export default function SavingsHistoryChart({ periods, values, onPeriodClick, clickablePeriods, showDerived = true, showActual = true }) {
+const DEFAULT_EMPTY_TEXT = 'Zůstatek zatím neznáme — doplní se z notifikací ze spořicího účtu.';
+const DEFAULT_ARIA_LABEL_SUFFIX = 'Vývoj spoření';
+
+export default function SavingsHistoryChart({
+  periods, values, onPeriodClick, clickablePeriods, showDerived = true, showActual = true,
+  emptyText = DEFAULT_EMPTY_TEXT,
+  ariaLabel,
+}) {
   const wrapRef = useRef(null);
   const [width, setWidth] = useState(0);
   const [active, setActive] = useState(null);
@@ -133,6 +140,9 @@ export default function SavingsHistoryChart({ periods, values, onPeriodClick, cl
 
   if (!width || !n) return <div className="chart-wrap" ref={wrapRef} style={{ height }} />;
 
+  const resolvedAriaLabel = ariaLabel
+    ?? `${DEFAULT_ARIA_LABEL_SUFFIX}, ${n} období. Šipkami vlevo a vpravo projdete jednotlivá období.`;
+
   return (
     <div className="chart-wrap" ref={wrapRef}>
       <svg
@@ -141,7 +151,7 @@ export default function SavingsHistoryChart({ periods, values, onPeriodClick, cl
         height={height}
         role="img"
         tabIndex={0}
-        aria-label={`Vývoj spoření, ${n} období. Šipkami vlevo a vpravo projdete jednotlivá období.`}
+        aria-label={resolvedAriaLabel}
         onKeyDown={handleKey}
         onBlur={() => setActive(null)}
       >
@@ -155,7 +165,7 @@ export default function SavingsHistoryChart({ periods, values, onPeriodClick, cl
         ))}
         {!hasAnyBalanceData && (
           <text x={plotLeft} y={balanceTop + balanceH / 2} className="chart-tick">
-            Zůstatek zatím neznáme — doplní se z notifikací ze spořicího účtu.
+            {emptyText}
           </text>
         )}
         {showDerived && segments('balance_derived').map((d, i) => (

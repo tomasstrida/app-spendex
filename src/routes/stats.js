@@ -490,6 +490,9 @@ router.get('/savings-history', requireAuth, (req, res) => {
 // + historie zůstatku po obdobích. `values` mají ZÁMĚRNĚ stejný tvar jako
 // savings-history, aby šla použít táž komponenta grafu.
 router.get('/fund-history', requireAuth, (req, res) => {
+  if (req.query.account_id === undefined) {
+    return res.status(400).json({ error: 'Chybí parametr account_id.' });
+  }
   const accountId = parseInt(req.query.account_id, 10);
   const account = Number.isInteger(accountId)
     ? db.prepare('SELECT id, name, account_number FROM accounts WHERE id = ? AND user_id = ? AND is_fund = 1')
@@ -585,14 +588,27 @@ router.get('/fund-history', requireAuth, (req, res) => {
 
   const { remaining, items } = fundRemaining(db, req.dataUserId, account.id, today);
 
+  // Krytí musí mířit na DNEŠEK, ne na den kotvy — `remaining` je taky forward-looking.
+  // Kotva bývá týdny stará (fond dostává snapshot jen u plateb, co prošly frontou
+  // revize), takže se k ní přičtou VŠECHNY pohyby po ní až do teď, bez horní meze.
+  const post = anchor
+    ? db.prepare(`
+        SELECT COALESCE(SUM(amount), 0) AS s FROM transactions
+        WHERE user_id = ? AND account_id = ? AND date > ?
+      `).get(req.dataUserId, account.id, anchor.date).s
+    : 0;
+  const balanceToday = anchor ? anchor.balance + post : null;
+
   res.json({
     from, to, billing_day: billingDay,
     account,
     coverage: {
-      balance: anchor ? anchor.balance : null,
-      balance_date: anchor ? anchor.date : null,
+      balance: balanceToday,          // odhad k dnešku (kotva + pohyby po ní)
+      balance_date: today,            // ke kterému dni odhad platí
+      anchor_balance: anchor ? anchor.balance : null,   // naposledy potvrzeno bankou
+      anchor_date: anchor ? anchor.date : null,
       remaining,
-      diff: anchor ? anchor.balance - remaining : null,
+      diff: anchor ? balanceToday - remaining : null,
       items,
     },
     periods, values,

@@ -3,10 +3,14 @@
 /**
  * Čisté pohyby na fondovém účtu za období.
  *
- * Na rozdíl od spořicího účtu (viz utils/savings.js) se tady NEDEDUPLIKUJE:
- * u fondových účtů jsou všechny nohy převodů zaúčtované přímo na fondu, takže
- * filtr na `account_id` každý pohyb vrátí právě jednou. Ověřeno na produkčních
- * datech — dotaz „účet i protiúčet je tentýž fond" vrací nula řádků.
+ * Na rozdíl od spořicího účtu (viz utils/savings.js) se tady NEDEDUPLIKUJE. Skutečný
+ * invariant: každý pohyb na fondu má vlastní řádek s `account_id` = fond, takže dotaz
+ * `WHERE account_id = ?` z principu nemůže vrátit tutéž transakci dvakrát (na rozdíl od
+ * dotazu tvaru `account_id = X OR counterparty_account = X`, kde dedup u spoření řeší
+ * právě dvojí započtení). Riziko tady NENÍ duplicita, ale opak — CHYBĚJÍCÍ noha: pohyb
+ * zachycený jen jako protistrana na jiném účtu, který by tenhle dotaz neviděl vůbec.
+ * Kdyby taková noha chyběla, projeví se to rozjetím dopočtené křivky vůči snapshotům
+ * v grafu.
  */
 function fundMovements(db, userId, accountId, start, end) {
   const row = db.prepare(`
@@ -61,6 +65,11 @@ function itemWindow(item, year) {
  * by to řešila jen vazba transakce → podpoložka, kterou datový model nemá; stejnou
  * nepřesnost má i stránka Roční budgety.
  *
+ * DALŠÍ ZNÁMÉ OMEZENÍ: `spentStmt` váže platbu na `category_id`, ne na `account_id` —
+ * platba kategorie navázané na fond, ale provedená z JINÉHO účtu, sníží `remaining`,
+ * aniž ten fond cokoli zaplatil (viz spec §2, Y_Sport). Neopravovat: vázat `spent` na
+ * účet by rozešlo číslo se stránkou Roční budgety, která `account_id` taky nefiltruje.
+ *
  * `today` se předává (formát 'YYYY-MM-DD'), ne bere z Date.now() — testovatelnost.
  */
 function fundRemaining(db, userId, accountId, today) {
@@ -72,7 +81,7 @@ function fundRemaining(db, userId, accountId, today) {
     SELECT bi.id, bi.category_id, bi.name, bi.amount, bi.window_start, bi.window_end,
            c.name AS category_name
     FROM budget_items bi
-    JOIN categories c ON c.id = bi.category_id AND c.user_id = bi.user_id
+    JOIN categories c ON c.id = bi.category_id AND c.user_id = bi.user_id AND c.type = 2
     JOIN accounts a ON a.id = c.fund_account_id AND a.user_id = c.user_id AND a.is_fund = 1
     WHERE bi.user_id = ? AND c.fund_account_id = ?
     ORDER BY bi.window_start, bi.id
