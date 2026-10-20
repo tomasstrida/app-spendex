@@ -74,6 +74,41 @@ function classifyAndStore(db, userId, tx, account, extId, notifyUserId, text) {
   };
 }
 
+// Korekce karetní blokace (benzínka: předautorizace → uvolnění rozdílu) nemá v e-mailu
+// řádek „Karta:". Kartu převezmeme z nejbližší předchozí kartové platby u téhož
+// obchodníka na stejném účtu — jinak by notifikace šla vlastníkovi dat místo toho,
+// kdo platil. Hledá se v transakcích i v review frontě (původní platba může čekat
+// na kategorii nebo na přiřazení karty). Okno 30 dní pokrývá i dlouhé blokace (hotely).
+const BLOCK_CORRECTION_WINDOW_DAYS = 30;
+
+function findBlockedCard(db, userId, tx, account) {
+  if (!tx.place || !tx.date) return null;
+  const accId = account ? account.id : null;
+  const since = `-${BLOCK_CORRECTION_WINDOW_DAYS} day`;
+  const fromTx = db.prepare(`
+    SELECT card_last4, date, tx_time FROM transactions
+    WHERE user_id = ? AND place = ? AND tx_type = 'Platba kartou' AND card_last4 IS NOT NULL
+      AND date <= ? AND date >= date(?, ?)
+      AND (? IS NULL OR account_id = ?)
+  `).all(userId, tx.place, tx.date, tx.date, since, accId, accId);
+  const fromInbox = db.prepare(`
+    SELECT json_extract(parsed_json, '$.card_last4') AS card_last4,
+           json_extract(parsed_json, '$.date') AS date,
+           json_extract(parsed_json, '$.tx_time') AS tx_time
+    FROM email_inbox
+    WHERE user_id = ? AND status IN ('pending', 'awaiting_card')
+      AND json_extract(parsed_json, '$.place') = ?
+      AND json_extract(parsed_json, '$.tx_type') = 'Platba kartou'
+      AND json_extract(parsed_json, '$.card_last4') IS NOT NULL
+      AND json_extract(parsed_json, '$.date') <= ?
+      AND json_extract(parsed_json, '$.date') >= date(?, ?)
+      AND (? IS NULL OR json_extract(parsed_json, '$.account_id') = ?)
+  `).all(userId, tx.place, tx.date, tx.date, since, accId, accId);
+  const key = (r) => `${r.date} ${r.tx_time || ''}`;
+  const best = [...fromTx, ...fromInbox].sort((a, b) => key(b).localeCompare(key(a)))[0];
+  return best ? String(best.card_last4) : null;
+}
+
 function ingestEmail(db, { userEmail, text }) {
   const user = db.prepare('SELECT id FROM users WHERE lower(email) = lower(?)').get(userEmail || '');
   if (!user) return { status: 'ignored' };
@@ -96,6 +131,10 @@ function ingestEmail(db, { userEmail, text }) {
       return { status: 'duplicate', external_id: extId };
     if (db.prepare("SELECT 1 FROM email_inbox WHERE user_id = ? AND external_id = ? AND status IN ('pending','awaiting_card')").get(userId, extId))
       return { status: 'duplicate', external_id: extId };
+  }
+
+  if (!tx.card_last4 && tx.tx_type === 'Korekce blokace') {
+    tx.card_last4 = findBlockedCard(db, userId, tx, account);
   }
 
   // Routing podle karty

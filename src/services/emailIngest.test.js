@@ -180,6 +180,85 @@ test('přiřazená karta člena → import + notifyUserId = člen', () => {
   assert.equal(tx.place, 'HAMR - BRANIK,RESTAURA, PRAHA 4');
 });
 
+// Korekce blokace (typicky benzínka: předautorizace 400 → po natankování uvolnění
+// rozdílu) nemá v e-mailu řádek „Karta:". Bez dohledání karty z původní platby
+// šla notifikace vlastníkovi dat, i když tankoval člen domácnosti.
+const SHELL_PAY = `zůstatek na účtu Společný číslo 1679014023/3030 se snížil o částku 400,00 CZK. Dostupný zůstatek k 12.10.2026 v 18:13 je 3 436,31 CZK.
+Platba kartou (nezaúčtováno) v Shell Czech Republic,, Praha, 000
+Částka: 400,00 CZK
+Karta: 516844******6062
+Datum provedení: 12.10.2026
+Kód transakce: 29003621213`;
+
+const SHELL_CORRECTION = `zůstatek na účtu Společný číslo 1679014023/3030 se zvýšil o částku 240,10 CZK. Dostupný zůstatek k 12.10.2026 v 18:20 je 3 676,41 CZK.
+Snížení částky blokace, Shell Czech Republic,, Praha, 000
+Částka: 240,10 CZK
+Datum změny částky blokace: 12.10.2026
+Kód transakce: 29003748963`;
+
+function seedHousehold(db) {
+  db.prepare("INSERT INTO users (id, email) VALUES (2, 'martin@example.com')").run();
+  db.prepare("INSERT INTO household_members (data_owner_id, user_id) VALUES (1, 2)").run();
+  db.prepare("INSERT INTO cards (data_owner_id, last4, assigned_user_id) VALUES (1, '6062', 2)").run();
+  db.prepare("INSERT INTO cards (data_owner_id, last4, assigned_user_id) VALUES (1, '8997', 1)").run();
+}
+
+test('korekce blokace převezme kartu z původní (zařazené) platby → notifikace jde členovi', () => {
+  const { db, tmp } = freshDb();
+  seed(db);
+  seedHousehold(db);
+  db.prepare("INSERT INTO categories (id, user_id, name) VALUES (8, 1, 'Auto Moto - PHM')").run();
+  db.prepare("INSERT INTO category_rules (user_id, category_id, pattern) VALUES (1, 8, 'Shell')").run();
+  const { ingestEmail } = require('./emailIngest');
+  const pay = ingestEmail(db, { userEmail: 'tom@example.com', text: SHELL_PAY });
+  const r = ingestEmail(db, { userEmail: 'tom@example.com', text: SHELL_CORRECTION });
+  const corr = db.prepare("SELECT card_last4 FROM transactions WHERE external_id = '29003748963-1679014023'").get();
+  cleanup(db, tmp);
+  assert.equal(pay.status, 'imported');
+  assert.equal(r.status, 'imported');
+  assert.equal(r.notifyUserId, 2);
+  assert.equal(corr.card_last4, '6062');
+});
+
+test('korekce blokace najde kartu i u původní platby čekající v review frontě', () => {
+  const { db, tmp } = freshDb();
+  seed(db);
+  seedHousehold(db);
+  const { ingestEmail } = require('./emailIngest');
+  const pay = ingestEmail(db, { userEmail: 'tom@example.com', text: SHELL_PAY });
+  const r = ingestEmail(db, { userEmail: 'tom@example.com', text: SHELL_CORRECTION });
+  const row = db.prepare('SELECT parsed_json FROM email_inbox WHERE id = ?').get(r.inboxId);
+  cleanup(db, tmp);
+  assert.equal(pay.status, 'pending');
+  assert.equal(r.status, 'pending');
+  assert.equal(r.notifyUserId, 2);
+  assert.equal(JSON.parse(row.parsed_json).card_last4, '6062');
+});
+
+test('korekce blokace u stejného obchodníka bere kartu z NEJBLIŽŠÍ předchozí platby', () => {
+  const { db, tmp } = freshDb();
+  seed(db);
+  seedHousehold(db);
+  // Starší tankování Toma (karta 8997) u téhož Shellu o dva dny dřív.
+  db.prepare(`INSERT INTO transactions (user_id, amount, currency, date, tx_time, description, place, tx_type, card_last4, account_id, source, external_id)
+              VALUES (1, -1500, 'CZK', '2026-10-10', '08:00', 'Shell', 'Shell Czech Republic,, Praha', 'Platba kartou', '8997', 10, 'airbank-email', 'old-1')`).run();
+  const { ingestEmail } = require('./emailIngest');
+  ingestEmail(db, { userEmail: 'tom@example.com', text: SHELL_PAY });
+  const r = ingestEmail(db, { userEmail: 'tom@example.com', text: SHELL_CORRECTION });
+  cleanup(db, tmp);
+  assert.equal(r.notifyUserId, 2);
+});
+
+test('korekce blokace bez dohledatelné původní platby → fallback na vlastníka dat', () => {
+  const { db, tmp } = freshDb();
+  seed(db);
+  seedHousehold(db);
+  const { ingestEmail } = require('./emailIngest');
+  const r = ingestEmail(db, { userEmail: 'tom@example.com', text: SHELL_CORRECTION });
+  cleanup(db, tmp);
+  assert.equal(r.notifyUserId, 1);
+});
+
 test('solo uživatel (bez členů) → karta auto-přiřazená vlastníkovi, import, notify vlastník', () => {
   const { db, tmp } = freshDb();
   seed(db);
