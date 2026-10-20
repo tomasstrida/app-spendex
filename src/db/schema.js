@@ -342,6 +342,9 @@ function initSchema() {
     'ALTER TABLE push_subscriptions ADD COLUMN last_success_at TEXT',
     'ALTER TABLE push_subscriptions ADD COLUMN last_error TEXT',
     'ALTER TABLE push_subscriptions ADD COLUMN last_error_at TEXT',
+    // Endpoint, který push služba prohlásila za mrtvý (404/410). Neodstraňuje se,
+    // aby ho resync z prohlížeče (který o 410 neví) nemohl tiše oživit.
+    'ALTER TABLE push_subscriptions ADD COLUMN gone_at TEXT',
     // 1 = tato fixní platba SÁM je převodem mezi vlastními účty (účelová dotace),
     // takže textová větev matcheru má interní převody započítat. Default 0: platba
     // identifikovaná textem je skutečný výdaj a převod na vlastní účet do ní nepatří

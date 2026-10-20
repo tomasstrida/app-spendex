@@ -12,7 +12,7 @@ function defaultClient() {
 async function sendToUser(db, userId, payload, client) {
   const sender = client || defaultClient();
   if (!sender) return;
-  const subs = db.prepare('SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?').all(userId);
+  const subs = db.prepare('SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ? AND gone_at IS NULL').all(userId);
   const body = JSON.stringify(payload);
   for (const s of subs) {
     const sub = { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } };
@@ -23,7 +23,9 @@ async function sendToUser(db, userId, payload, client) {
                   WHERE id = ?`).run(s.id);
     } catch (err) {
       if (err && (err.statusCode === 404 || err.statusCode === 410)) {
-        db.prepare('DELETE FROM push_subscriptions WHERE id = ?').run(s.id);
+        // Nemazat: prohlížeč o 410 neví a při startu by stejný endpoint znovu ohlásil.
+        // Záznam s gone_at mu /subscribe odmítne (409) → klient si vytvoří nový odběr.
+        db.prepare(`UPDATE push_subscriptions SET gone_at = datetime('now') WHERE id = ?`).run(s.id);
       } else {
         const msg = `${err && err.statusCode ? err.statusCode + ': ' : ''}${(err && err.message) || 'neznámá chyba'}`;
         console.error('[push] odeslání selhalo:', msg);

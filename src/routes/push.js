@@ -18,7 +18,7 @@ router.get('/public-key', requireAuth, (_req, res) => {
 router.get('/status', requireAuth, (req, res) => {
   const subscriptions = db.prepare(`
     SELECT endpoint, user_agent, created_at, last_success_at, last_error, last_error_at
-    FROM push_subscriptions WHERE user_id = ? ORDER BY id
+    FROM push_subscriptions WHERE user_id = ? AND gone_at IS NULL ORDER BY id
   `).all(req.user.id);
   res.json({ count: subscriptions.length, subscriptions });
 });
@@ -27,6 +27,11 @@ router.post('/subscribe', requireAuth, writeLimiter, (req, res) => {
   const { endpoint, keys } = req.body || {};
   if (!endpoint || !keys || !keys.p256dh || !keys.auth) {
     return res.status(400).json({ error: 'Neplatná subscription.' });
+  }
+  // Push služba tenhle endpoint už odmítla (410) — oživit ho by vedlo jen k dalšímu 410.
+  // 409 říká klientovi: zahoď lokální odběr a vytvoř nový.
+  if (db.prepare('SELECT 1 FROM push_subscriptions WHERE endpoint = ? AND gone_at IS NOT NULL').get(endpoint)) {
+    return res.status(409).json({ gone: true });
   }
   db.prepare(`
     INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent)
@@ -45,7 +50,7 @@ router.post('/unsubscribe', requireAuth, writeLimiter, (req, res) => {
 });
 
 router.post('/test', requireAuth, writeLimiter, async (req, res) => {
-  const count = db.prepare('SELECT COUNT(*) c FROM push_subscriptions WHERE user_id = ?').get(req.user.id).c;
+  const count = db.prepare('SELECT COUNT(*) c FROM push_subscriptions WHERE user_id = ? AND gone_at IS NULL').get(req.user.id).c;
   await sendToUser(db, req.user.id, { title: 'SPENDEX', body: 'Testovací notifikace ✅', url: '/import' });
   res.json({ ok: true, sent: count });
 });

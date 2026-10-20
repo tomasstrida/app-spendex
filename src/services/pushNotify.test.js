@@ -37,15 +37,20 @@ test('sendToUser odešle na všechna zařízení uživatele', async () => {
   assert.deepEqual(sent.sort(), ['https://x/ep1', 'https://x/ep2']);
 });
 
-test('410 z push služby → subscription se smaže', async () => {
+// Mrtvý endpoint se nemaže, ale označí `gone_at` — server si ho musí pamatovat,
+// aby ho resync z prohlížeče (který o 410 neví) nemohl tiše oživit.
+test('410 z push služby → subscription se označí gone_at a další push ji přeskočí', async () => {
   const { db, tmp } = freshDb();
   seedUser(db, 'pending_only');
-  const fakeClient = { sendNotification: async () => { const e = new Error('gone'); e.statusCode = 410; throw e; } };
+  let calls = 0;
+  const fakeClient = { sendNotification: async () => { calls++; const e = new Error('gone'); e.statusCode = 410; throw e; } };
   const { sendToUser } = require('./pushNotify');
   await sendToUser(db, 1, { title: 'T', body: 'B', url: '/import' }, fakeClient);
-  const cnt = db.prepare("SELECT COUNT(*) c FROM push_subscriptions WHERE user_id = 1").get().c;
+  await sendToUser(db, 1, { title: 'T', body: 'B', url: '/import' }, fakeClient);
+  const row = db.prepare("SELECT gone_at FROM push_subscriptions WHERE user_id = 1").get();
   cleanup(db, tmp);
-  assert.equal(cnt, 0);
+  assert.ok(row && row.gone_at, 'gone_at má být vyplněno');
+  assert.equal(calls, 1, 'na mrtvý endpoint se podruhé neposílá');
 });
 
 test('úspěšné odeslání zapíše last_success_at a vyčistí last_error', async () => {

@@ -60,6 +60,41 @@ test('POST /api/push/unsubscribe smaže subscription', async () => {
   assert.equal(cnt, 0);
 });
 
+// Prohlížeč se o 410 od Apple nedozví a při startu pošle stejný mrtvý endpoint.
+// Server ho nesmí oživit — 409 { gone: true } je pro klienta signál k čerstvému subscribe.
+test('POST /api/push/subscribe s endpointem označeným gone → 409 a zůstane gone', async () => {
+  const { app, db, tmp } = freshApp();
+  db.prepare("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, gone_at) VALUES (1, 'https://x/dead', 'k', 'a', '2026-10-01 10:00:00')").run();
+  const { server, base } = await listen(app);
+  const r = await fetch(`${base}/api/push/subscribe`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint: 'https://x/dead', keys: { p256dh: 'k', auth: 'a' } }) });
+  const j = await r.json();
+  const row = db.prepare("SELECT gone_at FROM push_subscriptions WHERE endpoint = 'https://x/dead'").get();
+  server.close(); cleanup(db, tmp);
+  assert.equal(r.status, 409);
+  assert.equal(j.gone, true);
+  assert.ok(row.gone_at, 'endpoint zůstává gone');
+});
+
+test('GET /api/push/status nevrací mrtvé (gone) endpointy', async () => {
+  const { app, db, tmp } = freshApp();
+  db.prepare("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, gone_at) VALUES (1, 'https://x/dead', 'k', 'a', '2026-10-01 10:00:00')").run();
+  db.prepare("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (1, 'https://x/live', 'k', 'a')").run();
+  const { server, base } = await listen(app);
+  const j = await (await fetch(`${base}/api/push/status`)).json();
+  server.close(); cleanup(db, tmp);
+  assert.equal(j.count, 1);
+  assert.equal(j.subscriptions[0].endpoint, 'https://x/live');
+});
+
+test('POST /api/push/test nepočítá mrtvé endpointy', async () => {
+  const { app, db, tmp } = freshApp();
+  db.prepare("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, gone_at) VALUES (1, 'https://x/dead', 'k', 'a', '2026-10-01 10:00:00')").run();
+  const { server, base } = await listen(app);
+  const j = await (await fetch(`${base}/api/push/test`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).json();
+  server.close(); cleanup(db, tmp);
+  assert.equal(j.sent, 0);
+});
+
 test('POST /api/push/subscribe bez keys → 400', async () => {
   const { app, db, tmp } = freshApp();
   const { server, base } = await listen(app);
