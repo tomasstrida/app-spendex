@@ -325,18 +325,25 @@ router.get('/budget-history', requireAuth, (req, res) => {
   // shodně s /api/budgets, takže se v grafu projeví i period overrides.
   // Kategorie bez jakéhokoli rozpočtu (roční, fond, nebo prostě bez záznamu)
   // dostane `limits: null` a čára limitu se nekreslí.
-  const budgetRows = db.prepare('SELECT category_id, month, amount FROM budgets WHERE user_id = ?')
+  const budgetRows = db.prepare('SELECT category_id, month, amount, valid_to FROM budgets WHERE user_id = ?')
     .all(req.dataUserId);
   const defaultLimit = new Map();
   const overrideLimit = new Map();   // `${category_id}|${periodKey}` → amount
+  const defaultValidTo = new Map();  // category_id → poslední platné období defaultu
   for (const b of budgetRows) {
-    if (b.month === 'default') defaultLimit.set(b.category_id, b.amount);
+    if (b.month === 'default') {
+      defaultLimit.set(b.category_id, b.amount);
+      if (b.valid_to) defaultValidTo.set(b.category_id, b.valid_to);
+    }
     else overrideLimit.set(`${b.category_id}|${b.month}`, b.amount);
   }
   const limitsFor = categoryId => {
     const values = periods.map(p => {
       const override = overrideLimit.get(`${categoryId}|${p.key}`);
-      return override ?? defaultLimit.get(categoryId) ?? null;
+      if (override != null) return override;
+      const validTo = defaultValidTo.get(categoryId);
+      if (validTo && p.key > validTo) return null;   // default už neplatí
+      return defaultLimit.get(categoryId) ?? null;
     });
     return values.some(v => v != null) ? values : null;
   };

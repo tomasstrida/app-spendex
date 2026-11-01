@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { usePeriod } from '../contexts/PeriodContext';
 import { usePeriodKeys } from '../hooks/usePeriodKeys';
-import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, X, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, X, Check, CalendarX } from 'lucide-react';
 import Layout from '../components/Layout';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
 
@@ -430,6 +430,18 @@ export default function BudgetsPage() {
     if (r.ok) loadBudgets(period);
   }
 
+  // Ukončení budgetu: od zobrazeného období dál se nezobrazuje ani nepočítá,
+  // historie (dřívější období) zůstává beze změny.
+  async function handleEnd(b) {
+    if (!confirm(`Ukončit rozpočet „${b.category_name}" od období ${formatPeriod(periodStart, periodEnd)}? Starší období zůstanou beze změny.`)) return;
+    const r = await fetch('/api/budgets/end', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category_id: b.category_id, period }),
+    });
+    if (r.ok) loadBudgets(period);
+  }
+
   const existingCategoryIds = budgets.map(b => b.category_id);
   const periodLabel = formatPeriod(periodStart, periodEnd);
 
@@ -507,6 +519,10 @@ export default function BudgetsPage() {
                     <button className="btn btn-ghost btn-icon" title="Upravit"
                       onClick={() => { setShowForm(false); setEditItem(b); }}>
                       <Pencil size={14} />
+                    </button>
+                    <button className="btn btn-ghost btn-icon" title="Ukončit od tohoto období"
+                      onClick={() => handleEnd(b)}>
+                      <CalendarX size={14} />
                     </button>
                     <button className="btn btn-ghost btn-icon" title="Smazat"
                       onClick={() => handleDelete(b)}>

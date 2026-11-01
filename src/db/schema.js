@@ -448,6 +448,9 @@ function initSchema() {
       FOREIGN KEY (subcategory_id) REFERENCES subcategories(id) ON DELETE SET NULL,
       UNIQUE(user_id, counterparty_account)
     )`,
+    // Poslední období (periodKey), ve kterém default měsíční budget ještě platí;
+    // NULL = platí bez omezení. Ukončení budgetu bez přepsání historie.
+    'ALTER TABLE budgets ADD COLUMN valid_to TEXT',
     // Textová poznámka k měsíčnímu období (zobrazuje se na Schůzce). Jedna na
     // (data owner, periodKey „YYYY-MM"); route /api/period-notes.
     `CREATE TABLE IF NOT EXISTS period_notes (

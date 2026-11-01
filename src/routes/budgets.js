@@ -3,13 +3,15 @@ const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const db = require('../db/connection');
 const { requireAuth } = require('../middleware/auth');
-const { getPeriodDates, getUserBillingDay, currentPeriodKey } = require('../utils/period');
+const { getPeriodDates, getUserBillingDay, currentPeriodKey, shiftPeriodKey } = require('../utils/period');
 const { SPENDING_AND } = require('../utils/spending-filter');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
+const PERIOD_KEY_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 // GET /api/budgets?period=2026-04
-// Vrátí výchozí budgety s případnými přepsáními pro dané období.
+// Vrátí výchozí budgety s případnými přepsáními pro dané období. Default s
+// `valid_to` (poslední platné období) se v pozdějších obdobích nevrací.
 router.get('/', requireAuth, (req, res) => {
   const billingDay = getUserBillingDay(db, req.dataUserId);
   const periodKey = req.query.period || currentPeriodKey(billingDay);
@@ -21,6 +23,7 @@ router.get('/', requireAuth, (req, res) => {
       c.id as category_id, c.name as category_name, c.color as category_color, c.icon as category_icon, c.type as category_type,
       db.id       as default_id,
       db.amount   as default_amount,
+      db.valid_to as valid_to,
       pb.id       as override_id,
       pb.amount   as override_amount,
       COALESCE(pb.amount, db.amount) as amount,
@@ -46,8 +49,9 @@ router.get('/', requireAuth, (req, res) => {
     LEFT JOIN budgets pb
       ON pb.category_id = db.category_id AND pb.user_id = db.user_id AND pb.month = ?
     WHERE db.user_id = ? AND db.month = 'default'
+      AND (db.valid_to IS NULL OR db.valid_to >= ?)
     ORDER BY c.name ASC
-  `).all(start, end, start, end, periodKey, req.dataUserId);
+  `).all(start, end, start, end, periodKey, req.dataUserId, periodKey);
 
   // id pro frontend = override_id pokud existuje, jinak default_id
   // `spent` = jen transakce (čte ho Schůzka i Spořicí účet — cash-flow).
@@ -77,8 +81,11 @@ router.put('/', requireAuth, writeLimiter, (req, res) => {
   db.prepare(`
     INSERT INTO budgets (user_id, category_id, month, amount)
     VALUES (?, ?, 'default', ?)
-    ON CONFLICT(user_id, category_id, month) DO UPDATE SET amount = excluded.amount
-  `).run(req.dataUserId, category_id, amount);
+    ON CONFLICT(user_id, category_id, month) DO UPDATE SET
+      amount = excluded.amount,
+      -- úprava v období PO ukončení budget oživí (jinak by nový budget zůstal skrytý)
+      valid_to = CASE WHEN budgets.valid_to IS NOT NULL AND ? > budgets.valid_to THEN NULL ELSE budgets.valid_to END
+  `).run(req.dataUserId, category_id, amount, String(period));
 
   if (scope === 'all') {
     // Smaž všechna period-přepsání pro tuto kategorii
@@ -93,6 +100,27 @@ router.put('/', requireAuth, writeLimiter, (req, res) => {
   const row = db.prepare(`SELECT * FROM budgets WHERE user_id = ? AND category_id = ? AND month = 'default'`)
     .get(req.dataUserId, category_id);
   res.json(row);
+});
+
+// POST /api/budgets/end
+// body: { category_id, period } — `period` = PRVNÍ období, ve kterém už budget neplatí.
+// Nastaví default valid_to = předchozí období (historie zůstává beze změny) a smaže
+// přepsání od `period` dál.
+router.post('/end', requireAuth, writeLimiter, (req, res) => {
+  const { category_id, period } = req.body || {};
+  if (!category_id || typeof period !== 'string' || !PERIOD_KEY_RE.test(period)) {
+    return res.status(400).json({ error: 'category_id a platné období jsou povinné.' });
+  }
+  const row = db.prepare(`SELECT id FROM budgets WHERE user_id = ? AND category_id = ? AND month = 'default'`)
+    .get(req.dataUserId, category_id);
+  if (!row) return res.status(404).json({ error: 'Rozpočet nenalezen.' });
+  const validTo = shiftPeriodKey(period, -1);
+  db.transaction(() => {
+    db.prepare('UPDATE budgets SET valid_to = ? WHERE id = ?').run(validTo, row.id);
+    db.prepare(`DELETE FROM budgets WHERE user_id = ? AND category_id = ? AND month != 'default' AND month >= ?`)
+      .run(req.dataUserId, category_id, period);
+  })();
+  res.json(db.prepare('SELECT * FROM budgets WHERE id = ?').get(row.id));
 });
 
 // DELETE /api/budgets/:id

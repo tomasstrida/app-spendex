@@ -463,6 +463,17 @@ test('budget-history: limits berou default rozpočet a přepsání pro konkrétn
   server.close();
 });
 
+test('budget-history: ukončený default (valid_to) se v pozdějších obdobích nekreslí', async () => {
+  const { db, app } = setup();
+  const { server, base } = await listen(app);
+  db.prepare("INSERT INTO categories (id,user_id,name,type) VALUES (52,1,'Terapie',1)").run();
+  db.prepare("INSERT INTO budgets (user_id,category_id,month,amount,valid_to) VALUES (1,52,'default',3000,'2026-07')").run();
+  db.prepare("INSERT INTO transactions (user_id,category_id,amount,date,description) VALUES (1,52,-1500,'2026-07-05','a')").run();
+  const r = await (await fetch(`${base}/api/stats/budget-history?from=2026-06&to=2026-08`)).json();
+  assert.deepEqual(r.series.find(s => s.category_id === 52).limits, [3000, 3000, null]);
+  server.close();
+});
+
 test('budget-history: kategorie bez měsíčního rozpočtu má limits null', async () => {
   const { db, app } = setup();
   const { server, base } = await listen(app);

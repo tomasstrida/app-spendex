@@ -85,3 +85,52 @@ test('PUT na systemovou kategorii vraci 400 a nezalozi budget', async () => {
   assert.equal(row, undefined, 'systemova kategorie nesmi mit radek v budgets');
   server.close();
 });
+
+// ── valid_to: ukončení měsíčního budgetu od období ───────────────────────────
+const postJson = (base, p, body) => fetch(`${base}${p}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+const putJson = (base, p, body) => fetch(`${base}${p}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+const ids = async (base, period) => (await (await fetch(`${base}/api/budgets?period=${period}`)).json()).budgets.map(b => b.category_id);
+
+test('POST /end: budget platí do předchozího období, od zadaného zmizí; historie zůstává', async () => {
+  const { app, db } = setup(); const { server, base } = await listen(app);
+  db.prepare("INSERT INTO transactions (user_id, category_id, amount, date, description) VALUES (1,5,-100,'2026-07-10','x')").run();
+  const r = await postJson(base, '/api/budgets/end', { category_id: 5, period: '2026-08' });
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).valid_to, '2026-07');
+  assert.deepEqual(await ids(base, '2026-07'), [5]);   // poslední platné období
+  assert.deepEqual(await ids(base, '2026-08'), []);
+  assert.deepEqual(await ids(base, '2027-01'), []);
+  assert.deepEqual(await ids(base, '2026-03'), [5]);   // historie nedotčena
+  server.close();
+});
+
+test('POST /end přes přelom roku (2027-01 → valid_to 2026-12) a smaže přepsání od období', async () => {
+  const { app, db } = setup(); const { server, base } = await listen(app);
+  db.prepare("INSERT INTO budgets (user_id, category_id, month, amount) VALUES (1,5,'2026-11',900)").run();
+  db.prepare("INSERT INTO budgets (user_id, category_id, month, amount) VALUES (1,5,'2027-02',900)").run();
+  const r = await postJson(base, '/api/budgets/end', { category_id: 5, period: '2027-01' });
+  assert.equal((await r.json()).valid_to, '2026-12');
+  const months = db.prepare("SELECT month FROM budgets WHERE category_id = 5 AND month != 'default'").all().map(x => x.month);
+  assert.deepEqual(months, ['2026-11']);   // přepsání před hranicí zůstává
+  server.close();
+});
+
+test('POST /end: validace a vlastnictví', async () => {
+  const { app } = setup(); const { server, base } = await listen(app);
+  assert.equal((await postJson(base, '/api/budgets/end', { category_id: 5, period: '2026-13' })).status, 400);
+  assert.equal((await postJson(base, '/api/budgets/end', { period: '2026-08' })).status, 400);
+  assert.equal((await postJson(base, '/api/budgets/end', { category_id: 999, period: '2026-08' })).status, 404);
+  assert.equal((await postJson(base, '/api/budgets/end', { category_id: 7, period: '2026-08' })).status, 404); // bez budgetu
+  server.close();
+});
+
+test('PUT v období po ukončení budget oživí; úprava v platném období ne', async () => {
+  const { app, db } = setup(); const { server, base } = await listen(app);
+  await postJson(base, '/api/budgets/end', { category_id: 5, period: '2026-08' });
+  await putJson(base, '/api/budgets', { category_id: 5, period: '2026-05', amount: 2500, scope: 'all' });
+  assert.equal(db.prepare("SELECT valid_to FROM budgets WHERE category_id = 5 AND month = 'default'").get().valid_to, '2026-07');
+  await putJson(base, '/api/budgets', { category_id: 5, period: '2026-09', amount: 2500, scope: 'all' });
+  assert.equal(db.prepare("SELECT valid_to FROM budgets WHERE category_id = 5 AND month = 'default'").get().valid_to, null);
+  assert.deepEqual(await ids(base, '2026-09'), [5]);
+  server.close();
+});
