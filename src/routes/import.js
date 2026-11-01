@@ -10,6 +10,7 @@ const applyRules = require('../utils/apply-rules');
 const seedRules = require('../../scripts/seed/rules');
 const loadUserRules = require('../utils/load-user-rules');
 const transferCategoryName = require('../utils/transfer-category');
+const ownAccountNumbers = require('../utils/own-accounts');
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
@@ -129,6 +130,8 @@ router.post('/confirm', requireAuth, writeLimiter, (req, res) => {
   const transferName = transferCategoryName(db, req.dataUserId);
   const effectiveRules = {
     ...seedRules,
+    // vlastní účty = seed + tabulka accounts (nově založený účet funguje hned)
+    ownAccountNumbers: ownAccountNumbers(db, req.dataUserId, seedRules.ownAccountNumbers),
     // type=4 marker, ne hardcoded název → odolné vůči přejmenování kategorie převodů
     ...(transferName ? { internalTransferCategory: transferName } : {}),
     textOverrides: loadUserRules(db, req.dataUserId),

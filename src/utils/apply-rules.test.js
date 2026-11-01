@@ -178,3 +178,40 @@ test('pravidlo bez patternu i bez match_counterparty_account nikdy nesedí (obra
   const tx = { description: 'cokoliv', note: '', counterparty_account: 'EXT/0100', amount: -100 };
   assert.equal(applyRules(tx, null, r).category, 'Ostatní');
 });
+
+// ── L3a: pravidlo s protiúčtem I účtem přebíjí L0 ────────────────────────────
+const withRules = (textOverrides) => ({ ...rules, textOverrides });
+const OSVC_TO_DANE = { pattern: '', match_counterparty_account: '1679014103/3030', match_account_id: 37, category: 'Mimo systém' };
+
+test('L3a: pravidlo (protiúčet + účet) přebije L0 interní převod', () => {
+  const tx = { counterparty_account: '1679014103/3030', ab_category: '', description: 'Tomáš Střída', note: '', amount: -13000 };
+  const r = applyRules(tx, { id: 37, account_number: '1679014031/3030' }, withRules([OSVC_TO_DANE]));
+  assert.equal(r.category, 'Mimo systém');
+});
+
+test('L3a: jiný účet než v pravidle → pravidlo nesedí, platí L0', () => {
+  const tx = { counterparty_account: '1679014103/3030', ab_category: '', description: 'x', note: '', amount: -13000 };
+  const r = applyRules(tx, { id: 99, account_number: '1679014023/3030' }, withRules([OSVC_TO_DANE]));
+  assert.equal(r.category, 'Převody');
+});
+
+test('L3a: pravidlo jen s protiúčtem (bez účtu) L0 NEpřebíjí (dosavadní chování)', () => {
+  const tx = { counterparty_account: '1679014103/3030', ab_category: '', description: 'x', note: '', amount: -13000 };
+  const rule = { pattern: '', match_counterparty_account: '1679014103/3030', category: 'Mimo systém' };
+  const r = applyRules(tx, { id: 37, account_number: '1679014031/3030' }, withRules([rule]));
+  assert.equal(r.category, 'Převody');
+});
+
+test('L3a: textové pravidlo bez protiúčtu L0 NEpřebíjí', () => {
+  const tx = { counterparty_account: '1679014138/3030', ab_category: '', description: 'MAX FITNESS', note: '', amount: -500 };
+  const rule = { pattern: 'max fitness', match_account_id: 37, category: 'Sport' };
+  const r = applyRules(tx, { id: 37, account_number: '1679014031/3030' }, withRules([rule]));
+  assert.equal(r.category, 'Převody');
+});
+
+test('L3a: respektuje i omezení částky', () => {
+  const tx = { counterparty_account: '1679014103/3030', ab_category: '', description: 'x', note: '', amount: -500 };
+  const rule = { ...OSVC_TO_DANE, amount_min_abs: 1000 };
+  const r = applyRules(tx, { id: 37, account_number: '1679014031/3030' }, withRules([rule]));
+  assert.equal(r.category, 'Převody');
+});

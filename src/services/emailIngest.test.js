@@ -478,3 +478,29 @@ test('balance_after se uloží do transakce při automatickém importu', () => {
   assert.equal(r.status, 'imported');
   assert.equal(tx.balance_after, 4934.46);
 });
+
+// Nový účet, který NENÍ v seed seznamu vlastních účtů, ale je v tabulce accounts.
+const TO_NEW_ACCOUNT = INTERNAL.replace('1679014138/3030', '1679014146/3030');
+
+test('protiúčet = účet zaregistrovaný v accounts (mimo seed) → Převody (L0)', () => {
+  const { db, tmp } = freshDb();
+  seed(db);
+  db.prepare("INSERT INTO accounts (id, user_id, name, account_number, role) VALUES (11, 1, 'Velké Radosti', '1679014146/3030', 'ignored')").run();
+  const { ingestEmail } = require('./emailIngest');
+  const r = ingestEmail(db, { userEmail: 'tom@example.com', fromHeader: 'info@airbank.cz', text: TO_NEW_ACCOUNT });
+  const tx = db.prepare('SELECT * FROM transactions WHERE user_id = 1').get();
+  cleanup(db, tmp);
+  assert.equal(r.status, 'imported');
+  assert.equal(tx.category_id, 5);
+});
+
+test('protiúčet = nezaregistrovaný účet mimo seed → NENÍ interní převod (jde do revize)', () => {
+  const { db, tmp } = freshDb();
+  seed(db);
+  const { ingestEmail } = require('./emailIngest');
+  const r = ingestEmail(db, { userEmail: 'tom@example.com', fromHeader: 'info@airbank.cz', text: TO_NEW_ACCOUNT });
+  const count = db.prepare("SELECT COUNT(*) c FROM transactions WHERE user_id = 1 AND category_id = 5").get().c;
+  cleanup(db, tmp);
+  assert.notEqual(r.status, 'imported');
+  assert.equal(count, 0);
+});

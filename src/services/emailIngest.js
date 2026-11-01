@@ -5,6 +5,7 @@ const applyRules = require('../utils/apply-rules');
 const seedRules = require('../../scripts/seed/rules');
 const loadUserRules = require('../utils/load-user-rules');
 const transferCategoryName = require('../utils/transfer-category');
+const ownAccountNumbers = require('../utils/own-accounts');
 const { matchPendingForTransaction } = require('./appleReceipts');
 
 const TX_INSERT = `INSERT OR IGNORE INTO transactions
@@ -36,7 +37,12 @@ function tryMatchAppleReceipt(db, userId, transactionId, tx) {
 
 // Rozhodne kategorii. account = řádek accounts ({id, account_number}) nebo null.
 function categorize(db, userId, tx, account) {
-  const rules = { ...seedRules, textOverrides: loadUserRules(db, userId) };
+  const rules = {
+    ...seedRules,
+    // vlastní účty = seed + tabulka accounts (nově založený účet funguje hned)
+    ownAccountNumbers: ownAccountNumbers(db, userId, seedRules.ownAccountNumbers),
+    textOverrides: loadUserRules(db, userId),
+  };
   // Kategorie interních převodů se identifikuje přes type=4, ne přes název —
   // aby přejmenování kategorie v UI nerozbilo L0 detekci převodů.
   const transferName = transferCategoryName(db, userId);
