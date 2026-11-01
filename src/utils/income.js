@@ -56,7 +56,7 @@ function incomeSourcesForPeriod(db, userId, period, billingDay) {
     "SELECT id FROM categories WHERE user_id = ? AND system_role = 'extra_income'"
   ).get(userId);
   let txSql = `
-    SELECT id, amount, date, description, counterparty_account, account_id
+    SELECT id, amount, date, description, counterparty_account, account_id, category_id
     FROM transactions
     WHERE user_id = ? AND amount > 0 AND date >= ? AND date <= ?
   `;
@@ -66,6 +66,15 @@ function incomeSourcesForPeriod(db, userId, period, billingDay) {
     txParams.push(extraIncomeCat.id);
   }
   const txs = db.prepare(txSql).all(...txParams);
+
+  // Kategorie, kterými uživatel platbu vědomě vyřadil z evidence („Mimo systém",
+  // „Pravidelné platby" — stejná dvojice jako v revizi a ve výdajovém filtru).
+  // Takové platby se NEhlásí jako „nezařazená příchozí platba" (auto-only varování
+  // na Schůzce); napárovaný alias je ale počítá dál, ať se bilance zpětně nemění.
+  const optedOutCats = new Set(
+    db.prepare("SELECT id FROM categories WHERE user_id = ? AND name IN ('Mimo systém', 'Pravidelné platby')")
+      .all(userId).map(c => c.id)
+  );
 
   const incomeTxs = txs.filter(t => {
     const cp = normCounterparty(t.counterparty_account);
@@ -94,12 +103,19 @@ function incomeSourcesForPeriod(db, userId, period, billingDay) {
         // interních převodů + seskupení protistrana × cílový účet + aliasy),
         // filtrem se vyjádřit nedá. Schůzka je posílá do prokliku jako `tx_ids`.
         tx_ids: [],
+        // Totéž bez vědomě vyřazených plateb — z toho se skládá auto-only varování.
+        warn_total: 0,
+        warn_tx_ids: [],
       };
       groups.set(key, g);
     }
     g.total += t.amount;
     g.tx_count += 1;
     g.tx_ids.push(t.id);
+    if (!(t.category_id != null && optedOutCats.has(t.category_id))) {
+      g.warn_total += t.amount;
+      g.warn_tx_ids.push(t.id);
+    }
     if (t.description) g.descriptions.add(t.description);
   }
 
@@ -181,6 +197,7 @@ function incomeSourcesForPeriod(db, userId, period, billingDay) {
   const autoOnly = [];
   for (const [key, g] of groups.entries()) {
     if (groupSource.has(key)) continue;
+    if (g.warn_tx_ids.length === 0) continue;   // všechny platby skupiny vědomě mimo evidenci
     const accountName = g.account_id ? (accountNameById.get(g.account_id) || null) : null;
     autoOnly.push({
       id: null,
@@ -190,9 +207,9 @@ function incomeSourcesForPeriod(db, userId, period, billingDay) {
       match_counterparty_account: g.counterparty,
       account_id: g.account_id,
       account_name: accountName,
-      actual: g.total,
-      tx_count: g.tx_count,
-      tx_ids: g.tx_ids,
+      actual: g.warn_total,
+      tx_count: g.warn_tx_ids.length,
+      tx_ids: g.warn_tx_ids,
       status: null,
       sort_order: null,
     });

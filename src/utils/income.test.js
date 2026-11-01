@@ -311,3 +311,64 @@ test('extra_income: běžný příjem v jiné kategorii se počítá dál', () =
   assert.equal(rows[0].actual, 21000);
   cleanup(db, tmp);
 });
+
+// ── Vědomě vyřazené kategorie (Mimo systém, Pravidelné platby) ───────────────
+function seedExt(db) {
+  seedUser(db);
+  db.prepare("INSERT INTO accounts (id, user_id, name, account_number, role) VALUES (10, 1, 'Hlavní', '1679014138', 'ignored')").run();
+  db.prepare("INSERT INTO categories (id, user_id, name, type) VALUES (30, 1, 'Mimo systém', 1)").run();
+  db.prepare("INSERT INTO categories (id, user_id, name, type) VALUES (31, 1, 'Pravidelné platby', 1)").run();
+  db.prepare("INSERT INTO categories (id, user_id, name, type) VALUES (32, 1, 'Zábava', 1)").run();
+}
+const insTx = (db, amount, cp, cat, date = '2026-04-10') => db.prepare(
+  'INSERT INTO transactions (user_id, account_id, amount, date, description, counterparty_account, category_id) VALUES (1, 10, ?, ?, ?, ?, ?)'
+).run(amount, date, 'x', cp, cat).lastInsertRowid;
+
+test('auto-only: platba v kategorii Mimo systém / Pravidelné platby se mezi nezařazené nehlásí', () => {
+  const { db, tmp } = freshDb();
+  seedExt(db);
+  insTx(db, 1600, '1111111111', 30);
+  insTx(db, 500, '2222222222', 31);
+  const { incomeSourcesForPeriod } = require('./income');
+  const rows = incomeSourcesForPeriod(db, 1, '2026-04', 1);
+  cleanup(db, tmp);
+  assert.equal(rows.length, 0);
+});
+
+test('auto-only: nezařazená platba (bez kategorie i v jiné kategorii) se hlásí dál', () => {
+  const { db, tmp } = freshDb();
+  seedExt(db);
+  const a = insTx(db, 700, '3333333333', null);
+  const b = insTx(db, 800, '4444444444', 32);
+  const { incomeSourcesForPeriod } = require('./income');
+  const rows = incomeSourcesForPeriod(db, 1, '2026-04', 1);
+  cleanup(db, tmp);
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows.flatMap(r => r.tx_ids).sort(), [a, b].sort());
+});
+
+test('auto-only: skupina se smíšenými platbami hlásí jen ty bez vyřazené kategorie', () => {
+  const { db, tmp } = freshDb();
+  seedExt(db);
+  insTx(db, 1600, '5555555555', 30, '2026-04-05');
+  const keep = insTx(db, 900, '5555555555', null, '2026-04-12');
+  const { incomeSourcesForPeriod } = require('./income');
+  const rows = incomeSourcesForPeriod(db, 1, '2026-04', 1);
+  cleanup(db, tmp);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].actual, 900);
+  assert.equal(rows[0].tx_count, 1);
+  assert.deepEqual(rows[0].tx_ids, [keep]);
+});
+
+test('alias: platba v Mimo systém se u napárovaného zdroje počítá dál (bilance beze změny)', () => {
+  const { db, tmp } = freshDb();
+  seedExt(db);
+  db.prepare("INSERT INTO income_sources (user_id, person, planned_amount, match_counterparty_account, sort_order) VALUES (1, 'Zdroj', 1000, '6666666666', 0)").run();
+  insTx(db, 1000, '6666666666', 30);
+  const { incomeSourcesForPeriod } = require('./income');
+  const rows = incomeSourcesForPeriod(db, 1, '2026-04', 1);
+  cleanup(db, tmp);
+  const src = rows.find(r => r.id != null);
+  assert.equal(src.actual, 1000);
+});
