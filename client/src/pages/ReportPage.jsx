@@ -4,6 +4,7 @@ import { usePeriodKeys } from '../hooks/usePeriodKeys';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Check, X } from 'lucide-react';
 import Layout from '../components/Layout';
+import PeriodNote from '../components/PeriodNote';
 import { t, formatCurrency, formatPeriod, addPeriods } from '../i18n';
 import { formatExpectedAmount } from '../utils/expectedAmount';
 import { computeMeetingSurplus } from '../utils/meetingBalance';
@@ -314,6 +315,9 @@ export default function ReportPage() {
 
       {loading ? <div className="page-loading">Načítání…</div> : (
         <div className="report-layout">
+
+          {/* ── POZNÁMKA K MĚSÍCI ── */}
+          <PeriodNote period={period} />
 
           {/* ── BILANCE (Zbylo na běžném) – první na stránce ── */}
           <section className="report-section report-section--bilance">

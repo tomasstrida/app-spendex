@@ -61,6 +61,7 @@ app.use('/api/fixed-expenses', require('./routes/fixed-expenses'));
 app.use('/api/prepaid', require('./routes/prepaid'));
 app.use('/api/income', require('./routes/income'));
 app.use('/api/stats', require('./routes/stats'));
+app.use('/api/period-notes', require('./routes/period-notes'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/import', require('./routes/import'));
 app.use('/api/email', require('./routes/emailInbound'));

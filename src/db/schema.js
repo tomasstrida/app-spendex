@@ -448,6 +448,16 @@ function initSchema() {
       FOREIGN KEY (subcategory_id) REFERENCES subcategories(id) ON DELETE SET NULL,
       UNIQUE(user_id, counterparty_account)
     )`,
+    // Textová poznámka k měsíčnímu období (zobrazuje se na Schůzce). Jedna na
+    // (data owner, periodKey „YYYY-MM"); route /api/period-notes.
+    `CREATE TABLE IF NOT EXISTS period_notes (
+      user_id INTEGER NOT NULL,
+      period_key TEXT NOT NULL,
+      note TEXT NOT NULL,
+      updated_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (user_id, period_key),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* sloupec/index/tabulka již existuje nebo nelze aplikovat */ }

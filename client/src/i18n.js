@@ -112,6 +112,16 @@ const cs = {
   period: {
     resetToCurrent: 'Aktuální měsíc',
   },
+  periodNote: {
+    title: 'Poznámka k měsíci',
+    add: 'Přidat poznámku',
+    edit: 'Upravit poznámku',
+    placeholder: 'Např. co se v tomto měsíci stalo mimo rozpočet…',
+    save: 'Uložit',
+    cancel: 'Zrušit',
+    saveError: 'Poznámku se nepodařilo uložit.',
+    loadError: 'Poznámku se nepodařilo načíst.',
+  },
   months: ['Leden','Únor','Březen','Duben','Květen','Červen',
            'Červenec','Srpen','Září','Říjen','Listopad','Prosinec'],
 };

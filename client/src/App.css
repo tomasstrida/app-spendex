@@ -535,6 +535,31 @@
   border-radius: var(--radius);
   padding: 20px 22px;
 }
+/* Poznámka k měsíci (Schůzka) */
+.period-note-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+.period-note-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  background: var(--bg3);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.period-note-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.period-note-actions .text-muted { margin-right: auto; }
 .report-section-header {
   display: flex;
   justify-content: space-between;
